@@ -655,7 +655,7 @@ const AC = {
   f15: {
     id: 'f15', mass: 20000, wing: 56.5, thrust: 130000, thrustAB: 210000,
     CL0: 0.175, CLA: 3.5, stallA: 0.45, cd0: 0.022, k: 0.12, wave: [0.85, 1.05, 0.03],
-    gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'fwd',
+    gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'fwd', travel: 0.3,
     ammo: 940, nukes: 1, muzzle: [1.6, 0.8, 3.0], stabSign: 1, model: 'F-15C.gltf.json',
     rig: { ab: [[-0.74, 0.02, 9.5], [0.74, 0.02, 9.5]], bombs: [[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2]], nuke: [0, -1.10, -0.885] },
     box: new THREE.Box3(new THREE.Vector3(-6.6, -0.75, -10.1), new THREE.Vector3(6.6, 3.8, 9.8)), slideI: 60,
@@ -672,7 +672,7 @@ const AC = {
     // Eurofighter Typhoon: ~17 t with bombs, 51.2 m² delta, two EJ200s (~60 kN dry, ~90 kN reheat each)
     id: 'typhoon', mass: 16000, wing: 51.2, thrust: 120000, thrustAB: 180000,
     CL0: 0.15, CLA: 3.2, stallA: 0.5, cd0: 0.02, k: 0.14, wave: [0.9, 1.1, 0.025],
-    gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'in',
+    gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'in', travel: 0.3,
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
     ammo: 150, nukes: 0, muzzle: [0.75, -0.25, 2.0], stabSign: -1, model: 'Typhoon.gltf.json',
     rig: { ab: [[-0.5, -0.16, 7.98], [0.5, -0.16, 7.98]], bombs: [[-3.9, -0.98, 2.62], [3.9, -0.98, 2.62], [-2.7, -0.98, 2.62], [2.7, -0.98, 2.62]], nuke: null },
@@ -688,7 +688,7 @@ const AC = {
   b757: {
     id: 'b757', mass: 80000, wing: 185, thrust: 380000, thrustAB: 0,
     CL0: 0.35, CLA: 5.0, stallA: 0.28, cd0: 0.022, k: 0.045, wave: [0.78, 0.95, 0.08],
-    gLimit: 2.5, effV: 85, rates: [0.35, 0.15, 0.6], stabRoll: 0, tailStrike: 0.2, gear: 4.4, weapons: false, gearTime: 8, mainRetract: 'in',
+    gLimit: 2.5, effV: 85, rates: [0.35, 0.15, 0.6], stabRoll: 0, tailStrike: 0.2, gear: 4.4, weapons: false, gearTime: 8, mainRetract: 'in', travel: 0.45,
     ammo: 0, nukes: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B757.gltf.json', rig: { ab: [], bombs: [], nuke: null },
     box: new THREE.Box3(new THREE.Vector3(-19, -3.95, -23.65), new THREE.Vector3(19, 9.2, 23.65)), slideI: 420,
     hitPts: [[23.65, 0, -0.35], [-23.65, 0, 1.0], [-3.4, 19, 0.55], [-3.4, -19, 0.55], [-21.9, 0, 9.2], [-21.0, 7.6, 1.42], [-21.0, -7.6, 1.42], [0, 0, -1.9], [7.15, 6.5, -3.9], [7.15, -6.5, -3.9]],
@@ -938,13 +938,22 @@ function rigGear() {
   for (const [key, list] of Object.entries(legs)) {
     bb.makeEmpty();
     list.forEach(([, b]) => bb.union(b));
-    const pivot = new THREE.Group();
+    const pivot = new THREE.Group(), upper = new THREE.Group(), lower = new THREE.Group();
     pivot.position.set((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
+    pivot.add(upper, lower);
     g.add(pivot);
-    for (const [m] of list) { m.position.sub(pivot.position); pivot.add(m); }
+    let strutBottom = 0;
+    for (const [m, mb] of list) {
+      // wheels and bogies ride on the piston; struts are the cylinder. Unnamed (stand-in) parts are sorted by height.
+      const nm = (m.name || '').toLowerCase();
+      const isLower = /wheel|bogie/.test(nm) || (!/strut/.test(nm) && (mb.min.y + mb.max.y) / 2 - bb.min.y < 0.62);
+      m.position.sub(pivot.position);
+      (isLower ? lower : upper).add(m);
+      if (!isLower) strutBottom = Math.min(strutBottom, mb.min.y - pivot.position.y);
+    }
     // nose legs (and the F-15's mains) fold forward; the others fold inward toward the centreline
     const fwd = key === 'nose' || A.mainRetract === 'fwd';
-    parts.gearLegs.push({ pivot, axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key === 'R' ? -1 : 1 });
+    parts.gearLegs.push({ pivot, upper, lower, nose: key === 'nose', len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key === 'R' ? -1 : 1 });
   }
 }
 setAircraft('f15');
@@ -1762,7 +1771,7 @@ function bombCamTarget() {
 const S = {
   pos: new THREE.Vector3(), vel: new THREE.Vector3(), quat: new THREE.Quaternion(), ang: new THREE.Vector3(),
   throttle: 0, onGround: true, crashed: false, brake: false, alpha: 0, V: 0, time: 0, maxAlt: 0, maxSpd: 0, wingDrop: 1,
-  gearDown: true, gearT: 1, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
+  gearDown: true, gearT: 1, gearComp: 0, noseDip: 0, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
   ammo: AMMO_MAX, bombs: BOMBS_MAX, nukes: NUKES_MAX, firing: false
 };
 const inp = { pitch: 0, roll: 0, yaw: 0 };
@@ -1920,9 +1929,13 @@ function physics(dt) {
   }
 
   // ground contact
+  // The gear is a spring-damper (oleo strut). The model's wheels sit at the parked compression,
+  // 40% of the stroke; fully extended they hang 0.4 × stroke lower.
   const g = ground(S.pos.x, S.pos.z);
-  const clearance = S.pos.y - GEAR - g.h;
-  if (clearance <= 0) {
+  const gearOK = S.gearT >= 0.98;
+  const reach = gearOK ? GEAR + 0.4 * A.travel : GEAR;
+  const comp = g.h + reach - S.pos.y; // how far the struts are pushed in
+  if (comp > 0) {
     if (!S.onGround) {
       const att = attitude(), vs = v.y;
       if (g.water) return crash('You ditched in the water.');
@@ -1936,9 +1949,14 @@ function physics(dt) {
       toast(`Touchdown ${fpm} ft/min · ${fpm < 200 ? 'Butter' : fpm < 450 ? 'Smooth' : fpm < 700 ? 'Firm' : 'Hard'}${g.runway ? '' : ' · off-runway'}`);
       S.onGround = true;
     }
-    S.pos.y = g.h + GEAR;
-    if (v.y < 0) v.y = 0;
-  } else if (clearance > 0.25) S.onGround = false;
+    const k = MASS * G / (0.4 * A.travel), damp = 2 * 0.55 * Math.sqrt(k * MASS);
+    v.y += Math.max(0, k * comp - damp * v.y) / MASS * dt;
+    if (comp > A.travel) { // bottomed out: the strut is solid
+      S.pos.y = g.h + reach - A.travel;
+      if (v.y < 0) v.y = 0;
+    }
+  } else if (comp < -0.25) S.onGround = false;
+  S.gearComp = gearOK && S.onGround ? clamp(comp, 0, A.travel) : 0;
 
   if (S.onGround) {
     if (g.water) return crash('You rolled into the water.');
@@ -2442,7 +2460,11 @@ function updateVisuals(dt) {
   for (const sp of parts.spoilers) sp.rotation.x += ((S.brake && running ? -0.75 : 0) - sp.rotation.x) * Math.min(1, dt * 4);
   if (running && !S.crashed && !paused) S.gearT = clamp(S.gearT + (S.gearDown ? 1 : -1) * dt / A.gearTime, 0, 1);
   const gk = S.gearT * S.gearT * (3 - 2 * S.gearT), ga = (1 - gk) * Math.PI / 2;
+  S.noseDip += ((S.onGround && S.brake && S.V > 1 ? 0.35 * A.travel : 0) - S.noseDip) * Math.min(1, dt * 4);
   for (const L of parts.gearLegs) {
+    const off = clamp(S.gearComp + (L.nose ? S.noseDip : 0), 0, A.travel) - 0.4 * A.travel; // + = pushed up from the parked pose
+    L.lower.position.y = off;
+    L.upper.scale.y = Math.max(0.2, (L.len - off) / L.len);
     L.pivot.rotation.set(L.axis === 'x' ? ga : 0, 0, L.axis === 'z' ? ga * L.sign : 0);
     L.pivot.visible = S.gearT > 0.01;
   }
