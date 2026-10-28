@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15, a Eurofighter Typhoon, a Boeing 757 or a B-52 from an island airbase over a destructible city.">
+<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15, a Eurofighter Typhoon, a Boeing 757 or a B-52 from a huge military airbase next to a destructible city.">
 <style>:root{color-scheme:dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -357,14 +357,11 @@ function fbm(x, y, oct) {
   for (let i = 0; i < oct; i++) { s += a * vnoise(x * f, y * f); n += a; a *= 0.5; f *= 2.03; }
   return s / n;
 }
-// The airbase has its own island south of the city: a 4 km (13,100 ft) runway, long enough for the B-52.
-const RUNWAY_H = 10, RUNWAY_LEN = 4000, RUNWAY_W = 60, RWY_Z = 13500;
-const ISLAND = { rx: 1400, rz: 3200 };
 // The city sits on a flat plain: a river cuts across it east-west, the sea is to the east and south,
 // and hills rise beyond the edge of town.
 // The main map is the original layout spread √10× wider (10× the area) away from its southern shore at
 // z = MAP_AZ, so the shore facing the airbase stays put and everything north of it spreads out; heights are
-// unchanged, so the hills are broader rather than taller. The airbase island is not scaled.
+// unchanged, so the hills are broader rather than taller.
 const MAP_K = Math.sqrt(10), MAP_AZ = 5800;
 const mapZ = z => MAP_AZ + (z - MAP_AZ) * MAP_K; // an original z in the scaled map
 const MAP_CZ = mapZ(-2200), MAP_R = 8000 * MAP_K;  // centre and radius of the main landmass
@@ -386,18 +383,17 @@ const DISTRICTS = [
 // the river keeps its width; its course is spread out with the map
 const RIVER = { z: mapZ(-2600), a1: 300 * MAP_K, w1: 1100 * MAP_K, a2: 120 * MAP_K, w2: 430 * MAP_K };
 const riverZ = x => RIVER.z + RIVER.a1 * Math.sin(x / RIVER.w1) + RIVER.a2 * Math.sin(x / RIVER.w2 + 1.3);
-// the airbase island: a flat field around the runway, low hills off to the sides, a steep shore
-function islandHeight(x, z) {
-  const e = Math.hypot(x / ISLAND.rx, (z - RWY_Z) / ISLAND.rz);
-  let h = RUNWAY_H - Math.max(0, e - 0.97) * 600;
-  const off = Math.abs(x) - 260;
-  if (off > 0 && e < 1) h += smooth(0, 500, off) * Math.max(0, fbm(x * 0.002 + 40, z * 0.002, 3) - 0.35) * 90 * (1 - smooth(0.75, 0.97, e));
-  return h;
-}
+// The airbase: the empty south coast between the city and the sea is levelled to the height of the city plain.
+// The level ground is a cap of the landmass: south of AB.zN, between AB.xW and AB.xE, and 700 m inside the shore.
+// Around it the hills are cut back and blended in; two access roads run north to the edge of town on level strips.
+const AB = { zN: -2700, xW: -15500, xE: 10500, r: MAP_R - 700, blend: 900 };
+const GATES = [-1500, 3000]; // x of the access roads and their gates
+const airbaseSD = (x, z) => Math.max(Math.hypot(x, z - MAP_CZ) - AB.r, AB.zN - z, x - AB.xE, AB.xW - x); // < 0 inside
 function heightAt(x, z) {
-  if (z > 7000) return islandHeight(x, z); // south of the main map there is only sea and the island
-  // fast path: the city plain is exactly flat away from the river
+  // fast paths: the city plain is exactly flat away from the river, and so is the airbase
   if (x > CITY.x0 && x < CITY.x1 && z > CITY.z0 && z < CITY.z1 && Math.abs(z - riverZ(x)) > 96) return CITY_H;
+  const sd = airbaseSD(x, z);
+  if (sd < 0) return CITY_H;
   const u = x / MAP_K, v = MAP_AZ + (z - MAP_AZ) / MAP_K; // the same spot in the original layout
   const e = fbm(u * 0.00032 + 11.3, v * 0.00032 - 7.1, 6);
   let h = Math.pow(e, 1.7) * 1300 - 120;
@@ -405,13 +401,62 @@ function heightAt(x, z) {
   const dx = Math.max(0, CITY.x0 - x, x - CITY.x1), dz = Math.max(0, CITY.z0 - z, z - CITY.z1);
   h = CITY_H + (h - CITY_H) * smooth(0, 1800 * MAP_K, Math.hypot(dx, dz)); // flat city plain
   h += (-5 - h) * smooth(95, 60, Math.abs(z - riverZ(x))) * smooth(-6500 * MAP_K, -4500 * MAP_K, x); // river
+  if (sd < 3500) {
+    let road = Infinity;
+    for (const gx of GATES) road = Math.min(road, Math.max(Math.abs(x - gx) - 30, CITY.z1 - z, z - AB.zN - 300));
+    h = Math.min(h, CITY_H + sd * (0.08 + sd * 0.00012)); // hills near the base cut back to a slope that steepens away from it
+    h = CITY_H + (h - CITY_H) * Math.min(smooth(0, AB.blend, sd), smooth(0, 120, road));
+  }
   if (x > CITY.x1) h = Math.min(h, CITY_H - (x - CITY.x1) * 0.25); // eastern shoreline drops into the sea
   h -= Math.max(0, Math.hypot(x, z - MAP_CZ) - MAP_R) * 0.25; // edge of the map falls into the sea
   return h;
 }
+// Paved surfaces: each is a rectangle along a direction (centre, unit direction ux/uz, half length, half width),
+// kept in a coarse grid so the ground test only looks at the few nearby.
+const PAVE = [], PAVE_GRID = new Map(), PAVE_CELL = 500;
+function pave(kind, x1, z1, x2, z2, w) {
+  const L = Math.hypot(x2 - x1, z2 - z1);
+  const r = { kind, cx: (x1 + x2) / 2, cz: (z1 + z2) / 2, ux: (x2 - x1) / L, uz: (z2 - z1) / L, hl: L / 2, hw: w / 2 };
+  PAVE.push(r);
+  const ex = Math.abs(r.ux) * r.hl + Math.abs(r.uz) * r.hw, ez = Math.abs(r.uz) * r.hl + Math.abs(r.ux) * r.hw;
+  for (let i = Math.floor((r.cx - ex) / PAVE_CELL); i <= Math.floor((r.cx + ex) / PAVE_CELL); i++)
+    for (let j = Math.floor((r.cz - ez) / PAVE_CELL); j <= Math.floor((r.cz + ez) / PAVE_CELL); j++) {
+      const key = i * 100000 + j;
+      let list = PAVE_GRID.get(key);
+      if (!list) PAVE_GRID.set(key, list = []);
+      list.push(r);
+    }
+  return r;
+}
+// the paved surface at a point, a runway before anything else, or null
+function pavedAt(x, z) {
+  const list = PAVE_GRID.get(Math.floor(x / PAVE_CELL) * 100000 + Math.floor(z / PAVE_CELL));
+  if (!list) return null;
+  let hit = null;
+  for (const r of list) {
+    const dx = x - r.cx, dz = z - r.cz;
+    if (Math.abs(dx * r.ux + dz * r.uz) <= r.hl && Math.abs(dz * r.ux - dx * r.uz) <= r.hw) { if (r.kind === 'rwy') return r; hit = hit || r; }
+  }
+  return hit;
+}
+// Five runways in different directions. names[0] is the runway flown along hdg (its threshold is the start of the
+// strip), names[1] the reverse. 36 is the main runway: 5,000 m (16,400 ft) by 90 m, the take-off spot.
+const RUNWAYS = [
+  { names: ['36', '18'], x: 0, z: 400, hdg: 0, len: 5000, w: 90 },
+  { names: ['09L', '27R'], x: -4600, z: -1500, hdg: 90, len: 4600, w: 75 },
+  { names: ['09R', '27L'], x: -4600, z: 1300, hdg: 90, len: 4200, w: 60 },
+  { names: ['04', '22'], x: 5200, z: 500, hdg: 40, len: 4000, w: 60 },
+  { names: ['13', '31'], x: -11600, z: -900, hdg: 130, len: 3800, w: 60 }
+];
+const RWY_ENDS = [];
+for (const R of RUNWAYS) {
+  const a = R.hdg * Math.PI / 180, ux = Math.sin(a), uz = -Math.cos(a), hl = R.len / 2;
+  R.rect = pave('rwy', R.x - ux * hl, R.z - uz * hl, R.x + ux * hl, R.z + uz * hl, R.w);
+  RWY_ENDS.push({ name: R.names[0], x: R.x - ux * hl, z: R.z - uz * hl }, { name: R.names[1], x: R.x + ux * hl, z: R.z + uz * hl });
+}
 function ground(x, z) {
-  const h = heightAt(x, z);
-  return { h: Math.max(h, 0), water: h < 0, runway: Math.abs(x) < RUNWAY_W / 2 && Math.abs(z - RWY_Z) < RUNWAY_LEN / 2 };
+  const h = heightAt(x, z), p = h === CITY_H ? pavedAt(x, z) : null;
+  return { h: Math.max(h, 0), water: h < 0, paved: !!p, runway: !!p && p.kind === 'rwy' };
 }
 function slopeAt(x, z) {
   const h = heightAt(x, z);
@@ -476,7 +521,7 @@ scene.add(sky);
   const nrm = geo.attributes.normal, colors = new Float32Array(pos.count * 3);
   const C = {
     deep: new THREE.Color('#3f716a'), sand: new THREE.Color('#d8c38c'), grassA: new THREE.Color('#86a957'),
-    grassB: new THREE.Color('#4f7c3a'), rock: new THREE.Color('#8f8274'), rockD: new THREE.Color('#665d55'), snow: new THREE.Color('#f3f1ea')
+    grassB: new THREE.Color('#4f7c3a'), mown: new THREE.Color('#9aab5e'), rock: new THREE.Color('#8f8274'), rockD: new THREE.Color('#665d55'), snow: new THREE.Color('#f3f1ea')
   };
   const col = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
@@ -487,32 +532,13 @@ scene.add(sky);
     col.lerp(j > 0.5 ? C.rock : C.rockD, Math.max(smooth(230, 380, h + j * 60), smooth(0.88, 0.72, ny)));
     col.lerp(C.snow, smooth(540, 620, h + j * 80) * smooth(0.68, 0.84, ny));
     if (h < 0) col.copy(C.sand).lerp(C.deep, smooth(0, -30, h));
+    else col.lerp(C.mown, 0.55 * smooth(200, -100, airbaseSD(x, z)));
     colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0 }));
   mesh.receiveShadow = true;
   scene.add(mesh);
-
-  // the airbase island gets its own patch of terrain
-  const ig = new THREE.PlaneGeometry(ISLAND.rx * 2.4, ISLAND.rz * 2.3, 90, 180);
-  ig.rotateX(-Math.PI / 2);
-  ig.translate(0, 0, RWY_Z);
-  const ip = ig.attributes.position;
-  for (let i = 0; i < ip.count; i++) ip.setY(i, islandHeight(ip.getX(i), ip.getZ(i)));
-  ig.computeVertexNormals();
-  const icol = new Float32Array(ip.count * 3);
-  for (let i = 0; i < ip.count; i++) {
-    const x = ip.getX(i), z = ip.getZ(i), h = ip.getY(i);
-    col.copy(C.grassA).lerp(C.grassB, smooth(0.38, 0.68, fbm(x * 0.0015 + 5, z * 0.0015, 3)));
-    if (h < RUNWAY_H - 0.3) col.copy(C.sand).lerp(C.deep, smooth(RUNWAY_H, -30, h));
-    else if (h > RUNWAY_H + 40) col.lerp(C.rockD, smooth(RUNWAY_H + 40, RUNWAY_H + 90, h));
-    icol[i * 3] = col.r; icol[i * 3 + 1] = col.g; icol[i * 3 + 2] = col.b;
-  }
-  ig.setAttribute('color', new THREE.BufferAttribute(icol, 3));
-  const island = new THREE.Mesh(ig, mesh.material);
-  island.receiveShadow = true;
-  scene.add(island);
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(120000, 120000), new THREE.MeshStandardMaterial({ color: '#2e7088', roughness: 0.3, metalness: 0.15 }));
   water.rotation.x = -Math.PI / 2;
@@ -529,6 +555,7 @@ scene.add(sky);
   for (let tries = 0; tries < N * 12 && n < N; tries++) {
     const x = (rnd() - 0.5) * 18000 * MAP_K, z = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ;
     if (x > CITY.x0 - 150 && x < CITY.x1 + 150 && z > CITY.z0 - 150 && z < CITY.z1 + 150) continue;
+    if (airbaseSD(x, z) < 300 || (z > CITY.z1 && z < AB.zN + 300 && GATES.some(gx => Math.abs(x - gx) < 70))) continue;
     if (fbm(x * 0.002 + 3, z * 0.002, 3) < 0.52) continue;
     const h = heightAt(x, z);
     if (h < 10 || h > 330 || slopeAt(x, z) > 0.4) continue;
@@ -558,45 +585,270 @@ scene.add(sky);
   scene.add(mesh);
 })();
 
-// airfield on the island: RWY 36, 4,000 m × 60 m
-(function buildAirfield() {
-  const top = RUNWAY_H + 0.1, Z = RWY_Z, W = RUNWAY_W, L = RUNWAY_LEN;
-  const runway = new THREE.Mesh(new THREE.BoxGeometry(W, 0.4, L), new THREE.MeshStandardMaterial({ color: '#3a3e44', roughness: 0.95 }));
-  runway.position.set(0, top - 0.2, Z);
-  runway.receiveShadow = true;
-  scene.add(runway);
-  const paint = new THREE.MeshBasicMaterial({ color: '#e7e4da' });
-  const stripe = (w, l, x, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), paint); m.rotation.x = -Math.PI / 2; m.position.set(x, top + 0.02, Z + z); scene.add(m); };
-  for (let z = -L / 2 + 120; z <= L / 2 - 120; z += 60) stripe(0.9, 30, 0, z);
-  for (const end of [-1, 1]) {
-    for (let k = 0; k < 8; k++) { stripe(1.8, 45, 4 + k * 3.2, end * (L / 2 - 30)); stripe(1.8, 45, -4 - k * 3.2, end * (L / 2 - 30)); }
-    stripe(6, 60, 11, end * (L / 2 - 300)); stripe(6, 60, -11, end * (L / 2 - 300));
-    for (let k = 0; k < 3; k++) { stripe(3, 22, 8, end * (L / 2 - 450 - k * 150)); stripe(3, 22, -8, end * (L / 2 - 450 - k * 150)); } // touchdown zone
+// ---------------- airbase ----------------
+// A military airbase on the levelled south coast. Runway 36 is the 5 km main runway. The 09L/27R and 09R/27L
+// parallels have the main and heavy aprons between them. Crosswind runways 04/22 and 13/31 serve the fighter
+// shelters east and west. Paved surfaces are rectangles in PAVE, which the ground test also uses; they are drawn
+// as one merged mesh, and the paint as another. Buildings go into BASE_BOXES, which buildCity adds to the
+// city's building table, so they are solid and break up like any other building. The east end is left open for
+// expansion.
+const BASE_BOXES = [];
+(function buildAirbase() {
+  const Y = CITY_H, rnd = mulberry(3636);
+  const LAYER = { road: 0.04, lot: 0.04, apron: 0.05, pad: 0.05, taxi: 0.07, rwy: 0.1 };
+  const COL = { road: '#38393b', lot: '#46474a', apron: '#6a6c6d', pad: '#77776f', taxi: '#46494d', rwy: '#3a3d42' };
+  const WHITE = '#e8e6de', YELLOW = '#d9b23a';
+  const box = (x0, z0, x1, z1, h, col) => BASE_BOXES.push([x0, z0, x1, z1, h, col]);
+  // a point on runway R: t metres along it (toward hdg), s metres to its right
+  const at = (R, t, s) => [R.rect.cx + R.rect.ux * t - R.rect.uz * s, R.rect.cz + R.rect.uz * t + R.rect.ux * s];
+  const holds = []; // [x, z, ux, uz, width]: hold-short bars on the taxiway links
+
+  // ---- taxiways: a parallel taxiway beside each runway, with links to the runway ----
+  const parallel = (R, side, t0, t1, w, links) => {
+    pave('taxi', ...at(R, t0, side), ...at(R, t1, side), w);
+    for (const t of links) {
+      pave('taxi', ...at(R, t, 0), ...at(R, t, side), 30);
+      const [hx, hz] = at(R, t, Math.sign(side) * (R.w / 2 + 50)), [ex, ez] = at(R, t, side);
+      const d = Math.hypot(ex - hx, ez - hz);
+      holds.push([hx, hz, (ex - hx) / d, (ez - hz) / d, 30]);
+    }
+  };
+  const [R36, R09L, R09R, R04, R13] = RUNWAYS;
+  parallel(R36, -250, -2460, 2460, 38, [-2460, -1300, 0, 1300, 2460]); // A, west of 36
+  parallel(R36, 250, -2460, 2460, 30, [-2460, 0, 2460]);               // A2, east of 36
+  parallel(R09L, 250, -2290, 4350, 36, [-2290, -1150, 0, 1150, 2290]); // B, south of 09L, on to A
+  parallel(R09R, -250, -2090, 4350, 30, [-2090, -700, 700, 2090]);     // C, north of 09R, on to A
+  parallel(R13, -220, -1890, 1890, 30, [-1890, 0, 1890]);              // W, northeast of 13/31
+  parallel(R04, -200, -1990, 1990, 30, [-1990, 0, 1990]);              // northwest of 04/22
+  pave('taxi', -6890, -1250, -11690, -1250, 30);                       // D: B west to the 13/31 taxiway
+  pave('taxi', 250, 400, 5030, 400, 30);                               // E: A2 east to the 04/22 taxiway
+
+  // ---- aprons ----
+  pave('apron', -6400, -942.5, -2600, -942.5, 585); // main apron, between B and the hangar line
+  pave('apron', -6400, 717.5, -2600, 717.5, 635);   // heavy apron for bombers, tankers and transports, on C
+  pave('apron', -2600, -925, -2300, -925, 450);     // ground support equipment yard
+
+  // ---- hangars and the buildings behind them ----
+  const HANGAR = '#a3a8ab', HEAVY = '#9aa1a6', SHOP = '#bdb6a8', WARE = '#a89f90', DORM = '#c9b79c', HQ = '#cfc7b6';
+  const OPS = '#c3bba9', FIRE = '#b5473a', HAS = '#8e8c81', TOWER = '#d9d3c6', DOOR = '#596064';
+  const deco = []; // decoration boxes that are not solid: [x, y, z, sx, sy, sz, colour]
+  for (let k = 0; k < 18; k++) {                         // maintenance hangars, doors on the main apron
+    const c = -6200 + 200 * k;
+    box(c - 48, -645, c + 48, -569, 20, HANGAR);
+    deco.push([c, Y + 8, -645.4, 84, 16, 0.6, DOOR]);
   }
-  for (const sx of [-1, 1]) stripe(0.9, L - 60, sx * (W / 2 - 1.5), 0); // edge lines
-  const apronMat = new THREE.MeshStandardMaterial({ color: '#56595c', roughness: 1 });
-  const slab = (w, l, x, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), apronMat); m.rotation.x = -Math.PI / 2; m.position.set(x, top - 0.02, Z + z); m.receiveShadow = true; scene.add(m); };
-  slab(260, 900, W / 2 + 230, -200);              // ramp, big enough for bombers
-  slab(30, L - 400, W / 2 + 85, 0);               // parallel taxiway
-  for (const z of [-L / 2 + 250, -200, L / 2 - 250]) slab(70, 25, W / 2 + 35, z); // links
+  for (let k = 0; k < 9; k++) {
+    const c = -6200 + 400 * k;
+    box(c - 60, -490, c + 60, -430, 10, SHOP);             // workshops
+    box(c - 50, -360, c + 40, -300, 8, WARE);              // stores
+    box(c - 70, -90, c + 70, 10, 12, WARE);                // supply warehouses
+    box(c - 40, 110, c + 40, 200, 14, DORM);               // barracks
+  }
+  for (const c of [-6150, -5500, -4850, -4200, -3550, -2900]) {
+    box(c - 75, 285, c + 75, 390, 34, HEAVY);              // heavy maintenance hangars, doors on the heavy apron
+    deco.push([c, Y + 14, 390.4, 132, 28, 0.6, DOOR]);
+  }
+  box(-2650, -420, -2350, -260, 16, HQ);                   // wing headquarters
+  box(-2250, -440, -1980, -300, 12, OPS);                  // operations group
+  box(-1900, -320, -1680, -170, 10, OPS);                  // base operations
+  // control towers: a solid shaft (listed before its base so it wins) and a glass cab on top
+  const tower = (x, z, h, base) => {
+    box(x - 5, z - 5, x + 5, z + 5, h, TOWER);
+    box(x - base, z - 25, x + base, z + 25, 8, OPS);
+    deco.push([x, Y + h + 3, z, 16, 6, 16, '#2b4a5f'], [x, Y + h + 6.5, z, 18, 1, 18, '#7d8184'], [x, Y + h + 11, z, 0.4, 8, 0.4, '#d0d0d0']);
+  };
+  tower(-1150, -450, 52, 40);   // main tower: sees 36 and both 09s
+  tower(-9600, -400, 34, 30);   // west tower for 13/31
+  tower(4200, -700, 40, 30);    // east tower for 04/22
+  box(-1380, 450, -1120, 590, 9, FIRE);   // main fire and rescue station, out onto taxiway A
+  box(-9150, 60, -8950, 180, 9, FIRE);    // west fire station
+  box(3850, 80, 4100, 200, 9, FIRE);      // east fire station, out onto taxiway E
+  pave('pad', 3975, 200, 3975, 385, 60);
+  // hardened aircraft shelters: a tall arch core and lower sides, the door toward the taxiway
+  const shelter = (c, zFront, zBack) => {
+    const z0 = Math.min(zFront, zBack), z1 = Math.max(zFront, zBack);
+    box(c - 11, z0, c + 11, z1, 12.5, HAS);
+    box(c - 17, z0, c + 17, z1, 8, HAS);
+    deco.push([c, Y + 5, zFront + Math.sign(zFront - zBack) * 0.4, 26, 10, 0.6, DOOR]);
+  };
+  for (let k = 0; k < 10; k++) { const c = -10300 + 220 * k; shelter(c, -1000, -952); pave('taxi', c, -1235, c, -1000, 22); }
+  for (let k = 0; k < 11; k++) { const c = 1200 + 240 * k; shelter(c, 185, 137); pave('taxi', c, 385, c, 185, 22); }
+  for (const c of [1380, 1980, 2580, 3180]) box(c - 80, -300, c + 80, -180, 9, OPS); // squadron buildings
+  box(-9900, -700, -9700, -600, 9, OPS); box(-9300, -700, -9100, -600, 9, OPS);
+  box(3300, -420, 3500, -320, 16, HANGAR); // fighter maintenance
 
-  const lights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 0.5, 0.6), new THREE.MeshBasicMaterial({ color: '#ffd27a' }), 2 * (Math.floor(L / 60) + 1));
-  const m = new THREE.Matrix4(); let i = 0;
-  for (let z = -L / 2; z <= L / 2; z += 60) for (const x of [-1, 1]) { m.makeTranslation(x * (W / 2 + 1.5), top + 0.25, Z + z); lights.setMatrixAt(i++, m); }
-  lights.count = i; scene.add(lights);
+  // ---- fuel farms ----
+  const tanks = [];
+  for (const x of [-7600, -7480, -7360]) for (const z of [180, 290]) tanks.push([x, z, 22, 16]);
+  pave('pad', -7680, 235, -7280, 235, 230);
+  for (const x of [1150, 1270, 1390]) for (const z of [-560, -440]) tanks.push([x, z, 22, 16]);
+  pave('pad', 1110, -500, 1430, -500, 200);
 
-  const wall = new THREE.MeshStandardMaterial({ color: '#c9c2b4', roughness: 0.9 }), roof = new THREE.MeshStandardMaterial({ color: '#7a3b2e', roughness: 0.8 });
-  [-560, -460, -360, -100, 40].forEach((z, k) => {
-    const big = k < 3, w = big ? 72 : 30, d = big ? 64 : 36, h = big ? 18 : 10, x = W / 2 + 300;
-    const hgr = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wall); hgr.position.set(x, top + h / 2, Z + z); hgr.castShadow = hgr.receiveShadow = true; scene.add(hgr);
-    const rg = new THREE.CylinderGeometry(w / 2 + 0.5, w / 2 + 0.5, d, 14, 1, false, 0, Math.PI);
-    rg.rotateX(Math.PI / 2); rg.rotateZ(Math.PI / 2);
-    const r = new THREE.Mesh(rg, roof); r.scale.set(1, 0.3, 1); r.position.set(x, top + h, Z + z); scene.add(r);
+  // ---- roads, parking and the perimeter ----
+  const road = (x1, z1, x2, z2, w = 12) => pave('road', x1, z1, x2, z2, w);
+  road(-10000, -120, -900, -120, 14);                         // the main road through the base
+  for (const gx of GATES) road(gx, CITY.z1 - 5, gx, gx < 0 ? 650 : -60); // from the edge of town through the gates
+  road(-6500, -520, -2700, -520); road(-6500, 250, -2700, 250);
+  for (const x of [-6450, -4800, -2800]) road(x, -520, x, 250);
+  road(-8000, -850, -8000, -120); road(-10500, -850, -8000, -850);
+  road(-9600, -120, -9600, -375); road(-9050, -120, -9050, 60); road(-7480, -120, -7480, 120);
+  road(-1500, 620, -269, 620);                                // crash crews out to taxiway A
+  road(-2050, -120, -2050, 0);
+  road(900, -60, 4400, -60); road(3000, -700, 4165, -700); road(1550, -60, 1550, -500); road(3975, -60, 3975, 80);
+  road(2800, -515, 3000, -515);
+  pave('lot', -2450, 110, -1650, 110, 220);                    // main parking
+  pave('lot', 2000, -515, 2800, -515, 270);                    // east parking
+  // the edge of the levelled ground, moved in by inset metres: north side, then the shore arc
+  const outline = inset => {
+    const r = AB.r - inset, zN = AB.zN + inset, xW = AB.xW + inset, xE = AB.xE - inset;
+    const pts = [[xW, zN], [xE, zN]];
+    for (let k = 0; k <= 64; k++) { const x = xE + (xW - xE) * k / 64; pts.push([x, MAP_CZ + Math.sqrt(r * r - x * x)]); }
+    return pts;
+  };
+  const patrol = outline(185);
+  patrol.forEach((p, i) => { const q = patrol[(i + 1) % patrol.length]; road(p[0], p[1], q[0], q[1], 7); });
+  // the fence, with a gap at each gate
+  const fence = [], fl = outline(150), FZ = AB.zN + 150;
+  fl.forEach((p, i) => {
+    const q = fl[(i + 1) % fl.length];
+    if (i > 0) { fence.push([p, q]); return; }
+    let x = p[0];
+    for (const gx of GATES) { fence.push([[x, FZ], [gx - 18, FZ]]); x = gx + 18; }
+    fence.push([[x, FZ], q]);
   });
-  const tx = -(W / 2 + 120), tz = Z + 150;
-  const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 24, 10), wall); tower.position.set(tx, top + 12, tz); tower.castShadow = true; scene.add(tower);
-  const cab = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 3.8, 4, 8), new THREE.MeshStandardMaterial({ color: '#25455c', roughness: 0.2, metalness: 0.5 })); cab.position.set(tx, top + 26, tz); scene.add(cab);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 0.8, 8), roof); cap.position.set(tx, top + 28.4, tz); scene.add(cap);
+  // gate checkpoints: guard booths either side, a canopy over the road, barrier arms
+  for (const gx of GATES) {
+    road(gx, FZ - 50, gx, FZ + 50, 20);
+    box(gx + 11, FZ + 4, gx + 16, FZ + 10, 3.5, '#d0cabd'); box(gx - 16, FZ - 10, gx - 11, FZ - 4, 3.5, '#d0cabd');
+    deco.push([gx, Y + 6.5, FZ, 36, 0.8, 18, '#d8d8d8']);
+    for (const [px, pz] of [[-17, -8], [17, -8], [-17, 8], [17, 8]]) deco.push([gx + px, Y + 3.2, FZ + pz, 0.5, 6.4, 0.5, '#9a9a9a']);
+    deco.push([gx - 3, Y + 1.1, FZ + 9, 6, 0.25, 0.25, '#e04a3a'], [gx + 3, Y + 1.1, FZ - 9, 6, 0.25, 0.25, '#e04a3a']);
+  }
+
+  // ---- vehicles: parked cars and the ground support yard ----
+  const CARS = ['#d9d9d9', '#2b2d30', '#7d8288', '#8c1f1f', '#1f3c6e', '#b9b4a8', '#46524a', '#f0f0ec'];
+  const lotCars = (x0, z0, x1, z1) => {
+    for (let z = z0 + 5; z < z1 - 8; z += 17) for (const dz of [0, 5.4]) for (let x = x0 + 3; x < x1 - 2; x += 2.7)
+      if (rnd() < (isTouch ? 0.25 : 0.5)) deco.push([x, Y + 0.8, z + dz, 1.8, 1.5, 4.4, CARS[Math.floor(rnd() * CARS.length)]]);
+  };
+  lotCars(-2450, 0, -1650, 220); lotCars(2000, -650, 2800, -380);
+  for (let row = 0; row < 6; row++) for (let k = 0; k < 10; k++) {
+    if (rnd() < 0.2) continue;
+    const x = -2560 + k * 24, z = -1110 + row * 70;
+    if (row % 3 === 0) deco.push([x, Y + 1.7, z, 2.6, 3.2, 10, '#cfc9b2']);      // fuel trucks
+    else if (row % 3 === 1) deco.push([x, Y + 1, z, 2.2, 1.8, 4.6, '#e0b23a']);  // tugs
+    else deco.push([x, Y + 1.5, z, 3, 2.8, 7, '#e2e2e2']);                       // loaders and stairs
+  }
+
+  // ---- surfaces ----
+  const geoOf = () => ({ pos: [], col: [], uv: [], idx: [] });
+  const flat = geoOf(), paint = geoOf(), labels = geoOf(), tc = new THREE.Color();
+  // a rectangle centred at (cx, cz), half length hl along (ux, uz), half width hw across it
+  const quad = (g, cx, cz, ux, uz, hl, hw, y, color, uv) => {
+    const i0 = g.pos.length / 3;
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([a, b], k) => {
+      g.pos.push(cx + ux * hl * a - uz * hw * b, y, cz + uz * hl * a + ux * hw * b);
+      if (uv) g.uv.push(...uv[k]);
+    });
+    tc.set(color);
+    for (let k = 0; k < 4; k++) g.col.push(tc.r, tc.g, tc.b);
+    g.idx.push(i0, i0 + 2, i0 + 1, i0, i0 + 3, i0 + 2); // counter-clockwise seen from above: facing up
+  };
+  const line = (g, x1, z1, x2, z2, w, y, color) => {
+    const L = Math.hypot(x2 - x1, z2 - z1);
+    quad(g, (x1 + x2) / 2, (z1 + z2) / 2, (x2 - x1) / L, (z2 - z1) / L, L / 2, w / 2, y, color);
+  };
+  for (const r of PAVE) {
+    quad(flat, r.cx, r.cz, r.ux, r.uz, r.hl, r.hw, Y + LAYER[r.kind], COL[r.kind]);
+    if (r.kind === 'taxi') quad(paint, r.cx, r.cz, r.ux, r.uz, r.hl, 0.3, Y + LAYER.taxi + 0.02, YELLOW); // centreline
+  }
+  for (const [x, z, ux, uz, w] of holds) for (const off of [0, 1.2]) quad(paint, x + ux * off, z + uz * off, -uz, ux, w / 2, 0.3, Y + LAYER.taxi + 0.02, YELLOW);
+  // apron taxilanes, with a lead-in line and stop bar at each stand
+  const ay = Y + LAYER.apron + 0.015;
+  line(paint, -6400, -1180, -2600, -1180, 0.6, ay, YELLOW);
+  for (let x = -6300; x <= -2700; x += 140) { line(paint, x, -1180, x, -765, 0.4, ay, YELLOW); line(paint, x - 4, -765, x + 4, -765, 0.8, ay, YELLOW); }
+  line(paint, -6400, 980, -2600, 980, 0.6, ay, YELLOW);
+  for (let x = -6200; x <= -2800; x += 300) { line(paint, x, 980, x, 480, 0.4, ay, YELLOW); line(paint, x - 6, 480, x + 6, 480, 0.8, ay, YELLOW); }
+
+  // runways: shoulders, edge and centre lines, threshold bars, aiming points, touchdown zones, the numbers
+  const NAMES = RUNWAYS.flatMap(R => R.names), cv = document.createElement('canvas');
+  cv.width = 1280; cv.height = 512;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#fff'; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.font = 'bold 230px Arial, Helvetica, sans-serif';
+  NAMES.forEach((nm, i) => {
+    const k = Math.min(1, 236 / cx.measureText(nm).width);
+    cx.save(); cx.translate((i % 5) * 256 + 128, Math.floor(i / 5) * 256 + 136); cx.scale(k, 1); cx.fillText(nm, 0, 0); cx.restore();
+  });
+  const lights = []; // [x, z, colour]
+  RUNWAYS.forEach((R, ri) => {
+    const r = R.rect, hl = r.hl, w = R.w, y = Y + LAYER.rwy + 0.02;
+    const mk = (t, s, len, wid) => { const [x, z] = at(R, t, s); quad(paint, x, z, r.ux, r.uz, len / 2, wid / 2, y, WHITE); };
+    quad(flat, r.cx, r.cz, r.ux, r.uz, hl + 60, w / 2 + 7.5, Y + LAYER.rwy - 0.02, '#585b5e'); // shoulders and blast pads
+    for (let t = -hl + 140; t <= hl - 140; t += 60) mk(t, 0, 36, w >= 75 ? 1.2 : 0.9);
+    for (const sd of [-1, 1]) mk(0, sd * (w / 2 - 1.5), 2 * hl - 20, 0.9);
+    const nb = w >= 75 ? 8 : 6, pitch = (w / 2 - 6) / nb, aim = w * 0.18 + 3;
+    for (const e of [-1, 1]) {
+      for (let k = 0; k < nb; k++) for (const sd of [-1, 1]) mk(e * (hl - 28.5), sd * (3 + pitch * (k + 0.5)), 45, pitch * 0.55);
+      for (const sd of [-1, 1]) mk(e * (hl - 400), sd * aim, 60, w >= 75 ? 10 : 8);
+      for (const d of [150, 550, 700, 850]) for (const sd of [-1, 1]) for (const o of [0, 6]) mk(e * (hl - d), sd * (aim - 3 + o), 22, 3);
+      // the number, read from the approach: names[0] at the t = -hl end, flown toward +u
+      const i = ri * 2 + (e < 0 ? 0 : 1), fx = -e * r.ux, fz = -e * r.uz, [px, pz] = at(R, e * (hl - 95), 0);
+      const u0 = (i % 5) / 5, u1 = u0 + 0.2, v1 = 1 - Math.floor(i / 5) * 0.5, v0 = v1 - 0.5, lh = 15, lw = Math.min(w * 0.2, 14);
+      quad(labels, px, pz, fx, fz, lh, lw, y, WHITE, [[u0, v0], [u0, v1], [u1, v1], [u1, v0]]);
+      // threshold lights across the end
+      const [tx, tz] = at(R, e * (hl + 2), 0);
+      for (let sd = -w / 2; sd <= w / 2 + 0.1; sd += 4.5) lights.push([tx - r.uz * sd, tz + r.ux * sd, '#5cff7a']);
+    }
+    for (let t = -hl; t <= hl + 0.1; t += 60) for (const sd of [-1, 1]) { const [x, z] = at(R, t, sd * (w / 2 + 2)); lights.push([x, z, '#ffe7a8']); }
+  });
+  // blue taxiway edge lights, kept off the runways and their shoulders
+  const offRunway = (x, z) => RUNWAYS.every(R => { const r = R.rect, dx = x - r.cx, dz = z - r.cz; return Math.abs(dx * r.ux + dz * r.uz) > r.hl + 60 || Math.abs(dz * r.ux - dx * r.uz) > r.hw + 12; });
+  for (const r of PAVE) if (r.kind === 'taxi' && r.hl > 60) for (let t = -r.hl + 20; t <= r.hl - 20; t += 60) for (const sd of [-1, 1]) {
+    const x = r.cx + r.ux * t - r.uz * sd * (r.hw + 1), z = r.cz + r.uz * t + r.ux * sd * (r.hw + 1);
+    if (offRunway(x, z)) lights.push([x, z, '#3a78ff']);
+  }
+
+  const toGeo = g => {
+    const geo = new THREE.BufferGeometry(), nrm = new Float32Array(g.pos.length);
+    for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1;
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(g.col, 3));
+    if (g.uv.length) geo.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
+    geo.setIndex(g.idx);
+    return geo;
+  };
+  const surf = new THREE.Mesh(toGeo(flat), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  surf.receiveShadow = true;
+  scene.add(surf);
+  const marks = new THREE.Mesh(toGeo(paint), new THREE.MeshBasicMaterial({ vertexColors: true }));
+  scene.add(marks);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 8;
+  scene.add(new THREE.Mesh(toGeo(labels), new THREE.MeshBasicMaterial({ map: tex, color: WHITE, transparent: true, depthWrite: false })));
+
+  // ---- instanced pieces: lights, decorations, fuel tanks, fence ----
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
+  const lm = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 0.5, 0.6), new THREE.MeshBasicMaterial({ color: '#ffffff' }), lights.length);
+  lights.forEach(([x, z, col], i) => { lm.setMatrixAt(i, m.makeTranslation(x, Y + 0.3, z)); lm.setColorAt(i, c.set(col)); });
+  scene.add(lm);
+  const dm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 }), deco.length);
+  deco.forEach(([x, y, z, sx, sy, sz, col], i) => { dm.setMatrixAt(i, m.compose(p.set(x, y, z), q.identity(), sc.set(sx, sy, sz))); dm.setColorAt(i, c.set(col)); });
+  dm.castShadow = dm.receiveShadow = true;
+  scene.add(dm);
+  const tg = new THREE.CylinderGeometry(1, 1, 1, 24);
+  tg.translate(0, 0.5, 0);
+  const tm = new THREE.InstancedMesh(tg, new THREE.MeshStandardMaterial({ color: '#d7d6cf', roughness: 0.5, metalness: 0.2 }), tanks.length);
+  tanks.forEach(([x, z, r, h], i) => tm.setMatrixAt(i, m.compose(p.set(x, Y, z), q.identity(), sc.set(r, h, r))));
+  tm.castShadow = tm.receiveShadow = true;
+  scene.add(tm);
+  const fm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#8f9497', roughness: 0.7, transparent: true, opacity: 0.6 }), fence.length);
+  const UP = new THREE.Vector3(0, 1, 0);
+  fence.forEach(([a, b], i) => {
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    fm.setMatrixAt(i, m.compose(p.set((a[0] + b[0]) / 2, Y + 1.4, (a[1] + b[1]) / 2), q.setFromAxisAngle(UP, Math.atan2(-dz, dx)), sc.set(Math.hypot(dx, dz), 2.8, 0.2)));
+  });
+  scene.add(fm);
 })();
 
 // ---------------- city ----------------
@@ -880,6 +1132,7 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
       }
     }
   }
+  for (const [x0, z0, x1, z1, h, col] of BASE_BOXES) put(x0, z0, x1, z1, h, [col]);
   const geo = new THREE.BoxGeometry(1, 1, 1);
   geo.translate(0, 0.5, 0);
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0.05 });
@@ -890,7 +1143,7 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
   if (abs(n.y) < 0.5 && fade > 0.0) {
     float u = abs(n.x) > 0.5 ? vWPos.z : vWPos.x;
     float fy = fract(vWPos.y / 3.4), fu = fract(u / 2.8);
-    float win = step(0.25, fy) * step(fy, 0.8) * step(0.2, fu) * step(fu, 0.8) * step(${CITY_H + 4}.0, vWPos.y);
+    float win = step(0.25, fy) * step(fy, 0.8) * step(0.2, fu) * step(fu, 0.8) * step(${CITY_H + 4}.0, vWPos.y) * step(vWPos.z, ${(AB.zN - 300).toFixed(1)});
     float r = fract(sin(dot(vec2(floor(u / 2.8), floor(vWPos.y / 3.4)), vec2(12.9898, 78.233))) * 43758.5453);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.15, 0.19, 0.24) + r * 0.08, win * 0.8 * fade);
     winLit = win * step(0.87, r) * fade;
@@ -959,8 +1212,8 @@ const AC = {
     chase: [5.5, 34, 30], eye: [0.95, 3.9], scale: 1, shadow: 16, airStart: [165, 0.5], fireball: 1, crashBlast: [30, 500],
     sound: { whine: [600, 1400, 1], roar: [160, 450, 1] },
     eyebrow: 'F-15C EAGLE · TWIN-ENGINE FIGHTER',
-    desc: 'Fly an F-15 from an island airbase 15 km south of the city, then head north over the water to the downtown towers, the river, the suburbs and the hills. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked, piece by piece, and the damage stays until you choose Rebuild city on the pause screen.',
-    specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', 'STORES', 'RWY 36 · 13,100 FT'],
+    desc: 'Fly an F-15 from a huge military airbase on the south coast, just outside the city, then head north to the downtown towers, the river, the suburbs and the hills. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked, piece by piece, and the damage stays until you choose Rebuild city on the pause screen.',
+    specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', 'STORES', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle, pull back at 150 kt, then raise the gear. With the stick centered the jet holds level flight; the throttle sets your speed. Lower the gear before landing.'
   },
   typhoon: {
@@ -976,8 +1229,8 @@ const AC = {
     chase: [5, 30, 28], eye: [0.8, 3.05], scale: 0.9, shadow: 14, airStart: [165, 0.5], fireball: 0.95, crashBlast: [28, 450],
     sound: { whine: [700, 1500, 1], roar: [170, 480, 1] },
     eyebrow: 'EUROFIGHTER TYPHOON · DELTA-CANARD FIGHTER',
-    desc: 'Fly a Eurofighter Typhoon from an island airbase 15 km south of the city, with its downtown towers, river, suburbs and hills. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
-    specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', '4 × MK-82', 'RWY 36 · 13,100 FT'],
+    desc: 'Fly a Eurofighter Typhoon from a huge military airbase on the south coast, just outside the city, with its downtown towers, river, suburbs and hills. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
+    specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', '4 × MK-82', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle, pull back at about 155 kt, then raise the gear. Watch the canards: they tilt nose-up to pitch up. Lower the gear and land at about 145 kt.'
   },
   a10: {
@@ -995,8 +1248,8 @@ const AC = {
     chase: [5, 32, 28], eye: [1.25, 4.9], scale: 1, shadow: 16, airStart: [140, 0.75], fireball: 1, crashBlast: [30, 500],
     sound: { whine: [900, 1700, 1.5], roar: [120, 320, 0.8] },
     eyebrow: 'A-10C THUNDERBOLT II · CLOSE AIR SUPPORT',
-    desc: 'Fly an A-10 Warthog from the island airbase 15 km south of the city. It is slow, tough and turns tight, with eight Mk-82s under its straight wings and the GAU-8 Avenger in the nose: 1,150 rounds of 30 mm that chew through buildings. Short bursts: the recoil slows the jet down.',
-    specs: ['ROTATE 135 KT', 'APPROACH 140 KT', '7.3 G LIMIT', 'MAX 400 KT', 'GAU-8/A 30 MM · 1,150 RDS', '8 × MK-82', 'RWY 36 · 13,100 FT'],
+    desc: 'Fly an A-10 Warthog from the military airbase on the south coast, just outside the city. It is slow, tough and turns tight, with eight Mk-82s under its straight wings and the GAU-8 Avenger in the nose: 1,150 rounds of 30 mm that chew through buildings. Short bursts: the recoil slows the jet down.',
+    specs: ['ROTATE 135 KT', 'APPROACH 140 KT', '7.3 G LIMIT', 'MAX 400 KT', 'GAU-8/A 30 MM · 1,150 RDS', '8 × MK-82', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle, pull back gently at about 135 kt, then raise the gear. There are no afterburners, so keep your speed up in turns. Fire the gun in short bursts. Lower the gear and land at about 140 kt.'
   },
   b52: {
@@ -1020,8 +1273,8 @@ const AC = {
     fireball: 2.2, crashBlast: [60, 2000],
     sound: { whine: [280, 700, 1.4], roar: [80, 240, 1.6] },
     eyebrow: 'BOEING B-52H STRATOFORTRESS · HEAVY BOMBER',
-    desc: 'Fly a B-52 from the island airbase 15 km south of the city. It is huge and slow to answer, with eight engines. Pick twenty 2,000 lb Mk-84s, eight under the wings and twelve in the bomb bay, each blowing a crater out of whatever it lands on, or a single nuclear bomb in the bay: the 1.45 Mt B28, or the 25 Mt B41, the most powerful bomb the US ever deployed.',
-    specs: ['ROTATE 160 KT', 'APPROACH 155 KT', '2 G LIMIT', '8 × TF33 ENGINES', 'STORES', 'RWY 36 · 13,100 FT'],
+    desc: 'Fly a B-52 from the military airbase on the south coast, just outside the city. It is huge and slow to answer, with eight engines. Pick twenty 2,000 lb Mk-84s, eight under the wings and twelve in the bomb bay, each blowing a crater out of whatever it lands on, or a single nuclear bomb in the bay: the 1.45 Mt B28, or the 25 Mt B41, the most powerful bomb the US ever deployed.',
+    specs: ['ROTATE 160 KT', 'APPROACH 155 KT', '2 G LIMIT', '8 × TF33 ENGINES', 'STORES', 'RWY 36 · 16,400 FT'],
     tip: 'Start airborne puts you at 30,000 ft over the sea, cruising toward the city. With the B41, keep flying straight at full power after release: you clear its 13 km blast by about half a kilometre. Takeoff: full throttle and a long roll; the B-52 lifts off almost level at about 160 kt with a gentle pull. Drop bombs from at least 1,500 ft, wing bombs first, then the bay. Lower the gear and land at about 155 kt.'
   },
   b757: {
@@ -1034,8 +1287,8 @@ const AC = {
     chase: [13, 85, 70], eye: [0.9, 19.7], scale: 2.3, shadow: 34, airStart: [125, 0.5], fireball: 1.8, crashBlast: [50, 1600],
     sound: { whine: [350, 900, 1.6], roar: [110, 300, 1.25] },
     eyebrow: 'BOEING 757-200 · TWIN-ENGINE AIRLINER',
-    desc: 'Fly a Boeing 757 from an island airbase 15 km south of the city, with its downtown towers, river, suburbs and hills. It weighs 80 tonnes, has no weapons, turns gently and carries a lot of momentum, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
-    specs: ['ROTATE 145 KT', 'APPROACH 140 KT', '2.5 G LIMIT', 'MAX MACH 0.86', 'NO WEAPONS', 'RWY 36 · 13,100 FT'],
+    desc: 'Fly a Boeing 757 from a huge military airbase on the south coast, just outside the city, with its downtown towers, river, suburbs and hills. It weighs 80 tonnes, has no weapons, turns gently and carries a lot of momentum, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
+    specs: ['ROTATE 145 KT', 'APPROACH 140 KT', '2.5 G LIMIT', 'MAX MACH 0.86', 'NO WEAPONS', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle, pull back gently at 145 kt, then raise the gear. It rolls slowly, so start turns early. Lower the gear and land at about 140 kt.'
   },
   b748: {
@@ -1052,8 +1305,8 @@ const AC = {
     chase: [20, 125, 100], eye: [3.6, 31.2], scale: 3.4, shadow: 50, airStart: [130, 0.6], fireball: 2.6, crashBlast: [70, 2600],
     sound: { whine: [300, 800, 1.7], roar: [90, 260, 1.4] },
     eyebrow: 'BOEING 747-8 · FOUR-ENGINE WIDEBODY',
-    desc: 'Fly a Boeing 747-8 from the island airbase 15 km south of the city: 76 m long, 68 m across the wingtips, four engines and 300 tonnes in the air. It answers the controls slowly and takes a long time to stop, so plan every turn and every approach well ahead.',
-    specs: ['ROTATE 165 KT', 'APPROACH 155 KT', '2.5 G LIMIT', 'MAX MACH 0.9', '4 × GENX-2B', 'NO WEAPONS', 'RWY 36 · 13,100 FT'],
+    desc: 'Fly a Boeing 747-8 from the military airbase on the south coast, just outside the city: 76 m long, 68 m across the wingtips, four engines and 300 tonnes in the air. It answers the controls slowly and takes a long time to stop, so plan every turn and every approach well ahead.',
+    specs: ['ROTATE 165 KT', 'APPROACH 155 KT', '2.5 G LIMIT', 'MAX MACH 0.9', '4 × GENX-2B', 'NO WEAPONS', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle and a long roll; pull back gently at about 165 kt, then raise the gear. Start turns early and keep the bank shallow. Lower the gear early and land at about 155 kt.'
   },
   ac130: {
@@ -1082,8 +1335,8 @@ const AC = {
     chase: [8, 62, 50], eye: [1.9, 11.8], scale: 1.8, shadow: 26, airStart: [120, 0.7], fireball: 1.6, crashBlast: [45, 1200],
     sound: { whine: [480, 700, 1.1], roar: [70, 170, 1.7] },
     eyebrow: 'LOCKHEED MARTIN AC-130J GHOSTRIDER · GUNSHIP',
-    desc: 'Fly the AC-130J Ghostrider from the island airbase 15 km south of the city. It is a C-130J turned into a gunship: four turboprops, a 30 mm cannon and a 105 mm howitzer firing out of its left side. Press V for the gunship sensor camera, circle the target in a left turn and let the fire control work out the lead.',
-    specs: ['ROTATE 125 KT', 'APPROACH 130 KT', '3 G LIMIT', '4 × AE 2100D3', 'GAU-23/A 30 MM', 'M102 105 MM', 'RWY 36 · 13,100 FT'],
+    desc: 'Fly the AC-130J Ghostrider from the military airbase on the south coast, just outside the city. It is a C-130J turned into a gunship: four turboprops, a 30 mm cannon and a 105 mm howitzer firing out of its left side. Press V for the gunship sensor camera, circle the target in a left turn and let the fire control work out the lead.',
+    specs: ['ROTATE 125 KT', 'APPROACH 130 KT', '3 G LIMIT', '4 × AE 2100D3', 'GAU-23/A 30 MM', 'M102 105 MM', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle, pull back at about 125 kt, then raise the gear. Over the target, bank left into a gentle circle and press V: the sensor stays on the spot you point it at while you orbit. 1 and 2 pick the gun, Space or a click fires.'
   }
 };
@@ -2157,8 +2410,7 @@ function stepPiece(p, dt) {
   // sliding friction at the corner; it also tips the piece over, so things tumble
   const vh = Math.hypot(v.x, v.z);
   if (vh > 1e-3) {
-    const onRunway = Math.abs(p.cp.x) < RUNWAY_W / 2 && Math.abs(p.cp.z - RWY_Z) < RUNWAY_LEN / 2;
-    const dec = Math.min(vh, (onRunway ? p.mu * 0.8 : p.mu) * G * dt);
+    const dec = Math.min(vh, (pavedAt(p.cp.x, p.cp.z) ? p.mu * 0.8 : p.mu) * G * dt);
     const fx = -v.x / vh * dec, fz = -v.z / vh * dec;
     v.x += fx; v.z += fz;
     w.x += (tR.y * fz) / p.I * 0.5;
@@ -3138,14 +3390,15 @@ function reset(mode) {
   S.ang.set(0, 0, 0);
   inp.pitch = inp.roll = inp.yaw = 0;
   if (mode === 'runway') {
-    S.pos.set(0, RUNWAY_H + 0.1 + GEAR, RWY_Z + RUNWAY_LEN / 2 - 80);
+    const R = RUNWAYS[0]; // lined up on runway 36, facing north toward the city
+    S.pos.set(R.x, CITY_H + 0.1 + GEAR, R.z + R.len / 2 - 80);
     S.vel.set(0, 0, 0);
     S.quat.identity();
     S.throttle = 0;
     S.onGround = true;
     S.gearDown = true; S.gearT = 1; S.doorT = 1;
   } else {
-    const x = 120, z = 7500;
+    const x = 0, z = 9000; // over the sea south of the base, heading north up runway 36
     S.pos.set(x, Math.max(A.airStart[2] || 900, heightAt(x, z) + 600), z); // optional per-aircraft start altitude (m)
     S.quat.setFromEuler(eul.set(0, 0.02, 0, 'YXZ'));
     axes(S.quat);
@@ -3328,7 +3581,7 @@ function physics(dt) {
     const decay = Math.exp(-dt * 8);
     const lx = (v.x - fx * along) * decay, lz = (v.z - fz * along) * decay;
     // rolling: a little rolling drag, the brakes and rough ground; sliding on the belly: about half a g of scraping
-    const dv = (S.belly ? 4.5 + (g.runway ? 0 : 1.5) : 0.3 + (S.brake ? 6 : 0) + (g.runway ? 0 : 0.9)) * dt;
+    const dv = (S.belly ? 4.5 + (g.paved ? 0 : 1.5) : 0.3 + (S.brake ? 6 : 0) + (g.paved ? 0 : 0.9)) * dt;
     along = Math.abs(along) <= dv ? 0 : along - Math.sign(along) * dv;
     v.x = fx * along + lx; v.z = fz * along + lz;
     if (S.belly && !S.bellyStopped && V < 1) { S.bellyStopped = true; toast('Stopped. You walked away from that one. Restart from the pause screen'); }
@@ -3840,8 +4093,10 @@ function updateHUD() {
   setText(el.vs, (fpm >= 0 ? '+' : '−') + String(Math.round(Math.abs(fpm) / 10) * 10).padStart(4, '0'));
   setText(el.aoa, (S.alpha * 180 / Math.PI).toFixed(1) + '°');
   el.aoa.style.color = S.alpha > 0.2 ? 'var(--amber)' : '';
-  const dx = -S.pos.x, dz = RWY_Z - S.pos.z, nm = Math.hypot(dx, dz) / 1852, brg = (Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360;
-  setText(el.rwy, `RWY 36 · ${nm.toFixed(1)} NM · ${String(Math.round(brg) % 360).padStart(3, '0')}°`);
+  let E = RWY_ENDS[0], ed = Infinity;
+  for (const T of RWY_ENDS) { const d = Math.hypot(T.x - S.pos.x, T.z - S.pos.z); if (d < ed) { ed = d; E = T; } }
+  const dx = E.x - S.pos.x, dz = E.z - S.pos.z, nm = ed / 1852, brg = (Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360;
+  setText(el.rwy, `RWY ${E.name} · ${nm.toFixed(1)} NM · ${String(Math.round(brg) % 360).padStart(3, '0')}°`);
   el.gnd.classList.toggle('on', S.onGround);
   el.brk.classList.toggle('on', S.brake);
   const g = ground(S.pos.x, S.pos.z), agl = (S.pos.y - GEAR - g.h) * 3.28084;
