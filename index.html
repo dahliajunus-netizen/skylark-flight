@@ -80,6 +80,30 @@ h2 { margin: 0; font-size: 30px; text-wrap: balance; }
 .specs span { font-family: var(--font-num); font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--fg); }
 .pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
 .lopick, .ctlpick { grid-template-columns: repeat(2, 1fr); }
+/* AC-130J gunship sensor view and weapon panel: thin lines, restrained colours, dark halo so it reads on any terrain */
+#gsHud { position: fixed; inset: 0; pointer-events: none; font: 700 12px var(--font-num); letter-spacing: .06em; color: #e4ebe4; text-shadow: 0 0 2px #000, 0 0 1px #000, 0 1px 3px rgba(0,0,0,.8); }
+#gsHud .gs-view { display: none; position: absolute; inset: 0; }
+body.gscam #gsHud .gs-view { display: block; }
+body.gscam #hud, body.gscam .ret:not(.gs-ret) { display: none !important; }
+.gs-ret { position: absolute; left: 50%; top: 50%; width: 160px; height: 160px; margin: -80px 0 0 -80px; fill: none; stroke: #e4ebe4; stroke-width: 1.2; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+.gs-sel { position: absolute; left: 50%; top: calc(50% + 96px); transform: translateX(-50%); font-size: 14px; white-space: nowrap; }
+.gs-tl, .gs-tr { position: absolute; top: 64px; line-height: 1.55; white-space: pre; }
+.gs-tl { left: 24px; } .gs-tr { right: 24px; text-align: right; }
+.gs-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); font-size: 10px; color: #b9c3b9; white-space: nowrap; }
+.gs-wpn { position: absolute; left: 16px; bottom: 16px; display: grid; gap: 4px; min-width: 330px; }
+body.gscam .gs-wpn { bottom: 40px; }
+.gsw { display: grid; grid-template-columns: 22px 1fr auto; gap: 2px 10px; align-items: center; padding: 6px 10px; border: 1px solid rgba(228,235,228,.28); border-radius: 4px; background: rgba(8,12,10,.42); }
+.gsw.on { border-color: #e4ebe4; background: rgba(8,12,10,.6); }
+.gsw .k { grid-row: span 2; text-align: center; border: 1px solid rgba(228,235,228,.5); border-radius: 3px; font-size: 11px; line-height: 18px; }
+.gsw .st { font-size: 11px; }
+.gsw .am { grid-column: 2 / 4; display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: #b9c3b9; }
+.gsw .bar { grid-column: 1 / 4; height: 2px; background: rgba(228,235,228,.18); }
+.gsw .bar i { display: block; height: 100%; width: 0; background: #6fd3e0; }
+.st.ready { color: #e4ebe4; } .st.firing { color: #ffc861; } .st.reload { color: #6fd3e0; } .st.empty { color: #ff6b5e; } .st.limits { color: #ffc861; opacity: .8; }
+.gs-btns { position: absolute; right: 16px; bottom: 120px; display: none; gap: 6px; pointer-events: auto; }
+body.touch .gs-btns { display: flex; flex-direction: column; }
+.gsb { font: 700 11px var(--font-ui); letter-spacing: .08em; color: #e4ebe4; background: rgba(8,12,10,.5); border: 1px solid rgba(228,235,228,.5); border-radius: 6px; padding: 10px 12px; touch-action: none; }
+.gsb.fire { border-color: #ffc861; color: #ffc861; }
 /* mouse aim: the circle is where you point, the cross is where the nose is */
 .ret.aim { width: 18px; height: 18px; margin: -9px 0 0 -9px; border-color: #fff; opacity: .85; }
 .ret.aim::after { background: #fff; }
@@ -171,6 +195,22 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 
 <div id="flash"></div>
 <div id="gunRet" class="ret" hidden></div>
+<div id="gsHud" hidden>
+  <div class="gs-view">
+    <svg class="gs-ret" viewBox="-80 -80 160 160" aria-hidden="true">
+      <path d="M-70 0H-14M14 0H70M0 -70V-14M0 14V70" />
+      <path d="M-6 -6H6V6H-6Z" />
+      <path d="M-40 -30V-40H-30M30 -40H40V-30M40 30V40H30M-30 40H-40V30" />
+      <path d="M-70 -4V4M70 -4V4M-4 -70H4M-4 70H4" />
+    </svg>
+    <div class="gs-sel" id="gsSel"></div>
+    <div class="gs-tl" id="gsTL"></div>
+    <div class="gs-tr" id="gsTR"></div>
+    <div class="gs-hint key-only">V EXIT · 1 / 2 WEAPON · SPACE / CLICK FIRE · T RELOAD 30 MM · SCROLL OR + − ZOOM · Y SENSOR · MOUSE OR ARROWS SLEW · WASD FLY</div>
+  </div>
+  <div class="gs-wpn" id="gsWpn"></div>
+  <div class="gs-btns"><button class="gsb" id="gsCamBtn">TV CAM</button><button class="gsb" id="gsW1">1</button><button class="gsb" id="gsW2">2</button><button class="gsb fire" id="gsFire">FIRE</button></div>
+</div>
 <div id="aimRet" class="ret aim" hidden></div>
 <div id="noseRet" class="ret nose" hidden></div>
 <div id="ccipN" class="ret ccip nuke" hidden><span>B61</span></div>
@@ -180,6 +220,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 
 <div class="tools" id="tools" hidden>
   <button class="tbtn" id="bBombCam" title="Hold to follow your last bomb">BOMB CAM<kbd>Z</kbd></button>
+  <button class="tbtn" id="bGs" hidden>GUNSHIP CAM<kbd>V</kbd></button>
   <button class="tbtn" id="bUi">HIDE UI<kbd>U</kbd></button>
   <button class="tbtn" id="bCam">CAM<kbd>C</kbd></button>
   <button class="tbtn touch-only" id="bBrkTool">BRAKE</button>
@@ -201,7 +242,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h1>Skylark</h1>
     <p id="acDesc"></p>
     <div class="specs" id="acSpecs"></div>
-    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <div class="actions">
@@ -221,6 +262,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 on the B-52); it lands on the dashed amber marker. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
+      <dt>V (AC-130J)</dt><dd>Gunship sensor camera: 1 / 2 pick the 30 mm or 105 mm, Space or click fires, T reloads the 30 mm, scroll zooms, Y switches TV / IR</dd>
       <dt>U</dt><dd>Hide or show the instruments and buttons</dd>
       <dt>Right mouse</dt><dd>Hold and drag to look around (scroll to zoom); let go to snap back</dd>
     </dl>
@@ -258,7 +300,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="card glass">
     <div class="eyebrow">HOLDING</div>
     <h2>Paused</h2>
-    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <dl class="keys key-only">
@@ -836,8 +878,41 @@ const AC = {
     desc: 'Fly a Boeing 747-8 from the island airbase 9 km south of the city: 76 m long, 68 m across the wingtips, four engines and 300 tonnes in the air. It answers the controls slowly and takes a long time to stop, so plan every turn and every approach well ahead.',
     specs: ['ROTATE 165 KT', 'APPROACH 155 KT', '2.5 G LIMIT', 'MAX MACH 0.9', '4 × GENX-2B', 'NO WEAPONS', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle and a long roll; pull back gently at about 165 kt, then raise the gear. Start turns early and keep the bank shallow. Lower the gear early and land at about 155 kt.'
+  },
+  ac130: {
+    // Lockheed Martin AC-130J Ghostrider: a C-130J-based gunship, ~62 t on a mission, 162 m² wing, four AE 2100D3
+    // turboprops (4,637 shp each) on six-blade Dowty R391 propellers. It flies orbits and fires out of its left side.
+    id: 'ac130', mass: 62000, wing: 162.1, thrust: 210000, thrustAB: 0,
+    CL0: 0.4, CLA: 5.6, stallA: 0.27, cd0: 0.03, k: 0.039, wave: [0.52, 0.66, 0.08],
+    gLimit: 3.0, effV: 70, rates: [0.45, 0.18, 0.9], stabRoll: 0, tailStrike: 0.2, gear: 3.2, weapons: false, gearTime: 7, mainRetract: 'fwd', travel: 0.4,
+    ammo: 0, roundDmg: 3.2, muzzle: [0, 0, 0], stabSign: 1, model: 'AC130.gltf.json', podEngines: true, rig: { ab: [], bombs: [], nuke: null },
+    // Gunship weapon stations, in the aircraft frame (x right, y up, z aft). Sourced: GAU-23/A (Mk44 Bushmaster II) fires
+    // 100 or 200 rounds a minute at ~1,080 m/s and has about 160 rounds in its feed before the crew reloads it; the M102
+    // fires a 15 kg shell at ~494 m/s, about 10 rounds a minute at most, each one loaded by hand. Simulation settings
+    // (not published for the J model): the 30 mm reserve, its reload time and the 105 mm stowage.
+    gunship: {
+      sensor: [-1.15, -2.15, -10.9], // the nose sensor turret
+      zoom: [40, 16, 6, 2.4],        // field of view, degrees, for each zoom step
+      weapons: [
+        { id: 'gau23', name: 'GAU-23/A', cal: '30 MM', kind: 'round', feed: 'supply', muzzle: [-2.95, -0.95, -6.6], mv: 1080, rate: 200 / 60,
+          ready: 160, stowed: 480, reload: 12 },
+        { id: 'm102', name: 'M102', cal: '105 MM', kind: 'shell', feed: 'hand', muzzle: [-3.75, -1.3, 4.1], mv: 494, rate: 10 / 60,
+          ready: 1, stowed: 99, reload: 6 }
+      ]
+    },
+    box: new THREE.Box3(new THREE.Vector3(-20.2, -2.4, -13.9), new THREE.Vector3(20.2, 8.64, 15.9)), slideI: 700,
+    hitPts: [[13.9, 0, -0.3], [-15.9, 0, 1.6], [0.5, 20.2, 2.4], [0.5, -20.2, 2.4], [-14.5, 0, 8.6], [5.7, 4.9, 1.5], [5.7, -4.9, 1.5], [5.5, 10, 1.7], [5.5, -10, 1.7], [0, 0, -2.3]],
+    chase: [8, 62, 50], eye: [1.9, 11.8], scale: 1.8, shadow: 26, airStart: [120, 0.7], fireball: 1.6, crashBlast: [45, 1200],
+    sound: { whine: [480, 700, 1.1], roar: [70, 170, 1.7] },
+    eyebrow: 'LOCKHEED MARTIN AC-130J GHOSTRIDER · GUNSHIP',
+    desc: 'Fly the AC-130J Ghostrider from the island airbase 9 km south of the city. It is a C-130J turned into a gunship: four turboprops, a 30 mm cannon and a 105 mm howitzer firing out of its left side. Press V for the gunship sensor camera, circle the target in a left turn and let the fire control work out the lead.',
+    specs: ['ROTATE 125 KT', 'APPROACH 130 KT', '3 G LIMIT', '4 × AE 2100D3', 'GAU-23/A 30 MM', 'M102 105 MM', 'RWY 36 · 13,100 FT'],
+    tip: 'Takeoff: full throttle, pull back at about 125 kt, then raise the gear. Over the target, bank left into a gentle circle and press V: the sensor stays on the spot you point it at while you orbit. 1 and 2 pick the gun, Space or a click fires.'
   }
 };
+// AC-130J gunship state (see the gunship section); declared up here because building an aircraft touches its HUD
+const gs = { cam: false, sel: 0, zoom: 1, fov: 16, mode: 0, target: null, w: [], sol: null, flash: 0 };
+const gsEl = {};
 let A = AC.f15, GEAR = A.gear;
 const plane = new THREE.Group();
 const parts = { bombs: [], spoilers: [] };
@@ -854,7 +929,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b748: null, b52: null }; // Blender-built models, filled in as they load
+const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b748: null, b52: null, ac130: null }; // Blender-built models, filled in as they load
 const AB_MATS = [['#ff8c3a', 0.75], ['#fff1c4', 0.9]].map(([c, o]) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
@@ -980,13 +1055,48 @@ function buildFromGltf(model) {
       const pivot = new THREE.Group(); pivot.position.set(0, bb.max.y, bb.min.z); plane.add(pivot);
       m.position.sub(pivot.position); pivot.add(m);
       parts.spoilers.push(pivot);
-    } else plane.add(m);
+    } else {
+      plane.add(m);
+      if (/propeller/.test(n)) addPropDisc(m);
+    }
   }
   parts.gear = gear;
   const r = A.rig;
   r.ab.forEach(([x, y, z], i) => addAfterburner(i ? 'abR' : 'abL', x, y, z));
   addStores(r.bombs, r.bombScale || 1, r.internalFrom);
   buildZones();
+}
+
+// a propeller turns about the aircraft's fore-aft axis; a faint disc stands in for the blur at speed
+function addPropDisc(m) {
+  if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+  const b = m.geometry.boundingBox, r = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z) / 2;
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(r, 40), new THREE.MeshBasicMaterial({ color: '#2a2d30', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  disc.position.copy(m.position); plane.add(disc);
+  parts.props.push({ m, disc });
+}
+
+// Lockheed Martin AC-130J: 29.79 m long, 40.41 m span. The Blender model (AC130.gltf.json, ac130/build_ac130.py) replaces this stand-in once it loads.
+function buildAC130() {
+  if (MODELS.ac130) return buildFromGltf(MODELS.ac130);
+  const grey = M('#585e63'), dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
+  add(new THREE.BoxGeometry(4.3, 4.6, 24), grey, 0, 0, -1.5);
+  add(tube(0.3, 2.2, 6, 16), grey, 0, 1.2, 13);
+  for (const sx of [-1, 1]) {
+    add(planform([[0, -2], [20.2, -1.15], [20.2, 1.45], [0, 2.9]].map(([x, z]) => [x * sx, z]), 0.7), grey, 0, 2.05, 0);
+    for (const ex of [4.9, 10]) add(tube(0.6, 0.75, 6.5, 14), grey, sx * ex, 1.5, -1.5);
+    const st = new THREE.Group(); st.position.set(sx * 0.5, 1.95, 13.3); plane.add(st);
+    add(planform([[0, -1.7], [7.5, -0.4], [7.5, 1.7], [0, 2.3]].map(([x, z]) => [x * sx, z]), 0.3), grey, 0, 0, 0, st);
+    parts[sx < 0 ? 'stabL' : 'stabR'] = st;
+  }
+  add(profile([[8.6, 1.6], [13.3, 8.64], [15.5, 8.64], [15.8, 1.6]], 0.4), grey, 0, 0, 0);
+  const gear = new THREE.Group(); plane.add(gear);
+  const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.4, 14); g.rotateZ(Math.PI / 2); return g; };
+  for (const [x, z, rad] of [[0, -10.7, 0.48], [-2.2, -0.95, 0.71], [-2.2, 0.95, 0.71], [2.2, -0.95, 0.71], [2.2, 0.95, 0.71]]) {
+    add(wheel(rad), dark, x, -GEAR + rad, z, gear);
+    add(new THREE.BoxGeometry(0.2, GEAR - rad - 2.0, 0.2), metal, x, -(GEAR - rad + 2.0) / 2, z, gear);
+  }
+  parts.gear = gear;
 }
 
 // Eurofighter Typhoon: 15.96 m long, 10.95 m span. The Blender model replaces this simple stand-in once it loads.
@@ -1139,8 +1249,8 @@ function setAircraft(id) {
   GEAR = A.gear;
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false; parts.bayDoors = [];
-  ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52 })[A.id]();
+  parts.bombs = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false; parts.bayDoors = []; parts.props = [];
+  ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130 })[A.id]();
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
   rigGear();
@@ -1569,7 +1679,7 @@ scene.add(plane);
 // load the Blender-built models published next to this page, then swap each in
 if (THREE.GLTFLoader) {
   const loader = new THREE.GLTFLoader();
-  for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52']) {
+  for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
         // glTF colours are linear; this renderer treats material colours as already display-ready
@@ -2332,6 +2442,221 @@ function updateBullets(dt) {
   trGeo.attributes.position.needsUpdate = trGeo.attributes.color.needsUpdate = true;
 }
 
+// ---------------- AC-130J gunship: sensor camera and side-firing weapons ----------------
+// Only aircraft with a `gunship` block get this. The sensor is ground-stabilised: it stays on the spot it is pointed at
+// while the aircraft circles, and the guns are slaved to it (the fire control works out the lead and the drop).
+// Each weapon keeps its own ammunition and reload state for the whole flight; switching never resets it.
+const GS_MODES = ['TV', 'IR WHT', 'IR BHT'], GS_FILTER = ['', 'grayscale(1) contrast(1.35) brightness(1.08)', 'grayscale(1) invert(1) contrast(1.3)'];
+const gsV = { a: new THREE.Vector3(), b: new THREE.Vector3(), d: new THREE.Vector3(), m: new THREE.Vector3(), p: new THREE.Vector3() };
+let shellTemplate = null;
+function initGunship() {
+  gs.w = (A.gunship ? A.gunship.weapons : []).map(c => ({ c, ready: c.ready, stowed: c.stowed, reloadT: 0, cool: 0, firedT: 9, empty: false }));
+  gs.sel = 0; gs.target = null; gs.sol = null;
+  if (!A.gunship) setGunshipCam(false);
+}
+// a point in the aircraft frame (x right, y up, z aft) in the world
+function gsWorld(local, out) {
+  axes(S.quat);
+  return out.copy(S.pos).addScaledVector(R, local[0]).addScaledVector(U, local[1]).addScaledVector(F, -local[2]);
+}
+// march along a ray until it meets the ground, the water or a building
+function rayToGround(o, d, out) {
+  let prev = 0;
+  for (let t = 20; t < 26000; t += Math.max(8, t * 0.01)) {
+    out.copy(o).addScaledVector(d, t);
+    if (out.y <= Math.max(floorAt(out.x, out.z), 0)) {
+      let lo = prev, hi = t;
+      for (let i = 0; i < 10; i++) { const m = (lo + hi) / 2; out.copy(o).addScaledVector(d, m); if (out.y <= Math.max(floorAt(out.x, out.z), 0)) hi = m; else lo = m; }
+      return out.copy(o).addScaledVector(d, hi);
+    }
+    prev = t;
+  }
+  return null;
+}
+// where the sensor looks: the tracked point, or (when there isn't one yet) the ground off the left wing, 35° down
+function gunshipTarget() {
+  if (gs.target && gs.target.distanceTo(S.pos) < 20000) return gs.target;
+  gsWorld(A.gunship.sensor, gsV.a);
+  axes(S.quat);
+  gsV.d.set(-R.x, 0, -R.z).normalize().multiplyScalar(Math.cos(0.61)); gsV.d.y = -Math.sin(0.61);
+  const hit = rayToGround(gsV.a, gsV.d.normalize(), gsV.p);
+  gs.target = hit ? hit.clone() : null;
+  return gs.target;
+}
+// turn the sensor (radians across and up/down) and put it back on the ground
+function gunshipSlew(dx, dy) {
+  const t = gunshipTarget(); if (!t) return;
+  gsWorld(A.gunship.sensor, gsV.a);
+  gsV.d.subVectors(t, gsV.a).normalize();
+  gsV.d.applyAxisAngle(worldUp, -dx);
+  gsV.b.crossVectors(gsV.d, worldUp).normalize();
+  const el = Math.asin(clamp(gsV.d.y, -1, 1)) - dy;
+  if (el < -0.03 && el > -1.53) gsV.d.applyAxisAngle(gsV.b, -dy);
+  const hit = rayToGround(gsV.a, gsV.d.normalize(), gsV.p);
+  if (hit) gs.target.copy(hit);
+}
+// fire control: the direction to fire from a weapon so its round meets the target, allowing for the aircraft's own
+// velocity (the round keeps it) and gravity; and whether that direction is inside the gun's field of fire (left side)
+function gunshipSolution(c, target) {
+  gsWorld(c.muzzle, gsV.m);
+  let t = gsV.m.distanceTo(target) / c.mv;
+  for (let i = 0; i < 4; i++) {
+    gsV.a.copy(target).addScaledVector(S.vel, -t); gsV.a.y += 0.5 * G * t * t;
+    gsV.d.subVectors(gsV.a, gsV.m); const L = gsV.d.length(); gsV.d.divideScalar(L); t = L / c.mv;
+  }
+  axes(S.quat);
+  return { ok: gsV.d.dot(R) < -0.2 && gsV.d.dot(U) < 0.3, dir: gsV.d.clone(), muzzle: gsV.m.clone(), t, range: gsV.m.distanceTo(target) };
+}
+function gunshipShot(big) {
+  if (!audio || muted) return;
+  const ctx = audio.ctx, t = ctx.currentTime;
+  const src = ctx.createBufferSource(); src.buffer = audio.buf; src.loop = true;
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(big ? 900 : 2400, t);
+  f.frequency.exponentialRampToValueAtTime(big ? 55 : 160, t + (big ? 1.4 : 0.16));
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(big ? 0.95 : 0.42, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + (big ? 1.8 : 0.22));
+  src.connect(f).connect(g).connect(ctx.destination);
+  src.start(t); src.stop(t + (big ? 1.9 : 0.25));
+}
+function gunshipFire(w, sol) {
+  const c = w.c, dir = sol.dir, m = sol.muzzle;
+  if (c.kind === 'round') {
+    // 30 mm high-explosive incendiary with tracer, through the existing round system
+    const i = bul.next; bul.next = (i + 1) % BMAX;
+    const sp = () => (Math.random() - 0.5) * 2.2; // ~1 mrad dispersion
+    bul.pos[i * 3] = m.x; bul.pos[i * 3 + 1] = m.y; bul.pos[i * 3 + 2] = m.z;
+    bul.vel[i * 3] = S.vel.x + dir.x * c.mv + sp(); bul.vel[i * 3 + 1] = S.vel.y + dir.y * c.mv + sp(); bul.vel[i * 3 + 2] = S.vel.z + dir.z * c.mv + sp();
+    bul.life[i] = sol.t + 2; bul.tracer[i] = 1;
+    for (let k = 0; k < 3; k++) emit('fire', m, S.vel.x + dir.x * 25, S.vel.y + dir.y * 25, S.vel.z + dir.z * 25, 0.35);
+    emit('smoke', m, S.vel.x + dir.x * 6, S.vel.y, S.vel.z + dir.z * 6, 0.5);
+    gunshipShot(false);
+  } else {
+    // 105 mm shell: a ballistic round through the existing bomb system, bursting on impact
+    if (!shellTemplate) { shellTemplate = new THREE.Mesh(tube(0.053, 0.053, 0.5, 8), M('#4d5240', 0.6, 0.3)); }
+    const obj = shellTemplate.clone(); obj.position.copy(m); obj.quaternion.setFromUnitVectors(NOSE, dir); scene.add(obj);
+    bombsFlying.push({ obj, kind: 'shell', t: 0, drag: 0, v: S.vel.clone().addScaledVector(dir, c.mv) });
+    for (let k = 0; k < 26; k++) emit('fire', m, S.vel.x + dir.x * rr([10, 60]), S.vel.y + dir.y * rr([10, 60]), S.vel.z + dir.z * rr([10, 60]), 1.1);
+    for (let k = 0; k < 14; k++) emit('smoke', m, S.vel.x + dir.x * rr([4, 16]), S.vel.y + rr([0, 3]), S.vel.z + dir.z * rr([4, 16]), 1.6);
+    boomLight.position.copy(m); boomLight.intensity = Math.max(boomLight.intensity, 6);
+    S.vel.addScaledVector(dir, -0.12); S.ang.y += 0.015; // the recoil nudges the aircraft away from the gun
+    if (gs.cam) W.shake = Math.max(W.shake, 0.5);
+    gunshipShot(true);
+  }
+}
+function updateGunship(dt) {
+  if (!A.gunship || !gs.w.length) return;
+  for (const w of gs.w) {
+    w.cool = Math.max(0, w.cool - dt); w.firedT += dt;
+    if (w.reloadT > 0 && (w.reloadT -= dt) <= 0) {
+      // the crew refills the feed from the reserve (30 mm), or loads the next round by hand (105 mm)
+      w.reloadT = 0;
+      const n = Math.min(w.c.ready - w.ready, w.stowed);
+      w.ready += n; w.stowed -= n;
+    }
+  }
+  const w = gs.w[gs.sel], t = S.crashed ? null : gunshipTarget();
+  gs.sol = t ? gunshipSolution(w.c, t) : null;
+  if (!S.firing || S.crashed || !t || w.reloadT > 0 || w.cool > 0 || !gs.sol.ok) return;
+  if (w.ready <= 0) return;
+  gunshipFire(w, gs.sol);
+  w.ready--; w.firedT = 0;
+  w.cool = w.c.feed === 'hand' ? 0 : 1 / w.c.rate;
+  if (w.ready === 0) {
+    if (w.stowed > 0) w.reloadT = w.c.reload;
+    else if (!w.empty) { w.empty = true; toast(`${w.c.name} ${w.c.cal}: ammunition expended`); }
+  }
+}
+function gunshipReload() {
+  const w = gs.w[gs.sel];
+  if (!w || w.c.feed !== 'supply') return;
+  if (w.reloadT > 0) return;
+  if (w.stowed <= 0) { toast(`${w.c.name}: no reserve ammunition left`); return; }
+  if (w.ready >= w.c.ready) { toast(`${w.c.name}: feed already full`); return; }
+  w.reloadT = w.c.reload; // rounds still in the feed stay there
+}
+function gunshipStatus(w, i) {
+  if (w.reloadT > 0) return [w.c.feed === 'hand' ? 'LOADING' : 'RELOADING', 'reload'];
+  if (w.ready <= 0 && w.stowed <= 0) return ['EMPTY', 'empty'];
+  if (i === gs.sel && gs.sol && !gs.sol.ok) return ['OUT OF LIMITS', 'limits'];
+  if (w.firedT < 0.35) return ['FIRING', 'firing'];
+  return ['READY', 'ready'];
+}
+function selectGunshipWeapon(i) {
+  if (!A.gunship || !gs.w[i] || gs.sel === i) return;
+  gs.sel = i;
+  toast(`${gs.w[i].c.name} ${gs.w[i].c.cal} selected`);
+}
+function setGunshipCam(on) {
+  on = !!on && !!A.gunship && running && !S.crashed;
+  if (on === gs.cam) return;
+  gs.cam = on;
+  document.body.classList.toggle('gscam', on);
+  canvas.style.filter = on ? GS_FILTER[gs.mode] : '';
+  if (on) { gunshipTarget(); gs.fov = A.gunship.zoom[gs.zoom]; look.active = false; lockPointer(); }
+  else { canvas.style.filter = ''; camSnap = true; if (!mouseAim()) { lockPointer.releasing = true; unlockPointer(); } }
+}
+function gunshipZoom(d) {
+  if (!gs.cam) return;
+  gs.zoom = clamp(gs.zoom + d, 0, A.gunship.zoom.length - 1);
+}
+function buildGunshipHUD() {
+  const box = $('#gsWpn'); box.textContent = '';
+  $('#gsHud').hidden = !A.gunship;
+  $('#bGs').hidden = !A.gunship;
+  if (!A.gunship) return;
+  gsEl.rows = A.gunship.weapons.map((c, i) => {
+    const r = document.createElement('div'); r.className = 'gsw';
+    r.innerHTML = '<span class="k"></span><span class="nm"></span><span class="st"></span><span class="am"><span class="a1"></span><span class="a2"></span></span><span class="bar"><i></i></span>';
+    r.querySelector('.k').textContent = String(i + 1);
+    r.querySelector('.nm').textContent = c.name + ' · ' + c.cal;
+    box.appendChild(r);
+    return { r, st: r.querySelector('.st'), a1: r.querySelector('.a1'), a2: r.querySelector('.a2'), bar: r.querySelector('.bar i') };
+  });
+}
+function updateGunshipHUD() {
+  if (!A.gunship || !gsEl.rows) return;
+  gs.w.forEach((w, i) => {
+    const e = gsEl.rows[i]; if (!e) return;
+    const [st, cls] = gunshipStatus(w, i);
+    e.r.classList.toggle('on', i === gs.sel);
+    setText(e.st, st); if (e.st.className !== 'st ' + cls) e.st.className = 'st ' + cls;
+    setText(e.a1, w.c.feed === 'hand' ? `LOADED ${w.ready} · STOWED ${w.stowed}` : `FEED ${w.ready} / ${w.c.ready}`);
+    setText(e.a2, w.c.feed === 'hand' ? `${w.ready + w.stowed} RDS` : `RESERVE ${w.stowed}`);
+    const prog = w.reloadT > 0 ? 1 - w.reloadT / w.c.reload : w.c.feed === 'hand' ? w.ready : w.ready / w.c.ready;
+    const pct = Math.round(clamp(prog, 0, 1) * 100) + '%';
+    if (e.bar.style.width !== pct) e.bar.style.width = pct;
+  });
+  if (!gs.cam) return;
+  const w = gs.w[gs.sel], [st] = gunshipStatus(w, gs.sel);
+  setText($('#gsSel'), `${w.c.name} ${w.c.cal} · ${st}${w.reloadT > 0 ? ' ' + w.reloadT.toFixed(1) + ' S' : ''}`);
+  const fov = gs.fov, zoom = A.gunship.zoom[0] / fov;
+  setText($('#gsTL'), `GHOSTRIDER  ${GS_MODES[gs.mode]}\nFOV ${fov.toFixed(1)}°  ZOOM ${zoom.toFixed(1)}×\nPOINT TRACK`);
+  const att = attitude(), kt = S.V * Math.sqrt(S.rho / RHO) * 1.94384, t = gs.target;
+  const rng = t && gs.sol ? (gs.sol.range / 1000).toFixed(2) + ' KM' : '----', el = t ? Math.round(t.y * 3.28084) + ' FT' : '----';
+  setText($('#gsTR'), `ALT ${Math.round(S.pos.y * 3.28084).toLocaleString('en-US')} FT\nIAS ${Math.round(kt)} KT\nHDG ${String(Math.round(att.hdg) % 360).padStart(3, '0')}°\nSLANT ${rng}\nTGT ELEV ${el}`);
+}
+// keys for the gunship, kept apart from the main controls
+addEventListener('keydown', e => {
+  if (!A.gunship || !running || e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k === 'v') setGunshipCam(!gs.cam);
+  else if (k === '1' || k === '2') selectGunshipWeapon(+k - 1);
+  else if (k === 't') gunshipReload();
+  else if (k === 'y' && gs.cam) { gs.mode = (gs.mode + 1) % GS_MODES.length; canvas.style.filter = GS_FILTER[gs.mode]; }
+  else if ((k === '=' || k === '+') && gs.cam) gunshipZoom(1);
+  else if (k === '-' && gs.cam) gunshipZoom(-1);
+  else if (k === 'c' && gs.cam) setGunshipCam(false);
+});
+canvas.addEventListener('wheel', e => { if (!gs.cam) return; e.preventDefault(); gunshipZoom(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+document.addEventListener('mousemove', e => {
+  if (!gs.cam || !locked() || !running || paused || S.crashed) return;
+  const k = 0.0016 * gs.fov / 40;
+  gunshipSlew(e.movementX * k, (invertPitch ? -1 : 1) * e.movementY * k);
+});
+
 // ---------------- bombs: Mk-82, Mk-84, B61 and B28 ----------------
 const bombsFlying = [];
 const BOMB_DRAG = 0.015, NOSE = new THREE.Vector3(0, 0, -1);
@@ -2378,7 +2703,7 @@ function updateBombs(dt) {
     const B = bombsFlying[b], o = B.obj, v = B.v;
     B.t += dt;
     v.y -= G * dt;
-    v.multiplyScalar(Math.exp(-BOMB_DRAG * dt));
+    v.multiplyScalar(Math.exp(-(B.drag ?? BOMB_DRAG) * dt));
     // the fins swing the tail into the airflow
     o.quaternion.slerp(tQ.setFromUnitVectors(NOSE, tA.copy(v).normalize()), Math.min(1, dt * 2));
     const steps = Math.max(1, Math.ceil(v.length() * dt / 4));
@@ -2395,6 +2720,7 @@ function updateBombs(dt) {
       scene.remove(o);
       bombsFlying.splice(b, 1);
       if (B.kind === 'nuke') { detonateNuke(p, hit === 'water', B.nk); continue; }
+      if (B.kind === 'shell') { explode(p, 0.55, hit === 'water'); blast(p, hit === 'water' ? 8 : 14, 520); continue; } // 105 mm HE, ~2 kg of Comp B
       if (B.kind === 'heavy') { explode(p, 2.2, hit === 'water'); blast(p, hit === 'water' ? 40 : 75, 2800); } // Mk-84, 2,000 lb
       else { explode(p, 1.3, hit === 'water'); blast(p, hit === 'water' ? 25 : 45, 1300); }
       lastImpact = { p, t: clockNow(), nuke: false };
@@ -2424,6 +2750,7 @@ function clearWeapons() {
   lastImpact = null;
 }
 function updateWeapons(dt) {
+  updateGunship(dt);
   if (S.firing && S.ammo > 0 && !S.crashed) {
     bul.acc += dt * (A.gunRate || 100); // 6,000 rounds per minute unless the aircraft says otherwise
     while (bul.acc >= 1 && S.ammo > 0) { bul.acc -= 1; fireRound(); S.ammo--; }
@@ -2575,7 +2902,7 @@ function nukeBoom(dist, killR) {
 const bombCam = { btn: false, mode: '', ang: 0, free: '' }; // free: the mode the free-look orbit was last set up for
 function bombCamTarget() {
   for (let i = bombsFlying.length - 1; i >= 0; i--) if (bombsFlying[i].kind === 'nuke') return bombsFlying[i];
-  if (bombsFlying.length) return bombsFlying[bombsFlying.length - 1];
+  for (let i = bombsFlying.length - 1; i >= 0; i--) if (bombsFlying[i].kind !== 'shell') return bombsFlying[i]; // not the gunship's shells
   if (lastImpact && clockNow() - lastImpact.t < (lastImpact.nuke ? lastImpact.life : 12)) return lastImpact;
   return null;
 }
@@ -2624,6 +2951,7 @@ function reset(mode) {
   S.stumps = [];
   updateDamage();
   Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false });
+  initGunship(); // a fresh flight: full ammunition
   Object.assign(S, { crashed: false, time: 0, maxAlt: 0, maxSpd: 0, brake: false, hitBuilding: -1,
     ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: parts.nuke ? 1 : 0, firing: false });
   clearWeapons();
@@ -2658,6 +2986,7 @@ function reset(mode) {
 
 function crash(msg) {
   if (S.crashed) return;
+  setGunshipCam(false);
   lockPointer.releasing = true; unlockPointer(); aim.fire = false;
   const building = S.hitBuilding >= 0;
   const n = building ? wallNormal(S.hitBuilding, S.hitPoint, new THREE.Vector3()) : new THREE.Vector3(0, 1, 0);
@@ -2853,12 +3182,13 @@ addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
 function updateInputs(dt) {
-  let tp = (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0);
+  const ar = !gs.cam; // in the gunship camera the arrow keys slew the sensor instead
+  let tp = (keys.s || (ar && keys.arrowdown) ? 1 : 0) - (keys.w || (ar && keys.arrowup) ? 1 : 0);
   if (invertPitch) tp = -tp;
-  let tr = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
+  let tr = (keys.d || (ar && keys.arrowright) ? 1 : 0) - (keys.a || (ar && keys.arrowleft) ? 1 : 0);
   let ty = (keys.e ? 1 : 0) - (keys.q ? 1 : 0);
   if (touchIn.active) { tp = touchIn.y; tr = touchIn.x; }
-  if (mouseAim() && !S.crashed) {
+  if (mouseAim() && !S.crashed && !gs.cam) {
     // fly the nose onto the aim point; any stick key held overrides that axis.
     // Near the nose: bank a little toward it and pitch and yaw straight at it.
     // Further off: roll until the aim point is over the canopy, then pull it into the nose; that is a half-roll and
@@ -2894,7 +3224,7 @@ function updateInputs(dt) {
   if (keys.f) S.throttle = Math.max(0, S.throttle - 0.5 * dt);
   if (keys.r || keys.f) setThrottleUI();
   S.brake = !!(keys.b || touchIn.brake);
-  S.firing = !!(keys[' '] || touchIn.gun || (mouseAim() && aim.fire));
+  S.firing = !!(keys[' '] || touchIn.gun || ((mouseAim() || gs.cam) && aim.fire) || gs.touchFire);
 }
 
 // free look: hold the right mouse button and drag; let go and the camera eases back to the chase view
@@ -2919,11 +3249,11 @@ function takeMouse() {
 }
 document.addEventListener('pointerlockchange', () => {
   // Esc (or anything else) took the mouse away mid-flight: hold, like the pause key
-  if (!locked() && mouseAim() && running && !paused && !S.crashed && !lockPointer.releasing) togglePause(true);
+  if (!locked() && (mouseAim() || gs.cam) && running && !paused && !S.crashed && !lockPointer.releasing) togglePause(true);
   lockPointer.releasing = false;
 });
 document.addEventListener('mousemove', e => {
-  if (!locked() || !mouseAim() || look.active || !running || paused || S.crashed) return;
+  if (!locked() || !mouseAim() || gs.cam || look.active || !running || paused || S.crashed) return;
   // turn the aim point: left/right about the vertical, up/down about the camera's right
   const k = 0.0022, dy = (invertPitch ? -1 : 1) * e.movementY;
   aim.dir.applyAxisAngle(worldUp, -e.movementX * k);
@@ -2933,13 +3263,15 @@ document.addEventListener('mousemove', e => {
   aim.dir.normalize();
 });
 canvas.addEventListener('mousedown', e => {
-  if (e.button !== 0 || !mouseAim() || !running) return;
+  if (e.button !== 0 || !running) return;
+  if (gs.cam) { if (!locked()) lockPointer(); else aim.fire = true; return; } // the gunship camera: click fires
+  if (!mouseAim()) return;
   if (!locked()) { takeMouse(); return; } // the first click takes the mouse
   aim.fire = true;
 });
 addEventListener('mouseup', e => { if (e.button === 0) aim.fire = false; });
 canvas.addEventListener('pointerdown', e => {
-  if (e.button !== 2 || !running || (S.crashed && !bombCam.mode)) return;
+  if (e.button !== 2 || !running || gs.cam || (S.crashed && !bombCam.mode)) return;
   look.active = true; look.id = e.pointerId; look.x = e.clientX; look.y = e.clientY;
   try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   lockPointer(); // the cursor stays put while you drag the view around
@@ -3037,6 +3369,12 @@ $('#goAir').onclick = $('#reAir').onclick = $('#pAir').onclick = () => start('ai
 $('#resume').onclick = () => togglePause(false);
 $('#pRebuild').onclick = $('#reRebuild').onclick = () => rebuildCity();
 $('#bCam').onclick = toggleCam;
+$('#bGs').onclick = () => setGunshipCam(!gs.cam);
+$('#gsCamBtn').onclick = () => setGunshipCam(!gs.cam);
+$('#gsW1').onclick = () => selectGunshipWeapon(0);
+$('#gsW2').onclick = () => selectGunshipWeapon(1);
+$('#gsFire').addEventListener('pointerdown', () => { gs.touchFire = true; });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('#gsFire').addEventListener(ev, () => { gs.touchFire = false; });
 $('#bUi').onclick = () => toggleUI();
 function updateAircraftUI() {
   $('#acEyebrow').textContent = A.eyebrow;
@@ -3059,6 +3397,7 @@ function updateAircraftUI() {
     }
   });
   $('#wpn').hidden = !A.weapons;
+  buildGunshipHUD();
   $('#tBomb').hidden = !parts.bombs.length;
   $('#tNuke').hidden = !parts.nuke;
   if (parts.nuke) $('#tNuke').textContent = $('#ccipN').firstChild.textContent = parts.nuke.userData.nk.name;
@@ -3104,7 +3443,7 @@ function togglePause(force) {
   if (!running || S.crashed) return;
   paused = typeof force === 'boolean' ? force : !paused;
   $('#pause').hidden = !paused;
-  if (paused) { lockPointer.releasing = true; unlockPointer(); aim.fire = false; } else if (mouseAim()) lockPointer();
+  if (paused) { lockPointer.releasing = true; unlockPointer(); aim.fire = false; } else if (mouseAim() || gs.cam) lockPointer();
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden && running && !S.crashed) togglePause(true); });
 
@@ -3267,6 +3606,7 @@ function placeReticle(node, p) {
 const el = { aimRet: $('#aimRet'), noseRet: $('#noseRet'), nukes: $('#nukes'), ccipN: $('#ccipN'), gun: $('#gun'), bombs: $('#bombs'), gunRet: $('#gunRet'), ccip: $('#ccip'), spd: $('#spd'), mach: $('#mach'), gl: $('#gload'), alt: $('#alt'), vs: $('#vs'), aoa: $('#aoa'), rwy: $('#rwy'), gnd: $('#cGnd'), brk: $('#cBrk'), gear: $('#cGear'), ab: $('#cAb'), ra: $('#cRa'), warn: $('#warn') };
 const setText = (node, s) => { if (node.textContent !== s) node.textContent = s; };
 function updateHUD() {
+  updateGunshipHUD();
   const att = attitude();
   const kt = S.V * Math.sqrt(S.rho / RHO) * 1.94384, ft = S.pos.y * 3.28084, fpm = S.vel.y * 196.85;
   setText(el.spd, String(Math.round(kt)));
@@ -3348,6 +3688,24 @@ function updateCamera(dt, now) {
     camera.up.copy(worldUp);
     camera.lookAt(S.pos.x, S.pos.y + 0.6, S.pos.z);
     camera.fov = 50; camera.updateProjectionMatrix();
+    return;
+  }
+  if (gs.cam && A.gunship && !S.crashed && !(keys.z || bombCam.btn)) {
+    // gunship sensor: from the nose turret, locked on the tracked ground point while the aircraft circles
+    const ar = (keys.arrowright ? 1 : 0) - (keys.arrowleft ? 1 : 0), au = (keys.arrowdown ? 1 : 0) - (keys.arrowup ? 1 : 0);
+    if (ar || au) gunshipSlew(ar * 0.5 * dt * gs.fov / 40, au * 0.5 * dt * gs.fov / 40);
+    gsWorld(A.gunship.sensor, camera.position);
+    camera.up.copy(worldUp);
+    const t = gunshipTarget();
+    if (t) camera.lookAt(t);
+    gs.fov += (A.gunship.zoom[gs.zoom] - gs.fov) * (1 - Math.exp(-dt * 8));
+    camera.fov = gs.fov;
+    if (W.shake > 0.01) {
+      camera.position.x += (Math.random() - 0.5) * W.shake * 0.2;
+      camera.position.y += (Math.random() - 0.5) * W.shake * 0.2;
+      W.shake *= Math.exp(-dt * 4);
+    }
+    camera.updateProjectionMatrix();
     return;
   }
   const bc = keys.z || bombCam.btn ? bombCamTarget() : null;
@@ -3488,6 +3846,13 @@ function updateVisuals(dt) {
   plane.quaternion.copy(S.quat);
   parts.stabL.rotation.x = -inp.pitch * 0.3 * A.stabSign + inp.roll * A.stabRoll;
   parts.stabR.rotation.x = -inp.pitch * 0.3 * A.stabSign - inp.roll * A.stabRoll;
+  // propellers: a visible turn rate (the real ones run ~1,000 rpm, far past what a frame can show) and a blur disc
+  const spin = running && !S.crashed ? 14 + 26 * S.throttle : 0;
+  for (const p of parts.props) {
+    p.m.rotation.z += spin * dt;
+    p.disc.visible = !!p.m.parent;
+    p.disc.material.opacity = running && !S.crashed ? 0.06 + 0.12 * S.throttle : 0;
+  }
   for (const sp of parts.spoilers) sp.rotation.x += ((S.brake && running ? -0.75 : 0) - sp.rotation.x) * Math.min(1, dt * 4);
   if (running && !S.crashed && !paused) {
     // the doors open first; the gear only moves once they are fully open, and they close after it is up
