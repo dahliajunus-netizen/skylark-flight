@@ -1145,6 +1145,8 @@ function setAircraft(id) {
   sun.shadow.camera.updateProjectionMatrix();
   rigGear();
   buildGearDoors();
+  const core = parts.zones.find(z => z.kind === 'core');
+  parts.bellyR = core ? -Math.min(...core.pts.map(p => p.y)) : GEAR * 0.45; // origin to the belly skin
   updateAircraftUI();
 }
 // Group the gear meshes into legs (nose, left main, right main) and hinge each one at the top of its strut.
@@ -1487,9 +1489,12 @@ function checkStructure() {
       }
       if (bi < 0 && !ground) continue;
       if (z.kind === 'core') {
-        S.hitBuilding = bi;
-        if (bi >= 0) { S.hitPoint.copy(tC); crash(tC.y > BLD[bi * 5 + 4] - 3 ? 'You hit a rooftop.' : 'You flew into a building.'); }
-        else crash(ground === 'water' ? 'You flew into the water.' : 'You flew into the terrain.');
+        if (bi >= 0) { if (hullHit(bi, tC)) return true; break; }
+        S.hitBuilding = -1;
+        if (ground === 'water') { crash('You flew into the water.'); return true; }
+        // a shallow, wings-level brush with the ground becomes a belly slide; anything steeper is a crash
+        if (S.vel.y > -7 && S.V < 140 && Math.abs(attitude().roll) < 0.5 && slopeAt(tC.x, tC.z) < 0.25) { bellyDown('The fuselage hit the ground'); break; }
+        crash('You flew into the terrain.');
         return true;
       }
       if (bi >= 0) damageAt(bi, tC, z.kind === 'wing' ? 3 : 2, 10); // the building takes a bite too
@@ -1499,7 +1504,57 @@ function checkStructure() {
   }
   return false;
 }
+// Fuselage integrity (S.hull, 1 = intact). A glancing blow against a building costs some of it and knocks the jet
+// away; it only ends the flight when the hit is hard (a large part of the speed going straight into the wall) or
+// the fuselage has nothing left. Heavies are less forgiving than fighters.
+const _wn = new THREE.Vector3();
+function hullHit(bi, p) {
+  const n = wallNormal(bi, p, _wn), vn = Math.max(0, -S.vel.dot(n));
+  const lim = A.scale > 2 ? 22 : 32; // m/s into the wall that the airframe survives
+  const push = () => { S.pos.addScaledVector(n, 0.6 * A.scale); if (S.vel.dot(n) < 0) S.vel.addScaledVector(n, -S.vel.dot(n) * 1.2); };
+  if (S.hitCool > 0) { push(); return false; } // still scraping along the same wall
+  S.hull -= 0.12 + 0.75 * Math.pow(vn / lim, 2);
+  if (vn > lim || S.hull <= 0) {
+    S.hull = Math.max(0, S.hull);
+    S.hitBuilding = bi; S.hitPoint.copy(p);
+    crash(p.y > BLD[bi * 5 + 4] - 3 ? 'You hit a rooftop.' : S.hull <= 0 ? 'One hit too many: the fuselage broke up against the building.' : 'You flew into a building.');
+    return true;
+  }
+  push();
+  S.vel.multiplyScalar(0.85);
+  S.ang.x += (Math.random() - 0.5) * 1.5; S.ang.y += (Math.random() - 0.5) * 1.5; S.ang.z += (Math.random() - 0.5) * 3;
+  damageAt(bi, p, 3 * A.scale, 25);
+  for (let i = 0; i < 24; i++) emit('spark', p, (Math.random() - 0.5) * 24, rr([2, 14]), (Math.random() - 0.5) * 24);
+  for (let i = 0; i < 8; i++) emit('dust', p, (Math.random() - 0.5) * 6, rr([1, 4]), (Math.random() - 0.5) * 6, 0.8);
+  S.hitCool = 0.35; S.damaged = true;
+  toast(`Fuselage hit: ${Math.round(S.hull * 100)}% integrity left`);
+  return false;
+}
+// The gear is gone or folded: the jet settles onto its belly and slides, scraping and slowing hard.
+function bellyDown(why) {
+  if (S.belly) return;
+  S.belly = true; S.damaged = true;
+  if (S.gearT > 0.3) for (const z of parts.zones.filter(z => z.kind === 'gear' && z.alive)) {
+    plane.updateMatrixWorld(true);
+    ripZone(z, z.pts[0], z.pts[0].clone().applyMatrix4(plane.matrixWorld));
+  }
+  S.gearT = 0; S.gearDown = false;
+  S.hull = Math.max(0.05, S.hull - 0.25);
+  toast(why + '. Belly landing: hold it level and let it slide');
+}
 function emitStumps(dt) {
+  // a battered fuselage smokes, and burns when it is nearly gone
+  if (running && !S.crashed && !paused && S.hull < 0.5) {
+    for (let k = burst(20 * (1 - S.hull), dt); k > 0; k--) emit('smoke', S.pos, 0, 1, 0, 0.6);
+    if (S.hull < 0.25) for (let k = burst(25, dt); k > 0; k--) emit('fire', S.pos, 0, 0, 0, 0.5);
+  }
+  // sparks and dust trail from the belly while it slides
+  if (running && !S.crashed && !paused && S.belly && S.onGround && S.V > 4) {
+    axes(S.quat);
+    tA.copy(S.pos).addScaledVector(U, -(parts.bellyR || 1));
+    for (let k = burst(Math.min(80, S.V * 1.2), dt); k > 0; k--) emit('spark', tA, (Math.random() - 0.5) * 8, rr([1, 5]), (Math.random() - 0.5) * 8);
+    for (let k = burst(12, dt); k > 0; k--) emit('dust', tA, 0, 1, 0, 0.8);
+  }
   if (!S.stumps.length || !running || S.crashed || paused) return;
   plane.updateMatrixWorld(true);
   for (const st of S.stumps) {
@@ -2577,6 +2632,7 @@ function reset(mode) {
   if (S.damaged) { S.damaged = false; setAircraft(A.id); } // put the torn-off parts back
   S.stumps = [];
   updateDamage();
+  Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false });
   Object.assign(S, { crashed: false, time: 0, maxAlt: 0, maxSpd: 0, brake: false, hitBuilding: -1,
     ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: parts.nuke ? 1 : 0, firing: false });
   clearWeapons();
@@ -2718,27 +2774,41 @@ function physics(dt) {
   // The gear is a spring-damper (oleo strut). The model's wheels sit at the parked compression,
   // 40% of the stroke; fully extended they hang 0.4 × stroke lower.
   const g = ground(S.pos.x, S.pos.z);
-  const gearOK = S.gearT >= 0.98;
-  const reach = gearOK ? GEAR + 0.4 * A.travel : GEAR;
+  S.hitCool = Math.max(0, (S.hitCool || 0) - dt);
+  const gearOK = S.gearT >= 0.98 && !S.belly;
+  // with the gear down the wheels touch first; gear in transit touches at the wheels and folds; gear up (or gone), the belly
+  const reach = gearOK ? GEAR + 0.4 * A.travel : !S.belly && S.gearT > 0.3 ? GEAR : parts.bellyR || GEAR * 0.45;
+  const travel = gearOK || !S.belly ? A.travel : 0.12; // the belly barely gives
   const comp = g.h + reach - S.pos.y; // how far the struts are pushed in
   if (comp > 0) {
     if (!S.onGround) {
       const att = attitude(), vs = v.y;
       if (g.water) return crash('You ditched in the water.');
       if (slopeAt(S.pos.x, S.pos.z) > 0.25 || vs < -12) return crash('You flew into the terrain. Keep an eye on the radar altitude in the hills.');
-      if (S.gearT < 0.98) return crash(S.gearDown ? 'The landing gear was still coming down when you touched. Lower it earlier.' : 'Belly landing: the landing gear was up. Press G to lower it before you land.');
-      if (V > 110) return crash(`You touched down at ${Math.round(V * 1.94384)} kt and the tires and gear failed. Land at about 150 kt.`);
-      if (vs < -4.2) return crash(`Hard landing at ${Math.round(-vs * 196.85)} ft/min. Keep the descent under about 800 ft/min.`);
-      if (S.dmg.legsLost) return crash('A gear leg had been torn off, so the jet collapsed when it touched down.');
-      if (att.pitch < -0.12) return crash('The nose gear hit first. Raise the nose a little (flare) just before touchdown.');
-      const fpm = Math.round(-vs * 196.85);
-      toast(`Touchdown ${fpm} ft/min · ${fpm < 200 ? 'Butter' : fpm < 450 ? 'Smooth' : fpm < 700 ? 'Firm' : 'Hard'}${g.runway ? '' : ' · off-runway'}`);
+      // things the gear can't take: it folds, and the jet lands on its belly instead
+      let fail = null;
+      if (S.belly) fail = 'Down on the belly again';
+      else if (S.gearT < 0.98) fail = S.gearDown ? 'The landing gear was still coming down and folded' : 'The landing gear was up';
+      else if (V > 110) fail = `The tires and gear failed at ${Math.round(V * 1.94384)} kt`;
+      else if (vs < -4.2) fail = `Hard landing at ${Math.round(-vs * 196.85)} ft/min: the gear collapsed`;
+      else if (S.dmg.legsLost) fail = 'A gear leg had been torn off and the rest folded';
+      else if (att.pitch < -0.12) fail = 'The nose gear hit first and folded';
+      if (fail) {
+        // too hard, too fast or too banked to slide it in
+        if (vs < -7.5) return crash(`${fail}, and at ${Math.round(-vs * 196.85)} ft/min the fuselage broke. Keep the descent under about 800 ft/min.`);
+        if (V > 150) return crash(`${fail}, and at ${Math.round(V * 1.94384)} kt the belly slide tore the jet apart.`);
+        if (Math.abs(att.roll) > 0.45) return crash(`${fail}, and a wing dug in. Keep the wings level on a belly landing.`);
+        if (!S.belly) bellyDown(fail); else S.hull = Math.max(0.05, S.hull - 0.1);
+      } else {
+        const fpm = Math.round(-vs * 196.85);
+        toast(`Touchdown ${fpm} ft/min · ${fpm < 200 ? 'Butter' : fpm < 450 ? 'Smooth' : fpm < 700 ? 'Firm' : 'Hard'}${g.runway ? '' : ' · off-runway'}`);
+      }
       S.onGround = true;
     }
-    const k = MASS * G / (0.4 * A.travel), damp = 2 * 0.55 * Math.sqrt(k * MASS);
+    const k = MASS * G / (0.4 * travel), damp = 2 * 0.55 * Math.sqrt(k * MASS);
     v.y += Math.max(0, k * comp - damp * v.y) / MASS * dt;
-    if (comp > A.travel) { // bottomed out: the strut is solid
-      S.pos.y = g.h + reach - A.travel;
+    if (comp > travel) { // bottomed out: the strut (or the belly) is solid
+      S.pos.y = g.h + reach - travel;
       if (v.y < 0) v.y = 0;
     }
   } else if (comp < -0.25) S.onGround = false;
@@ -2746,7 +2816,7 @@ function physics(dt) {
 
   if (S.onGround) {
     if (g.water) return crash('You rolled into the water.');
-    if (S.dmg.legsLost) return crash('A gear leg was torn off and the jet collapsed onto the ground.');
+    if (S.dmg.legsLost && !S.belly) { bellyDown('A gear leg was torn off and the jet dropped onto its belly'); }
     if (V > 12 && slopeAt(S.pos.x, S.pos.z) > 0.3) return crash('You ran off into rough terrain.');
     eul.setFromQuaternion(q, 'YXZ');
     eul.z *= Math.exp(-dt * 10);
@@ -2757,9 +2827,11 @@ function physics(dt) {
     let along = v.x * fx + v.z * fz;
     const decay = Math.exp(-dt * 8);
     const lx = (v.x - fx * along) * decay, lz = (v.z - fz * along) * decay;
-    const dv = (0.3 + (S.brake ? 6 : 0) + (g.runway ? 0 : 0.9)) * dt;
+    // rolling: a little rolling drag, the brakes and rough ground; sliding on the belly: about half a g of scraping
+    const dv = (S.belly ? 4.5 + (g.runway ? 0 : 1.5) : 0.3 + (S.brake ? 6 : 0) + (g.runway ? 0 : 0.9)) * dt;
     along = Math.abs(along) <= dv ? 0 : along - Math.sign(along) * dv;
     v.x = fx * along + lx; v.z = fz * along + lz;
+    if (S.belly && !S.bellyStopped && V < 1) { S.bellyStopped = true; toast('Stopped. You walked away from that one. Restart from the pause screen'); }
   }
   S.maxAlt = Math.max(S.maxAlt, S.pos.y);
   S.maxSpd = Math.max(S.maxSpd, V);
@@ -2935,6 +3007,7 @@ addEventListener('blur', () => { bombCam.btn = false; });
 $('#bGear').onclick = () => toggleGear();
 function toggleGear() {
   if (!running || S.crashed || paused) return;
+  if (S.belly) { toast('The landing gear is gone'); return; }
   if (S.onGround) { toast('The gear stays down on the ground'); return; }
   S.gearDown = !S.gearDown;
   toast(S.gearDown ? 'Gear down' : 'Gear up');
@@ -3234,6 +3307,7 @@ function updateHUD() {
   if (Dh.engL < 0.995) dm.push(Dh.engL < 0.01 ? 'L ENG OUT' : 'L ENG ' + pct(Dh.engL));
   if (Dh.engR < 0.995) dm.push(Dh.engR < 0.01 ? 'R ENG OUT' : 'R ENG ' + pct(Dh.engR));
   if (Dh.legsLost) dm.push('GEAR LEG LOST');
+  if (S.hull < 0.995) dm.push('HULL ' + pct(S.hull));
   const dmEl = document.getElementById('cDmg');
   dmEl.hidden = !dm.length;
   setText(dmEl, 'DMG ' + dm.join(' · '));
