@@ -78,7 +78,7 @@ h2 { margin: 0; font-size: 30px; text-wrap: balance; }
 .card p { margin: 0; line-height: 1.5; color: #cdd8df; font-size: 14px; max-width: 60ch; }
 .specs { display: flex; gap: 6px; flex-wrap: wrap; }
 .specs span { font-family: var(--font-num); font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--fg); }
-.pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
+.pick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
 .lopick { grid-template-columns: repeat(2, 1fr); }
 .pickb { font: 700 13px var(--font-ui); padding: 10px 8px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--dim); cursor: pointer; }
 .pickb:hover { color: var(--fg); }
@@ -192,7 +192,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h1>Skylark</h1>
     <p id="acDesc"></p>
     <div class="specs" id="acSpecs"></div>
-    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="actions">
       <button class="btn primary" id="goRunway">Take off from runway</button>
@@ -205,7 +205,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>R / F</dt><dd>Throttle; above 85% lights the afterburners</dd>
       <dt>G</dt><dd>Landing gear up / down</dd>
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
-      <dt>Space</dt><dd>Fire the 20 mm cannon (hold)</dd>
+      <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 on the B-52); it lands on the dashed amber marker. Get 2.2 km away from a B61, 3.3 km from a B28</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
@@ -247,7 +247,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="card glass">
     <div class="eyebrow">HOLDING</div>
     <h2>Paused</h2>
-    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <dl class="keys key-only">
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
@@ -256,7 +256,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>R / F</dt><dd>Throttle; above 85% lights the afterburners</dd>
       <dt>G</dt><dd>Landing gear up / down</dd>
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
-      <dt>Space</dt><dd>Fire the 20 mm cannon (hold)</dd>
+      <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 on the B-52); it lands on the dashed amber marker. Get 2.2 km away from a B61, 3.3 km from a B28</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
@@ -725,7 +725,7 @@ const AC = {
     CL0: 0.15, CLA: 3.2, stallA: 0.5, cd0: 0.02, k: 0.14, wave: [0.9, 1.1, 0.025],
     gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'in', travel: 0.3,
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
-    ammo: 150, muzzle: [0.75, -0.25, 2.0], stabSign: -1, model: 'Typhoon.gltf.json',
+    ammo: 150, roundDmg: 1.6, muzzle: [0.75, -0.25, 2.0], stabSign: -1, model: 'Typhoon.gltf.json',
     rig: { ab: [[-0.5, -0.16, 7.98], [0.5, -0.16, 7.98]], bombs: [[-3.9, -0.98, 2.62], [3.9, -0.98, 2.62], [-2.7, -0.98, 2.62], [2.7, -0.98, 2.62]], nuke: null },
     box: new THREE.Box3(new THREE.Vector3(-5.5, -1.25, -8.0), new THREE.Vector3(5.5, 3.35, 8.0)), slideI: 45,
     hitPts: [[7.98, 0, -0.1], [-7.98, 0, -0.16], [-5.4, 5.47, -0.46], [-5.4, -5.47, -0.46], [-6.2, 0, 3.33], [1.2, 2.15, -0.12], [1.2, -2.15, -0.12], [0, 0, -1.1]],
@@ -735,6 +735,25 @@ const AC = {
     desc: 'Fly a Eurofighter Typhoon from an island airbase 9 km south of the city, with its downtown towers, river, suburbs and hills. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
     specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', '4 × MK-82', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back at about 155 kt, then raise the gear. Watch the canards: they tilt nose-up to pitch up. Lower the gear and land at about 145 kt.'
+  },
+  a10: {
+    // Fairchild Republic A-10C: ~17 t with fuel and ammunition, 47 m² straight wing, two TF34s (~40 kN each), no afterburner
+    id: 'a10', mass: 17000, wing: 47, thrust: 80000, thrustAB: 0,
+    CL0: 0.3, CLA: 4.8, stallA: 0.28, cd0: 0.032, k: 0.061, wave: [0.55, 0.7, 0.08], // tops out near 400 kt
+    gLimit: 7.3, effV: 75, rates: [0.65, 0.3, 2.0], stabRoll: 0, tailStrike: 0.2, gear: 2.05, weapons: true, gearTime: 5, mainRetract: 'fwd', travel: 0.3,
+    // GAU-8/A Avenger: 30 mm, 3,900 rounds a minute, and enough recoil (~40 kN) to slow the jet while it fires
+    ammo: 1150, gunRate: 65, roundDmg: 2.5, recoil: 40000, brrt: true, muzzle: [0, -0.2, 8.6], stabSign: 1, model: 'A10.gltf.json', podEngines: true,
+    // three under each outer wing, then one inboard of each gear pod (outboard first, alternating sides)
+    rig: { ab: [], nuke: null, bombs: [[-6.6, -0.594, 0.218], [6.6, -0.594, 0.218], [-5.5, -0.751, 0.172], [5.5, -0.751, 0.172],
+      [-4.4, -0.91, 0.126], [4.4, -0.91, 0.126], [-1.55, -1.07, 0.08], [1.55, -1.07, 0.08]] },
+    box: new THREE.Box3(new THREE.Vector3(-8.8, -1.0, -8.65), new THREE.Vector3(8.8, 2.45, 8.15)), slideI: 55,
+    hitPts: [[8.6, 0, -0.2], [0.3, 8.75, 0.15], [0.3, -8.75, 0.15], [-8.1, 0, 0.4], [-7.0, 2.92, 2.4], [-7.0, -2.92, 2.4], [-4.0, 1.6, 1.4], [-4.0, -1.6, 1.4], [0, 0, -0.95]],
+    chase: [5, 32, 28], eye: [1.25, 4.9], scale: 1, shadow: 16, airStart: [140, 0.75], fireball: 1, crashBlast: [30, 500],
+    sound: { whine: [900, 1700, 1.5], roar: [120, 320, 0.8] },
+    eyebrow: 'A-10C THUNDERBOLT II · CLOSE AIR SUPPORT',
+    desc: 'Fly an A-10 Warthog from the island airbase 9 km south of the city. It is slow, tough and turns tight, with eight Mk-82s under its straight wings and the GAU-8 Avenger in the nose: 1,150 rounds of 30 mm that chew through buildings. Short bursts: the recoil slows the jet down.',
+    specs: ['ROTATE 135 KT', 'APPROACH 140 KT', '7.3 G LIMIT', 'MAX 400 KT', 'GAU-8/A 30 MM · 1,150 RDS', '8 × MK-82', 'RWY 36 · 13,100 FT'],
+    tip: 'Takeoff: full throttle, pull back gently at about 135 kt, then raise the gear. There are no afterburners, so keep your speed up in turns. Fire the gun in short bursts. Lower the gear and land at about 140 kt.'
   },
   b52: {
     // Boeing B-52H: ~140 t plus up to 18 t of bombs, 370 m² wing, eight TF33s (~76 kN each)
@@ -791,7 +810,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-const MODELS = { f15: null, typhoon: null, b757: null, b52: null }; // Blender-built models, filled in as they load
+const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b52: null }; // Blender-built models, filled in as they load
 const AB_MATS = [['#ff8c3a', 0.75], ['#fff1c4', 0.9]].map(([c, o]) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
@@ -952,6 +971,33 @@ function buildTyphoon() {
   parts.gear = gear;
 }
 
+// A-10C Thunderbolt II: 16.26 m long, 17.53 m span. The Blender model (A10.gltf.json, a10/build_a10.py) replaces this stand-in once it loads.
+function buildA10() {
+  if (MODELS.a10) return buildFromGltf(MODELS.a10);
+  const grey = M('#555b60'), greyD = M('#43484c'), dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
+  add(tube(0.3, 0.75, 16, 16), grey, 0, 0.05, 0);
+  add(new THREE.SphereGeometry(1, 16, 10), dark, 0, 1.0, -4.6).scale.set(0.48, 0.55, 1.3);
+  for (const sx of [-1, 1]) {
+    add(planform([[0.5, -0.9], [8.77, -0.46], [8.77, 1.26], [0.5, 2.1]].map(([x, z]) => [x * sx, z]), 0.4), grey, 0, -0.45, 0);
+    add(tube(0.46, 0.7, 3.6, 16), greyD, sx * 1.6, 1.38, 4.2);
+    const stab = new THREE.Group(); stab.position.set(sx * 0.2, 0.55, 6.9); plane.add(stab);
+    add(planform([[0, -0.7], [2.7, -0.45], [2.7, 0.97], [0, 1.05]].map(([x, z]) => [x * sx, z]), 0.14), grey, 0, 0, 0, stab);
+    parts[sx < 0 ? 'stabL' : 'stabR'] = stab;
+    add(profile([[6.25, -0.55], [6.3, 2.42], [7.75, 2.42], [7.95, -0.55]], 0.14), greyD, sx * 2.92, 0, 0);
+    add(tube(0.33, 0.33, 3.6, 12), grey, sx * 2.6, -0.73, 0);
+  }
+  add(tube(0.12, 0.12, 0.9, 10), metal, 0, -0.2, -8.15);
+  const r = A.rig;
+  addStores(r.bombs);
+  const gear = new THREE.Group(); plane.add(gear);
+  const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.26, 14); g.rotateZ(Math.PI / 2); return g; };
+  for (const [x, z, rad] of [[0.36, -5.5, 0.38], [-2.6, 0.25, 0.5], [2.6, 0.25, 0.5]]) {
+    add(wheel(rad), dark, x, -GEAR + rad, z, gear);
+    add(new THREE.BoxGeometry(0.14, GEAR - rad - 0.7, 0.14), metal, x, -(GEAR - rad + 0.7) / 2, z, gear);
+  }
+  parts.gear = gear;
+}
+
 // Boeing B-52H: 48.5 m long, 56.4 m span. The Blender model (B52.gltf.json) replaces this stand-in once it loads.
 function buildB52() {
   if (MODELS.b52) return buildFromGltf(MODELS.b52);
@@ -1020,7 +1066,7 @@ function setAircraft(id) {
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
   parts.bombs = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false; parts.bayDoors = [];
-  ({ f15: buildF15, typhoon: buildTyphoon, b757: build757, b52: buildB52 })[A.id]();
+  ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b52: buildB52 })[A.id]();
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
   rigGear();
@@ -1308,7 +1354,7 @@ scene.add(plane);
 // load the Blender-built models published next to this page, then swap each in
 if (THREE.GLTFLoader) {
   const loader = new THREE.GLTFLoader();
-  for (const id of ['f15', 'typhoon', 'b757', 'b52']) {
+  for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b52']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
         // glTF colours are linear; this renderer treats material colours as already display-ready
@@ -2042,7 +2088,7 @@ function roundImpact(x, y, z, kind) {
   if (kind === 'water') { for (let i = 0; i < 3; i++) emit('splash', tC, (Math.random() - 0.5) * 3, rr([4, 10]), (Math.random() - 0.5) * 3, 0.35); return; }
   for (let i = 0; i < 3; i++) emit('spark', tC, (Math.random() - 0.5) * 14, rr([2, 10]), (Math.random() - 0.5) * 14);
   if (Math.random() < 0.6) emit('dust', tC, (Math.random() - 0.5) * 2, rr([1, 3]), (Math.random() - 0.5) * 2, 0.45);
-  if (Math.random() < 0.2) emit('fire', tC, 0, 1, 0, 0.3);
+  if (Math.random() < (A.roundDmg > 2 ? 0.7 : 0.2)) emit('fire', tC, 0, 1, 0, A.roundDmg > 2 ? 0.45 : 0.3);
 }
 function updateBullets(dt) {
   for (let i = 0; i < BMAX; i++) {
@@ -2056,7 +2102,7 @@ function updateBullets(dt) {
     for (let n = 1; n <= steps && !hit; n++) {
       const x = bul.pos[j] + vx * dt * n / steps, y = bul.pos[j + 1] + vy * dt * n / steps, z = bul.pos[j + 2] + vz * dt * n / steps;
       const bi = buildingAt(x, z);
-      if (bi >= 0 && solidAt(bi, x, y, z)) { damageAt(bi, tV.set(x, y, z), 0.8, A.id === 'typhoon' ? 1.6 : 1); hit = [x, y, z, 'building']; }
+      if (bi >= 0 && solidAt(bi, x, y, z)) { damageAt(bi, tV.set(x, y, z), 0.8, A.roundDmg || 1); hit = [x, y, z, 'building']; }
       else { const h = heightAt(x, z); if (y <= Math.max(h, 0)) hit = [x, Math.max(h, 0), z, h < 0 ? 'water' : 'ground']; }
     }
     if (hit) { roundImpact(...hit); bul.life[i] = 0; trPos[s + 1] = trPos[s + 4] = -1e6; continue; }
@@ -2173,7 +2219,7 @@ function clearWeapons() {
 }
 function updateWeapons(dt) {
   if (S.firing && S.ammo > 0 && !S.crashed) {
-    bul.acc += dt * 100; // 6,000 rounds per minute
+    bul.acc += dt * (A.gunRate || 100); // 6,000 rounds per minute unless the aircraft says otherwise
     while (bul.acc >= 1 && S.ammo > 0) { bul.acc -= 1; fireRound(); S.ammo--; }
   } else bul.acc = 0;
   updateBullets(dt);
@@ -2445,6 +2491,7 @@ function physics(dt) {
     : t <= AB_AT ? t / AB_AT * A.thrust : A.thrust + (t - AB_AT) / (1 - AB_AT) * (A.thrustAB - A.thrust)) * Math.pow(rho / RHO, 0.7);
   force.set(0, 0, 0);
   force.addScaledVector(F, thrust * (S.dmg.engL + S.dmg.engR) / 2);
+  if (A.recoil && S.firing && S.ammo > 0) force.addScaledVector(F, -A.recoil); // the GAU-8 pushes back
   if (V > 0.5) {
     vhat.copy(v).divideScalar(V);
     liftDir.crossVectors(R, vhat);
@@ -2791,8 +2838,25 @@ function initAudio() {
     gunOsc.connect(gunOscG).connect(gunG);
     noise.connect(gunF).connect(gunG);
     gunG.connect(ctx.destination);
-    noise.start(); whine.start(); horn.start(); gunOsc.start();
-    audio = { ctx, buf, roarF, roarG, hissG, whine, whineG, hg, gunG };
+    // GAU-8 "BRRRT": 65 rounds a second fuse into one low, tearing buzz. A 65 Hz pulse train gates
+    // band-passed noise (each round a crack), over a clipped square-wave growl at the same rate.
+    const brrtG = ctx.createGain(); brrtG.gain.value = 0;
+    const brrtOsc = ctx.createOscillator(); brrtOsc.type = 'square'; brrtOsc.frequency.value = 65;
+    const clip = ctx.createWaveShaper(), curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(x * 3); }
+    clip.curve = curve;
+    const growlF = ctx.createBiquadFilter(); growlF.type = 'lowpass'; growlF.frequency.value = 900;
+    const growlG = ctx.createGain(); growlG.gain.value = 0.35;
+    brrtOsc.connect(clip).connect(growlF).connect(growlG).connect(brrtG);
+    const crackF = ctx.createBiquadFilter(); crackF.type = 'bandpass'; crackF.frequency.value = 320; crackF.Q.value = 0.7;
+    const gate = ctx.createGain(); gate.gain.value = 0.5;
+    const depth = ctx.createGain(); depth.gain.value = 0.5;
+    brrtOsc.connect(depth).connect(gate.gain); // 0..1 at 65 Hz
+    noise.connect(crackF).connect(gate).connect(brrtG);
+    const brrtLow = ctx.createBiquadFilter(); brrtLow.type = 'lowshelf'; brrtLow.frequency.value = 180; brrtLow.gain.value = 8;
+    brrtG.connect(brrtLow).connect(ctx.destination);
+    noise.start(); whine.start(); horn.start(); gunOsc.start(); brrtOsc.start();
+    audio = { ctx, buf, roarF, roarG, hissG, whine, whineG, hg, gunG, brrtG, brrtOsc };
   } catch (e) { audio = null; }
 }
 // impact: a low, decaying rumble (higher and shorter for a splash)
@@ -2820,7 +2884,11 @@ function updateAudio(stall) {
   audio.roarG.gain.setTargetAtTime(live ? (0.1 + n * 0.22) * s.roar[2] + ab * 0.3 : 0, t, 0.25);
   audio.hissG.gain.setTargetAtTime(live ? Math.min(0.08, S.V / 4000) + ab * 0.04 : 0, t, 0.2);
   audio.hg.gain.setTargetAtTime(live && stall ? 0.035 : 0, t, 0.03);
-  audio.gunG.gain.setTargetAtTime(live && S.firing && S.ammo > 0 ? 0.3 : 0, t, 0.015);
+  const shooting = live && S.firing && S.ammo > 0;
+  audio.gunG.gain.setTargetAtTime(shooting && !A.brrt ? 0.3 : 0, t, 0.015);
+  // the Avenger spins up in a blink and its roar hangs a moment after the trigger is released
+  audio.brrtG.gain.setTargetAtTime(shooting && A.brrt ? 0.55 : 0, t, shooting ? 0.02 : 0.09);
+  audio.brrtOsc.frequency.setTargetAtTime(shooting && A.brrt ? 65 : 52, t, 0.05);
 }
 
 // ---------------- instruments ----------------
