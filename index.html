@@ -78,7 +78,7 @@ h2 { margin: 0; font-size: 30px; text-wrap: balance; }
 .card p { margin: 0; line-height: 1.5; color: #cdd8df; font-size: 14px; max-width: 60ch; }
 .specs { display: flex; gap: 6px; flex-wrap: wrap; }
 .specs span { font-family: var(--font-num); font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--fg); }
-.pick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
+.pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
 .lopick { grid-template-columns: repeat(2, 1fr); }
 .pickb { font: 700 13px var(--font-ui); padding: 10px 8px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--dim); cursor: pointer; }
 .pickb:hover { color: var(--fg); }
@@ -192,7 +192,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h1>Skylark</h1>
     <p id="acDesc"></p>
     <div class="specs" id="acSpecs"></div>
-    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="actions">
       <button class="btn primary" id="goRunway">Take off from runway</button>
@@ -247,7 +247,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="card glass">
     <div class="eyebrow">HOLDING</div>
     <h2>Paused</h2>
-    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <dl class="keys key-only">
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
@@ -805,6 +805,24 @@ const AC = {
     desc: 'Fly a Boeing 757 from an island airbase 9 km south of the city, with its downtown towers, river, suburbs and hills. It weighs 80 tonnes, has no weapons, turns gently and carries a lot of momentum, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
     specs: ['ROTATE 145 KT', 'APPROACH 140 KT', '2.5 G LIMIT', 'MAX MACH 0.86', 'NO WEAPONS', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back gently at 145 kt, then raise the gear. It rolls slowly, so start turns early. Lower the gear and land at about 140 kt.'
+  },
+  b748: {
+    // Boeing 747-8: ~300 t at a medium weight, 554 m² wing, four GEnx-2B (~290 kN each), Mach 0.855 cruise
+    id: 'b748', mass: 300000, wing: 554, thrust: 1150000, thrustAB: 0,
+    CL0: 0.45, CLA: 5.2, stallA: 0.26, cd0: 0.021, k: 0.042, wave: [0.82, 0.96, 0.08],
+    gLimit: 2.5, effV: 90, rates: [0.28, 0.11, 0.42], stabRoll: 0, tailStrike: 0.17, gear: 5.5, weapons: false, gearTime: 10, mainRetract: 'in', travel: 0.5,
+    bodyFwd: 3.5, // the body gear (inboard of 3.5 m) folds forward into the belly; the wing gear folds inward
+    centreX: 1.0, // only the nose gear is on the centreline (the body trucks' inner wheels are 1.4 m out)
+    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B747.gltf.json', podEngines: true, rig: { ab: [], bombs: [], nuke: null },
+    box: new THREE.Box3(new THREE.Vector3(-34.2, -3.3, -33.5), new THREE.Vector3(34.2, 13.85, 42.75)), slideI: 1600,
+    hitPts: [[33.5, 0, -0.4], [-42.7, 0, 2.3], [-21.0, 34.2, 1.8], [-21.0, -34.2, 1.8], [-38.5, 0, 13.85], [-38.5, 11, 2.9], [-38.5, -11, 2.9],
+      [3.5, 11.84, -4.6], [3.5, -11.84, -4.6], [-4.2, 21.03, -3.4], [-4.2, -21.03, -3.4], [0, 0, -3.3]],
+    chase: [20, 125, 100], eye: [3.6, 31.2], scale: 3.4, shadow: 50, airStart: [130, 0.6], fireball: 2.6, crashBlast: [70, 2600],
+    sound: { whine: [300, 800, 1.7], roar: [90, 260, 1.4] },
+    eyebrow: 'BOEING 747-8 · FOUR-ENGINE WIDEBODY',
+    desc: 'Fly a Boeing 747-8 from the island airbase 9 km south of the city: 76 m long, 68 m across the wingtips, four engines and 300 tonnes in the air. It answers the controls slowly and takes a long time to stop, so plan every turn and every approach well ahead.',
+    specs: ['ROTATE 165 KT', 'APPROACH 155 KT', '2.5 G LIMIT', 'MAX MACH 0.9', '4 × GENX-2B', 'NO WEAPONS', 'RWY 36 · 13,100 FT'],
+    tip: 'Takeoff: full throttle and a long roll; pull back gently at about 165 kt, then raise the gear. Start turns early and keep the bank shallow. Lower the gear early and land at about 155 kt.'
   }
 };
 let A = AC.f15, GEAR = A.gear;
@@ -823,7 +841,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b52: null }; // Blender-built models, filled in as they load
+const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b748: null, b52: null }; // Blender-built models, filled in as they load
 const AB_MATS = [['#ff8c3a', 0.75], ['#fff1c4', 0.9]].map(([c, o]) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
@@ -984,6 +1002,36 @@ function buildTyphoon() {
   parts.gear = gear;
 }
 
+// Boeing 747-8: 76.25 m long, 68.4 m span. The Blender model (B747.gltf.json, b747/build_b747.py) replaces this stand-in once it loads.
+function build748() {
+  if (MODELS.b748) return buildFromGltf(MODELS.b748);
+  const white = M('#f1f1ee', 0.45, 0.1), blue = M('#1f4e8c', 0.5, 0.1), eng = M('#c9ccd0', 0.4, 0.4), wingMat = M('#cdd1d6', 0.5, 0.3);
+  const dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
+  add(tube(1.2, 3.25, 76, 24), white, 0, 0, 4.6);
+  add(tube(1.6, 1.6, 22, 18), white, 0, 3.0, -19).scale.set(1.5, 1.1, 1);
+  add(profile([[25.6, 1.6], [36.9, 13.85], [40.8, 13.85], [39.2, 1.6]], 0.6), blue, 0, 0, 0);
+  for (const sx of [-1, 1]) {
+    const w = add(planform([[1, -8], [12.5, 1.65], [34.2, 21], [34.2, 22.7], [12.5, 10.15], [1, 7.5]].map(([x, z]) => [x * sx, z]), 0.9), wingMat, 0, -2.3, 0);
+    w.rotation.z = sx * 0.12;
+    for (const [ex, ey, ez] of [[11.84, -0.8, -3.0], [21.03, 7.4, -1.9]]) {
+      add(tube(1.2, 1.5, 5.4, 18), eng, sx * ex, ez, ey);
+      add(new THREE.CircleGeometry(1.3, 18), dark, sx * ex, ez, ey - 2.71).rotation.y = Math.PI;
+    }
+    const st = new THREE.Group(); st.position.set(sx * 1.0, 1.65, 34.6); plane.add(st);
+    add(planform([[0, -4.4], [10, 4.0], [10, 7.2], [0, 4.8]].map(([x, z]) => [x * sx, z]), 0.4), white, 0, 0, 0, st);
+    parts[sx < 0 ? 'stabL' : 'stabR'] = st;
+  }
+  const gear = new THREE.Group(); plane.add(gear);
+  const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.46, 14); g.rotateZ(Math.PI / 2); return g; };
+  for (const [x, z] of [[-5.5, 1.55], [5.5, 1.55], [-1.92, 4.55], [1.92, 4.55]]) for (const dx of [-0.55, 0.55]) for (const dz of [-0.72, 0.72]) {
+    add(wheel(0.63), dark, x + dx, -GEAR + 0.63, z + dz, gear);
+    if (dx < 0 && dz < 0) add(new THREE.BoxGeometry(0.4, GEAR - 3.2, 0.4), metal, x, -(GEAR + 2.6) / 2, z, gear);
+  }
+  for (const dx of [-0.42, 0.42]) add(wheel(0.6), dark, dx, -GEAR + 0.6, -26.5, gear);
+  add(new THREE.BoxGeometry(0.34, GEAR - 3.6, 0.34), metal, 0, -(GEAR + 2.9) / 2, -26.5, gear);
+  parts.gear = gear;
+}
+
 // A-10C Thunderbolt II: 16.26 m long, 17.53 m span. The Blender model (A10.gltf.json, a10/build_a10.py) replaces this stand-in once it loads.
 function buildA10() {
   if (MODELS.a10) return buildFromGltf(MODELS.a10);
@@ -1079,7 +1127,7 @@ function setAircraft(id) {
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
   parts.bombs = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false; parts.bayDoors = [];
-  ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b52: buildB52 })[A.id]();
+  ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52 })[A.id]();
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
   rigGear();
@@ -1091,6 +1139,9 @@ function rigGear() {
   const g = parts.gear, legs = {}, bb = new THREE.Box3(), tmpB = new THREE.Box3();
   parts.gearLegs = [];
   if (!g) return;
+  // off-centre meshes on each side are grouped by spacing: a gap of more than 1.6 m across starts a new leg
+  // (a 747's body and wing gear); far outboard ones are outriggers
+  const side = { L: [], R: [] };
   for (const m of [...g.children]) {
     if (!m.isMesh) continue;
     m.updateMatrix();
@@ -1098,8 +1149,17 @@ function rigGear() {
     tmpB.copy(m.geometry.boundingBox).applyMatrix4(m.matrix);
     const cx = (tmpB.min.x + tmpB.max.x) / 2;
     const cz = (tmpB.min.z + tmpB.max.z) / 2;
-    const key = Math.abs(cx) < 1.5 ? 'c' + Math.round(cz / 6) : (cx < 0 ? 'L' : 'R') + (Math.abs(cx) > 10 ? 'o' : '');
-    (legs[key] = legs[key] || []).push([m, tmpB.clone()]);
+    if (Math.abs(cx) < (A.centreX || 1.5)) (legs['c' + Math.round(cz / 6)] = legs['c' + Math.round(cz / 6)] || []).push([m, tmpB.clone()]);
+    else if (Math.abs(cx) > 10) (legs[(cx < 0 ? 'L' : 'R') + 'o'] = legs[(cx < 0 ? 'L' : 'R') + 'o'] || []).push([m, tmpB.clone()]);
+    else side[cx < 0 ? 'L' : 'R'].push([m, tmpB.clone(), Math.abs(cx)]);
+  }
+  for (const [sd, list] of Object.entries(side)) {
+    let n = 0, prev = -Infinity;
+    for (const [m, b, ax] of list.sort((a, c) => a[2] - c[2])) {
+      if (ax - prev > 1.6) n++;
+      prev = ax;
+      (legs[sd + n] = legs[sd + n] || []).push([m, b]);
+    }
   }
   const centre = Object.keys(legs).filter(k => k[0] === 'c').sort((a, b) => +a.slice(1) - +b.slice(1));
   for (const [key, list] of Object.entries(legs)) {
@@ -1118,12 +1178,14 @@ function rigGear() {
       (isLower ? lower : upper).add(m);
       if (!isLower) strutBottom = Math.min(strutBottom, mb.min.y - pivot.position.y);
     }
-    // nose legs (and the F-15's mains) fold forward; the others fold inward toward the centreline
-    const fwd = key[0] === 'c' || A.mainRetract === 'fwd';
+    // nose legs (and the F-15's mains, and a 747's body gear) fold forward; the others fold inward toward the centreline
+    const fwd = key[0] === 'c' || A.mainRetract === 'fwd' || (A.bodyFwd && Math.abs((bb.min.x + bb.max.x) / 2) < A.bodyFwd);
     const leg = { pivot, upper, lower, nose: key === centre[0], len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key[0] === 'R' ? -1 : 1 };
     parts.gearLegs.push(leg);
     const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
-    const label = key[0] === 'c' ? (centre.length > 1 ? (key === centre[0] ? 'Forward' : 'Aft') + ' main gear truck' : 'Nose gear leg') : (key[0] === 'L' ? 'Left' : 'Right') + (key[1] === 'o' ? ' outrigger wheel' : ' main gear leg');
+    const mains = Object.keys(legs).filter(k => k[0] === key[0] && k[1] !== 'o').sort();
+    const which = mains.length > 1 ? (key === mains[0] ? ' body gear' : ' wing gear') : ' main gear leg';
+    const label = key[0] === 'c' ? (centre.length > 1 ? (key === centre[0] ? 'Forward' : 'Aft') + ' main gear truck' : 'Nose gear leg') : (key[0] === 'L' ? 'Left' : 'Right') + (key[1] === 'o' ? ' outrigger wheel' : which);
     parts.zones.push({ kind: 'gear', side: key[0] === 'c' ? '' : key[0], leg, alive: true, label,
       pts: [new THREE.Vector3(cx, bb.min.y, cz), new THREE.Vector3(cx, (bb.min.y + bb.max.y) / 2, cz)] });
   }
@@ -1439,7 +1501,7 @@ scene.add(plane);
 // load the Blender-built models published next to this page, then swap each in
 if (THREE.GLTFLoader) {
   const loader = new THREE.GLTFLoader();
-  for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b52']) {
+  for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
         // glTF colours are linear; this renderer treats material colours as already display-ready
