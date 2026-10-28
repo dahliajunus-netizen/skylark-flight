@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15, a Eurofighter Typhoon or a Boeing 757 over a destructible city.">
+<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15, a Eurofighter Typhoon, a Boeing 757 or a B-52 from an island airbase over a destructible city.">
 <style>:root{color-scheme:dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -78,7 +78,7 @@ h2 { margin: 0; font-size: 30px; text-wrap: balance; }
 .card p { margin: 0; line-height: 1.5; color: #cdd8df; font-size: 14px; max-width: 60ch; }
 .specs { display: flex; gap: 6px; flex-wrap: wrap; }
 .specs span { font-family: var(--font-num); font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--fg); }
-.pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
+.pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
 .pickb { font: 700 13px var(--font-ui); padding: 10px 8px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--dim); cursor: pointer; }
 .pickb:hover { color: var(--fg); }
 .pickb[aria-pressed="true"] { background: rgba(79,216,234,.14); border-color: rgba(79,216,234,.5); color: var(--cyan); }
@@ -191,7 +191,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h1>Skylark</h1>
     <p id="acDesc"></p>
     <div class="specs" id="acSpecs"></div>
-    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C Eagle</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">Boeing 757-200</button></div>
+    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="actions">
       <button class="btn primary" id="goRunway">Take off from runway</button>
       <button class="btn" id="goAir">Start airborne</button>
@@ -245,7 +245,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="card glass">
     <div class="eyebrow">HOLDING</div>
     <h2>Paused</h2>
-    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C Eagle</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">Boeing 757-200</button></div>
+    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <dl class="keys key-only">
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
       <dt>A / D, ← / →</dt><dd>Roll; steers on the ground</dd>
@@ -298,14 +298,25 @@ function fbm(x, y, oct) {
   for (let i = 0; i < oct; i++) { s += a * vnoise(x * f, y * f); n += a; a *= 0.5; f *= 2.03; }
   return s / n;
 }
-const RUNWAY_H = 24, RUNWAY_LEN = 1400, RUNWAY_W = 36;
-// The city sits on a flat plain north of the airport: a river cuts across it east-west,
-// the sea is to the east, and hills rise beyond the edge of town.
-const CITY_H = RUNWAY_H, BLOCK = 144, ROAD = 12;
+// The airbase has its own island south of the city: a 4 km (13,100 ft) runway, long enough for the B-52.
+const RUNWAY_H = 10, RUNWAY_LEN = 4000, RUNWAY_W = 60, RWY_Z = 13500;
+const ISLAND = { rx: 1400, rz: 3200 };
+// The city sits on a flat plain: a river cuts across it east-west, the sea is to the east and south,
+// and hills rise beyond the edge of town.
+const CITY_H = 24, BLOCK = 144, ROAD = 12;
 const CITY = { x0: -3400, x1: 3700, z0: -7200, z1: 2800 };
 const DOWNTOWN = { x: 400, z: -4600 };
 const riverZ = x => -2600 + 300 * Math.sin(x / 1100) + 120 * Math.sin(x / 430 + 1.3);
+// the airbase island: a flat field around the runway, low hills off to the sides, a steep shore
+function islandHeight(x, z) {
+  const e = Math.hypot(x / ISLAND.rx, (z - RWY_Z) / ISLAND.rz);
+  let h = RUNWAY_H - Math.max(0, e - 0.97) * 600;
+  const off = Math.abs(x) - 260;
+  if (off > 0 && e < 1) h += smooth(0, 500, off) * Math.max(0, fbm(x * 0.002 + 40, z * 0.002, 3) - 0.35) * 90 * (1 - smooth(0.75, 0.97, e));
+  return h;
+}
 function heightAt(x, z) {
+  if (z > 7000) return islandHeight(x, z); // south of the main map there is only sea and the island
   // fast path: the city plain is exactly flat away from the river
   if (x > CITY.x0 && x < CITY.x1 && z > CITY.z0 && z < CITY.z1 && Math.abs(z - riverZ(x)) > 96) return CITY_H;
   const e = fbm(x * 0.00032 + 11.3, z * 0.00032 - 7.1, 6);
@@ -320,7 +331,7 @@ function heightAt(x, z) {
 }
 function ground(x, z) {
   const h = heightAt(x, z);
-  return { h: Math.max(h, 0), water: h < 0, runway: Math.abs(x) < RUNWAY_W / 2 && Math.abs(z) < RUNWAY_LEN / 2 };
+  return { h: Math.max(h, 0), water: h < 0, runway: Math.abs(x) < RUNWAY_W / 2 && Math.abs(z - RWY_Z) < RUNWAY_LEN / 2 };
 }
 function slopeAt(x, z) {
   const h = heightAt(x, z);
@@ -403,6 +414,26 @@ scene.add(sky);
   mesh.receiveShadow = true;
   scene.add(mesh);
 
+  // the airbase island gets its own patch of terrain
+  const ig = new THREE.PlaneGeometry(ISLAND.rx * 2.4, ISLAND.rz * 2.3, 90, 180);
+  ig.rotateX(-Math.PI / 2);
+  ig.translate(0, 0, RWY_Z);
+  const ip = ig.attributes.position;
+  for (let i = 0; i < ip.count; i++) ip.setY(i, islandHeight(ip.getX(i), ip.getZ(i)));
+  ig.computeVertexNormals();
+  const icol = new Float32Array(ip.count * 3);
+  for (let i = 0; i < ip.count; i++) {
+    const x = ip.getX(i), z = ip.getZ(i), h = ip.getY(i);
+    col.copy(C.grassA).lerp(C.grassB, smooth(0.38, 0.68, fbm(x * 0.0015 + 5, z * 0.0015, 3)));
+    if (h < RUNWAY_H - 0.3) col.copy(C.sand).lerp(C.deep, smooth(RUNWAY_H, -30, h));
+    else if (h > RUNWAY_H + 40) col.lerp(C.rockD, smooth(RUNWAY_H + 40, RUNWAY_H + 90, h));
+    icol[i * 3] = col.r; icol[i * 3 + 1] = col.g; icol[i * 3 + 2] = col.b;
+  }
+  ig.setAttribute('color', new THREE.BufferAttribute(icol, 3));
+  const island = new THREE.Mesh(ig, mesh.material);
+  island.receiveShadow = true;
+  scene.add(island);
+
   const water = new THREE.Mesh(new THREE.PlaneGeometry(120000, 120000), new THREE.MeshStandardMaterial({ color: '#2e7088', roughness: 0.3, metalness: 0.15 }));
   water.rotation.x = -Math.PI / 2;
   water.position.y = 0;
@@ -447,41 +478,45 @@ scene.add(sky);
   scene.add(mesh);
 })();
 
-// airfield
+// airfield on the island: RWY 36, 4,000 m × 60 m
 (function buildAirfield() {
-  const top = RUNWAY_H + 0.1;
-  const runway = new THREE.Mesh(new THREE.BoxGeometry(RUNWAY_W, 0.4, RUNWAY_LEN), new THREE.MeshStandardMaterial({ color: '#3a3e44', roughness: 0.95 }));
-  runway.position.set(0, top - 0.2, 0);
+  const top = RUNWAY_H + 0.1, Z = RWY_Z, W = RUNWAY_W, L = RUNWAY_LEN;
+  const runway = new THREE.Mesh(new THREE.BoxGeometry(W, 0.4, L), new THREE.MeshStandardMaterial({ color: '#3a3e44', roughness: 0.95 }));
+  runway.position.set(0, top - 0.2, Z);
   runway.receiveShadow = true;
   scene.add(runway);
   const paint = new THREE.MeshBasicMaterial({ color: '#e7e4da' });
-  const stripe = (w, l, x, z) => { const s = new THREE.Mesh(new THREE.PlaneGeometry(w, l), paint); s.rotation.x = -Math.PI / 2; s.position.set(x, top + 0.02, z); scene.add(s); };
-  for (let z = -RUNWAY_LEN / 2 + 90; z <= RUNWAY_LEN / 2 - 90; z += 50) stripe(0.9, 24, 0, z);
+  const stripe = (w, l, x, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), paint); m.rotation.x = -Math.PI / 2; m.position.set(x, top + 0.02, Z + z); scene.add(m); };
+  for (let z = -L / 2 + 120; z <= L / 2 - 120; z += 60) stripe(0.9, 30, 0, z);
   for (const end of [-1, 1]) {
-    for (let k = 0; k < 6; k++) { stripe(1.6, 30, 3 + k * 2.5, end * (RUNWAY_LEN / 2 - 22)); stripe(1.6, 30, -3 - k * 2.5, end * (RUNWAY_LEN / 2 - 22)); }
-    stripe(4, 45, 7, end * (RUNWAY_LEN / 2 - 170)); stripe(4, 45, -7, end * (RUNWAY_LEN / 2 - 170));
+    for (let k = 0; k < 8; k++) { stripe(1.8, 45, 4 + k * 3.2, end * (L / 2 - 30)); stripe(1.8, 45, -4 - k * 3.2, end * (L / 2 - 30)); }
+    stripe(6, 60, 11, end * (L / 2 - 300)); stripe(6, 60, -11, end * (L / 2 - 300));
+    for (let k = 0; k < 3; k++) { stripe(3, 22, 8, end * (L / 2 - 450 - k * 150)); stripe(3, 22, -8, end * (L / 2 - 450 - k * 150)); } // touchdown zone
   }
-  const apron = new THREE.Mesh(new THREE.PlaneGeometry(110, 280), new THREE.MeshStandardMaterial({ color: '#56595c', roughness: 1 }));
-  apron.rotation.x = -Math.PI / 2; apron.position.set(90, top - 0.02, -120); apron.receiveShadow = true; scene.add(apron);
-  const twy = new THREE.Mesh(new THREE.PlaneGeometry(52, 16), apron.material);
-  twy.rotation.x = -Math.PI / 2; twy.position.set(44, top - 0.03, -120); scene.add(twy);
+  for (const sx of [-1, 1]) stripe(0.9, L - 60, sx * (W / 2 - 1.5), 0); // edge lines
+  const apronMat = new THREE.MeshStandardMaterial({ color: '#56595c', roughness: 1 });
+  const slab = (w, l, x, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), apronMat); m.rotation.x = -Math.PI / 2; m.position.set(x, top - 0.02, Z + z); m.receiveShadow = true; scene.add(m); };
+  slab(260, 900, W / 2 + 230, -200);              // ramp, big enough for bombers
+  slab(30, L - 400, W / 2 + 85, 0);               // parallel taxiway
+  for (const z of [-L / 2 + 250, -200, L / 2 - 250]) slab(70, 25, W / 2 + 35, z); // links
 
-  const lights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 0.5, 0.6), new THREE.MeshBasicMaterial({ color: '#ffd27a' }), 2 * (Math.floor(RUNWAY_LEN / 60) + 1));
+  const lights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 0.5, 0.6), new THREE.MeshBasicMaterial({ color: '#ffd27a' }), 2 * (Math.floor(L / 60) + 1));
   const m = new THREE.Matrix4(); let i = 0;
-  for (let z = -RUNWAY_LEN / 2; z <= RUNWAY_LEN / 2; z += 60) for (const x of [-1, 1]) { m.makeTranslation(x * (RUNWAY_W / 2 + 1.5), top + 0.25, z); lights.setMatrixAt(i++, m); }
+  for (let z = -L / 2; z <= L / 2; z += 60) for (const x of [-1, 1]) { m.makeTranslation(x * (W / 2 + 1.5), top + 0.25, Z + z); lights.setMatrixAt(i++, m); }
   lights.count = i; scene.add(lights);
 
   const wall = new THREE.MeshStandardMaterial({ color: '#c9c2b4', roughness: 0.9 }), roof = new THREE.MeshStandardMaterial({ color: '#7a3b2e', roughness: 0.8 });
-  [-220, -170, -120].forEach((z, k) => {
-    const hgr = new THREE.Mesh(new THREE.BoxGeometry(26, 10, 34), wall); hgr.position.set(130, top + 5, z * 1 - k * 12); hgr.castShadow = hgr.receiveShadow = true; scene.add(hgr);
-    const rg = new THREE.CylinderGeometry(13.5, 13.5, 34, 12, 1, false, 0, Math.PI);
-    rg.rotateX(Math.PI / 2); rg.rotateZ(Math.PI / 2); // half-barrel along Z, dome facing up
-    const r = new THREE.Mesh(rg, roof);
-    r.scale.set(1, 0.35, 1); r.position.set(130, top + 10, z - k * 12); scene.add(r);
+  [-560, -460, -360, -100, 40].forEach((z, k) => {
+    const big = k < 3, w = big ? 72 : 30, d = big ? 64 : 36, h = big ? 18 : 10, x = W / 2 + 300;
+    const hgr = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wall); hgr.position.set(x, top + h / 2, Z + z); hgr.castShadow = hgr.receiveShadow = true; scene.add(hgr);
+    const rg = new THREE.CylinderGeometry(w / 2 + 0.5, w / 2 + 0.5, d, 14, 1, false, 0, Math.PI);
+    rg.rotateX(Math.PI / 2); rg.rotateZ(Math.PI / 2);
+    const r = new THREE.Mesh(rg, roof); r.scale.set(1, 0.3, 1); r.position.set(x, top + h, Z + z); scene.add(r);
   });
-  const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 20, 10), wall); tower.position.set(-80, top + 10, 120); tower.castShadow = true; scene.add(tower);
-  const cab = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 3.8, 4, 8), new THREE.MeshStandardMaterial({ color: '#25455c', roughness: 0.2, metalness: 0.5 })); cab.position.set(-80, top + 22, 120); scene.add(cab);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 0.8, 8), roof); cap.position.set(-80, top + 24.4, 120); scene.add(cap);
+  const tx = -(W / 2 + 120), tz = Z + 150;
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 24, 10), wall); tower.position.set(tx, top + 12, tz); tower.castShadow = true; scene.add(tower);
+  const cab = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 3.8, 4, 8), new THREE.MeshStandardMaterial({ color: '#25455c', roughness: 0.2, metalness: 0.5 })); cab.position.set(tx, top + 26, tz); scene.add(cab);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 0.8, 8), roof); cap.position.set(tx, top + 28.4, tz); scene.add(cap);
 })();
 
 // ---------------- city ----------------
@@ -504,7 +539,7 @@ vWN = normalize(mat3(modelMatrix) * wn);`);
     .replace('#include <color_fragment>', '#include <color_fragment>\n' + colorCode)
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + emissiveCode);
 }
-const inAirport = (x, z, m = 0) => Math.abs(x) < 650 + m && z > -1400 - m && z < 1450 + m;
+const inAirport = () => false; // the airport is on its own island now
 const isPark = (ix, iz) => ((ix * 7 + iz * 13) % 23 + 23) % 23 === 0;
 
 // streets, sidewalks, lots and parks, painted onto one flat plane
@@ -521,7 +556,6 @@ const isPark = (ix, iz) => ((ix * 7 + iz * 13) % 23 + 23) % 23 === 0;
   float road = max(roadX, roadZ);
   float rz = -2600.0 + 300.0 * sin(p.x / 1100.0) + 120.0 * sin(p.x / 430.0 + 1.3);
   if (abs(p.y - rz) < 80.0 && road < 0.5) discard; // river; streets carry on as bridges
-  if (abs(p.x) < 650.0 && p.y > -1400.0 && p.y < 1450.0) discard; // airport grounds
   vec2 blk = floor(p / ${BLOCK}.0);
   float park = step(mod(blk.x * 7.0 + blk.y * 13.0, 23.0), 0.5);
   float h = fract(sin(dot(blk, vec2(12.9898, 78.233))) * 43758.5453);
@@ -582,11 +616,10 @@ function wallNormal(i, p, out) {
       const x0 = ix * BLOCK + ROAD + 4, z0 = iz * BLOCK + ROAD + 4, size = BLOCK - 2 * ROAD - 8;
       const cx = x0 + size / 2, cz = z0 + size / 2;
       if (isPark(ix, iz) || inAirport(cx, cz, 120)) continue;
-      if (Math.abs(cx) < 340 && cz > 1450) continue; // keep the southern approach clear
       if ([[x0, z0], [x0 + size, z0], [x0, z0 + size], [x0 + size, z0 + size]].some(([x, z]) => Math.abs(z - riverZ(x)) < 100)) continue;
       const dist = Math.hypot(cx - DOWNTOWN.x, (cz - DOWNTOWN.z) * 0.9);
       const tall = Math.exp(-((dist / 1300) ** 2));
-      const cap = Math.abs(cx) < 450 && cz < -1400 && cz > -3700 ? 35 : 1e9; // northern departure path
+      const cap = 1e9;
       const first = BLD.length / 5;
       if (tall > 0.3) {
         // downtown: one or two towers per block
@@ -667,8 +700,8 @@ const AC = {
     chase: [5.5, 34, 30], eye: [0.95, 3.9], scale: 1, shadow: 16, airStart: [165, 0.5], fireball: 1, crashBlast: [30, 500],
     sound: { whine: [600, 1400, 1], roar: [160, 450, 1] },
     eyebrow: 'F-15C EAGLE · TWIN-ENGINE FIGHTER',
-    desc: 'Fly an F-15 out of a city airport. Downtown towers rise just north of the runway, past the river, with streets and suburbs spreading to the hills and the sea on the east side. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked, piece by piece, and the damage stays until you choose Rebuild city on the pause screen.',
-    specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', '4 × MK-82', 'B61 NUCLEAR BOMB', 'RWY 36 · 4,600 FT'],
+    desc: 'Fly an F-15 from an island airbase 9 km south of the city, then head north over the water to the downtown towers, the river, the suburbs and the hills. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked, piece by piece, and the damage stays until you choose Rebuild city on the pause screen.',
+    specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', '4 × MK-82', 'B61 NUCLEAR BOMB', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back at 150 kt, then raise the gear. With the stick centered the jet holds level flight; the throttle sets your speed. Lower the gear before landing.'
   },
   typhoon: {
@@ -684,22 +717,45 @@ const AC = {
     chase: [5, 30, 28], eye: [0.8, 3.05], scale: 0.9, shadow: 14, airStart: [165, 0.5], fireball: 0.95, crashBlast: [28, 450],
     sound: { whine: [700, 1500, 1], roar: [170, 480, 1] },
     eyebrow: 'EUROFIGHTER TYPHOON · DELTA-CANARD FIGHTER',
-    desc: 'Fly a Eurofighter Typhoon out of a city airport, with downtown towers just north of the runway, a river, suburbs, hills and the sea to the east. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
-    specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', '4 × MK-82', 'RWY 36 · 4,600 FT'],
+    desc: 'Fly a Eurofighter Typhoon from an island airbase 9 km south of the city, with its downtown towers, river, suburbs and hills. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
+    specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', '4 × MK-82', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back at about 155 kt, then raise the gear. Watch the canards: they tilt nose-up to pitch up. Lower the gear and land at about 145 kt.'
+  },
+  b52: {
+    // Boeing B-52H: ~140 t plus 40 t of bombs, 370 m² wing, eight TF33s (~76 kN each)
+    id: 'b52', mass: 140000, wing: 370, thrust: 608000, thrustAB: 0,
+    CL0: 0.4, CLA: 5.0, stallA: 0.22, cd0: 0.022, k: 0.05, wave: [0.78, 0.92, 0.08],
+    gLimit: 2.0, effV: 95, rates: [0.25, 0.1, 0.35], stabRoll: 0, tailStrike: 0.15, gear: 3.4, weapons: true, gearTime: 10, mainRetract: 'in', travel: 0.5,
+    ammo: 0, nukes: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B52.gltf.json', podEngines: true,
+    bombKg: 2000, bombCd: 0.0004, bombName: '2000 KG', bombKind: 'heavy',
+    // 8 on the two wing pylons (2 abreast, 2 deep), then 12 in the bomb bay (2 abreast, 3 high, 2 deep)
+    rig: { ab: [], nuke: null, bombScale: 1.6, internalFrom: 8, bombs: [
+      [-6.17, -0.16, -4.75], [6.17, -0.16, -4.75], [-6.83, -0.16, -4.75], [6.83, -0.16, -4.75],
+      [-6.17, -0.16, -0.75], [6.17, -0.16, -0.75], [-6.83, -0.16, -0.75], [6.83, -0.16, -0.75],
+      [-0.42, -1.4, -4.75], [0.42, -1.4, -4.75], [-0.42, -1.4, 0.25], [0.42, -1.4, 0.25],
+      [-0.42, -0.8, -4.75], [0.42, -0.8, -4.75], [-0.42, -0.8, 0.25], [0.42, -0.8, 0.25],
+      [-0.42, -0.2, -4.75], [0.42, -0.2, -4.75], [-0.42, -0.2, 0.25], [0.42, -0.2, 0.25]] },
+    box: new THREE.Box3(new THREE.Vector3(-28.2, -3.0, -24.25), new THREE.Vector3(28.2, 9.0, 24.25)), slideI: 900,
+    hitPts: [[24.25, 0, -0.3], [-24.25, 0, 0.8], [-9.0, 28.2, 0.2], [-9.0, -28.2, 0.2], [-19.0, 0, 9.0], [0, 0, -1.8]],
+    chase: [16, 115, 95], eye: [1.25, 19.6], scale: 2.6, shadow: 42, airStart: [150, 0.6], fireball: 2.2, crashBlast: [60, 2000],
+    sound: { whine: [280, 700, 1.4], roar: [80, 240, 1.6] },
+    eyebrow: 'BOEING B-52H STRATOFORTRESS · HEAVY BOMBER',
+    desc: 'Fly a B-52 from the island airbase 9 km south of the city. It is huge and slow to answer, with eight engines and twenty 2,000 kg bombs: eight under the wings and twelve in the bomb bay. Each one blows a crater out of whatever it lands on.',
+    specs: ['ROTATE 160 KT', 'APPROACH 155 KT', '2 G LIMIT', '8 × TF33 ENGINES', '20 × 2,000 KG BOMBS', 'RWY 36 · 13,100 FT'],
+    tip: 'Takeoff: full throttle and a long roll; the B-52 lifts off almost level at about 160 kt with a gentle pull. Drop bombs from at least 1,500 ft, wing bombs first, then the bay. Lower the gear and land at about 155 kt.'
   },
   b757: {
     id: 'b757', mass: 80000, wing: 185, thrust: 380000, thrustAB: 0,
     CL0: 0.35, CLA: 5.0, stallA: 0.28, cd0: 0.022, k: 0.045, wave: [0.78, 0.95, 0.08],
     gLimit: 2.5, effV: 85, rates: [0.35, 0.15, 0.6], stabRoll: 0, tailStrike: 0.2, gear: 4.4, weapons: false, gearTime: 8, mainRetract: 'in', travel: 0.45,
-    ammo: 0, nukes: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B757.gltf.json', rig: { ab: [], bombs: [], nuke: null },
+    ammo: 0, nukes: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B757.gltf.json', podEngines: true, rig: { ab: [], bombs: [], nuke: null },
     box: new THREE.Box3(new THREE.Vector3(-19, -3.95, -23.65), new THREE.Vector3(19, 9.2, 23.65)), slideI: 420,
     hitPts: [[23.65, 0, -0.35], [-23.65, 0, 1.0], [-3.4, 19, 0.55], [-3.4, -19, 0.55], [-21.9, 0, 9.2], [-21.0, 7.6, 1.42], [-21.0, -7.6, 1.42], [0, 0, -1.9], [7.15, 6.5, -3.9], [7.15, -6.5, -3.9]],
     chase: [13, 85, 70], eye: [0.9, 19.7], scale: 2.3, shadow: 34, airStart: [125, 0.5], fireball: 1.8, crashBlast: [50, 1600],
     sound: { whine: [350, 900, 1.6], roar: [110, 300, 1.25] },
     eyebrow: 'BOEING 757-200 · TWIN-ENGINE AIRLINER',
-    desc: 'Fly a Boeing 757 out of a city airport, with downtown towers just north of the runway, a river, suburbs, hills and the sea to the east. It weighs 80 tonnes, has no weapons, turns gently and carries a lot of momentum, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
-    specs: ['ROTATE 145 KT', 'APPROACH 140 KT', '2.5 G LIMIT', 'MAX MACH 0.86', 'NO WEAPONS', 'RWY 36 · 4,600 FT'],
+    desc: 'Fly a Boeing 757 from an island airbase 9 km south of the city, with its downtown towers, river, suburbs and hills. It weighs 80 tonnes, has no weapons, turns gently and carries a lot of momentum, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
+    specs: ['ROTATE 145 KT', 'APPROACH 140 KT', '2.5 G LIMIT', 'MAX MACH 0.86', 'NO WEAPONS', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back gently at 145 kt, then raise the gear. It rolls slowly, so start turns early. Lower the gear and land at about 140 kt.'
   }
 };
@@ -719,7 +775,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-const MODELS = { f15: null, typhoon: null, b757: null }; // Blender-built models, filled in as they load
+const MODELS = { f15: null, typhoon: null, b757: null, b52: null }; // Blender-built models, filled in as they load
 const AB_MATS = [['#ff8c3a', 0.75], ['#fff1c4', 0.9]].map(([c, o]) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
@@ -760,9 +816,13 @@ function addNuke(x, y, z) {
   const b = nukeTemplate.clone(); b.position.set(x, y, z); plane.add(b); parts.nuke = b;
 }
 // positions are listed in release order, alternating sides to keep the jet balanced
-function addBombs(positions) {
+function addBombs(positions, scale = 1, internalFrom = Infinity) {
   if (!bombTemplate) bombTemplate = makeBomb();
-  for (const [x, y, z] of positions) { const b = bombTemplate.clone(); b.position.set(x, y, z); plane.add(b); parts.bombs.push(b); }
+  positions.forEach(([x, y, z], i) => {
+    const b = bombTemplate.clone(); b.position.set(x, y, z); b.scale.setScalar(scale);
+    b.userData.kind = A.bombKind || 'mk82'; b.userData.internal = i >= internalFrom;
+    plane.add(b); parts.bombs.push(b);
+  });
 }
 
 function buildF15() {
@@ -819,7 +879,11 @@ function buildFromGltf(model) {
     m.userData.fromModel = true;
     const n = src.name.toLowerCase();
     if (/wheel|strut|bogie/.test(n)) gear.add(m);
-    else if (/stabilator|stabili[sz]er|canard/.test(n)) {
+    else if (/bomb_bay_door/.test(n)) {
+      const pivot = new THREE.Group(); pivot.position.copy(m.position); plane.add(pivot);
+      m.position.set(0, 0, 0); pivot.add(m);
+      parts.bayDoors.push({ pivot, sign: pivot.position.x < 0 ? -1 : 1 });
+    } else if (/stabilator|stabili[sz]er|canard/.test(n)) {
       // the Blender object origin is already on the pivot; wrap it so rotation.x tilts it about the sim's X axis
       const pivot = new THREE.Group(); pivot.position.copy(m.position); plane.add(pivot);
       m.position.set(0, 0, 0); pivot.add(m);
@@ -835,7 +899,7 @@ function buildFromGltf(model) {
   parts.gear = gear;
   const r = A.rig;
   r.ab.forEach(([x, y, z], i) => addAfterburner(i ? 'abR' : 'abL', x, y, z));
-  addBombs(r.bombs);
+  addBombs(r.bombs, r.bombScale || 1, r.internalFrom);
   if (r.nuke) addNuke(...r.nuke);
   buildZones();
 }
@@ -863,6 +927,20 @@ function buildTyphoon() {
     add(wheel(rad), dark, x, -GEAR + rad, z, gear);
     add(new THREE.BoxGeometry(0.12, GEAR - rad - 0.9, 0.12), metal, x, -(GEAR - rad + 0.9) / 2, z, gear);
   }
+  parts.gear = gear;
+}
+
+// Boeing B-52H: 48.5 m long, 56.4 m span. The Blender model (B52.gltf.json) replaces this stand-in once it loads.
+function buildB52() {
+  if (MODELS.b52) return buildFromGltf(MODELS.b52);
+  const grey = M('#5c6267'), dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
+  add(tube(0.6, 1.2, 48, 16), grey, 0, 0.1, 0);
+  for (const sx of [-1, 1]) add(planform([[1.5, -10.25], [28.2, 9.85], [28.2, 13.25], [1.5, 1.25]].map(([x, z]) => [x * sx, z]), 0.5), grey, 0, 1.4, 0);
+  add(profile([[12.25, 1.8], [18.25, 9.0], [21.45, 9.0], [21.25, 1.8]], 0.4), grey, 0, 0, 0);
+  addBombs(A.rig.bombs, A.rig.bombScale, A.rig.internalFrom);
+  const gear = new THREE.Group(); plane.add(gear);
+  const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.3, 14); g.rotateZ(Math.PI / 2); return g; };
+  for (const z of [-10.75, 3.25]) for (const x of [-0.9, 0.9]) { add(wheel(0.55), dark, x, -GEAR + 0.55, z, gear); add(new THREE.BoxGeometry(0.2, GEAR - 2.3, 0.2), metal, x, -(GEAR + 0.6) / 2, z, gear); }
   parts.gear = gear;
 }
 
@@ -919,8 +997,8 @@ function setAircraft(id) {
   GEAR = A.gear;
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false;
-  ({ f15: buildF15, typhoon: buildTyphoon, b757: build757 })[A.id]();
+  parts.bombs = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false; parts.bayDoors = [];
+  ({ f15: buildF15, typhoon: buildTyphoon, b757: build757, b52: buildB52 })[A.id]();
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
   rigGear();
@@ -937,9 +1015,11 @@ function rigGear() {
     if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
     tmpB.copy(m.geometry.boundingBox).applyMatrix4(m.matrix);
     const cx = (tmpB.min.x + tmpB.max.x) / 2;
-    const key = Math.abs(cx) < 1 ? 'nose' : cx < 0 ? 'L' : 'R';
+    const cz = (tmpB.min.z + tmpB.max.z) / 2;
+    const key = Math.abs(cx) < 1.5 ? 'c' + Math.round(cz / 6) : (cx < 0 ? 'L' : 'R') + (Math.abs(cx) > 10 ? 'o' : '');
     (legs[key] = legs[key] || []).push([m, tmpB.clone()]);
   }
+  const centre = Object.keys(legs).filter(k => k[0] === 'c').sort((a, b) => +a.slice(1) - +b.slice(1));
   for (const [key, list] of Object.entries(legs)) {
     bb.makeEmpty();
     list.forEach(([, b]) => bb.union(b));
@@ -957,11 +1037,12 @@ function rigGear() {
       if (!isLower) strutBottom = Math.min(strutBottom, mb.min.y - pivot.position.y);
     }
     // nose legs (and the F-15's mains) fold forward; the others fold inward toward the centreline
-    const fwd = key === 'nose' || A.mainRetract === 'fwd';
-    const leg = { pivot, upper, lower, nose: key === 'nose', len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key === 'R' ? -1 : 1 };
+    const fwd = key[0] === 'c' || A.mainRetract === 'fwd';
+    const leg = { pivot, upper, lower, nose: key === centre[0], len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key[0] === 'R' ? -1 : 1 };
     parts.gearLegs.push(leg);
     const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
-    parts.zones.push({ kind: 'gear', side: key === 'nose' ? '' : key, leg, alive: true, label: key === 'nose' ? 'Nose gear leg' : (key === 'L' ? 'Left' : 'Right') + ' main gear leg',
+    const label = key[0] === 'c' ? (centre.length > 1 ? (key === centre[0] ? 'Forward' : 'Aft') + ' main gear truck' : 'Nose gear leg') : (key[0] === 'L' ? 'Left' : 'Right') + (key[1] === 'o' ? ' outrigger wheel' : ' main gear leg');
+    parts.zones.push({ kind: 'gear', side: key[0] === 'c' ? '' : key[0], leg, alive: true, label,
       pts: [new THREE.Vector3(cx, bb.min.y, cz), new THREE.Vector3(cx, (bb.min.y + bb.max.y) / 2, cz)] });
   }
 }
@@ -1033,12 +1114,12 @@ function buildZones() {
   plane.traverse(o => {
     if (!o.isMesh || !o.userData.fromModel || parts.gear && isInside(o, parts.gear)) return;
     // podded engines only exist on the 757; the fighters' "nacelles" are their intake and engine-bay bodies (core)
-    const nm = nameOf(o), rule = ZONE_RULES.find(([k, re]) => re.test(nm) && (k !== 'eng' || A.id === 'b757'));
+    const nm = nameOf(o), rule = ZONE_RULES.find(([k, re]) => re.test(nm) && (k !== 'eng' || A.podEngines));
     if (!rule) { core.push(o); return; }
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
     const cx = o.geometry.boundingBox.getCenter(_v).applyMatrix4(localMatrix(o)).x;
     const side = Math.abs(cx) < 0.3 ? '' : cx < 0 ? 'L' : 'R';
-    const key = rule[0] + side;
+    const key = rule[0] + side + (rule[0] === 'eng' ? Math.round(Math.abs(cx) / 6) : ''); // one zone per engine pod
     (groups[key] = groups[key] || { kind: rule[0], side, meshes: [] }).meshes.push(o);
   });
   const sideWord = sd => sd === 'L' ? 'Left ' : sd === 'R' ? 'Right ' : '';
@@ -1205,7 +1286,7 @@ scene.add(plane);
 // load the Blender-built models published next to this page, then swap each in
 if (THREE.GLTFLoader) {
   const loader = new THREE.GLTFLoader();
-  for (const id of ['f15', 'typhoon', 'b757']) {
+  for (const id of ['f15', 'typhoon', 'b757', 'b52']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
         // glTF colours are linear; this renderer treats material colours as already display-ready
@@ -1506,7 +1587,7 @@ function stepPiece(p, dt) {
   // sliding friction at the corner; it also tips the piece over, so things tumble
   const vh = Math.hypot(v.x, v.z);
   if (vh > 1e-3) {
-    const onRunway = Math.abs(p.cp.x) < RUNWAY_W / 2 && Math.abs(p.cp.z) < RUNWAY_LEN / 2;
+    const onRunway = Math.abs(p.cp.x) < RUNWAY_W / 2 && Math.abs(p.cp.z - RWY_Z) < RUNWAY_LEN / 2;
     const dec = Math.min(vh, (onRunway ? p.mu * 0.8 : p.mu) * G * dt);
     const fx = -v.x / vh * dec, fz = -v.z / vh * dec;
     v.x += fx; v.z += fz;
@@ -1980,8 +2061,11 @@ let lastImpact = null; // { p, t, nuke } for the bomb camera
 const clockNow = () => performance.now() / 1000;
 
 function releaseStore(src, kind) {
+  const obj = src.clone();
+  obj.visible = true;
   src.visible = false;
-  const obj = (kind === 'nuke' ? nukeTemplate : bombTemplate).clone();
+  if (src.userData.internal) S.bayOpen = 3; // bomb bay doors swing open for a few seconds
+  kind = src.userData.kind || kind;
   plane.updateMatrixWorld(true);
   src.getWorldPosition(obj.position);
   src.getWorldQuaternion(obj.quaternion);
@@ -2031,8 +2115,8 @@ function updateBombs(dt) {
       scene.remove(o);
       bombsFlying.splice(b, 1);
       if (B.kind === 'nuke') { detonateNuke(p, hit === 'water'); continue; }
-      explode(p, 1.3, hit === 'water');
-      blast(p, hit === 'water' ? 25 : 45, 1300);
+      if (B.kind === 'heavy') { explode(p, 2.2, hit === 'water'); blast(p, hit === 'water' ? 40 : 75, 2800); } // 2,000 kg
+      else { explode(p, 1.3, hit === 'water'); blast(p, hit === 'water' ? 25 : 45, 1300); }
       lastImpact = { p, t: clockNow(), nuke: false };
       continue;
     }
@@ -2259,7 +2343,7 @@ function reset(mode) {
   S.ang.set(0, 0, 0);
   inp.pitch = inp.roll = inp.yaw = 0;
   if (mode === 'runway') {
-    S.pos.set(0, RUNWAY_H + 0.1 + GEAR, RUNWAY_LEN / 2 - 60);
+    S.pos.set(0, RUNWAY_H + 0.1 + GEAR, RWY_Z + RUNWAY_LEN / 2 - 80);
     S.vel.set(0, 0, 0);
     S.quat.identity();
     S.throttle = 0;
@@ -2326,7 +2410,7 @@ function physics(dt) {
   S.alpha = alpha; S.V = V; S.rho = rho; S.mach = mach;
   const qS = 0.5 * rho * V * V * A.wing;
   const CL = liftCoef(alpha);
-  const MASS = A.mass + S.bombs * 230 + S.nukes * 320; // Mk-82 about 230 kg, B61 about 320 kg
+  const MASS = A.mass + S.bombs * (A.bombKg || 230) + S.nukes * 320; // Mk-82 about 230 kg, B61 about 320 kg
 
   const t = S.throttle;
   const thrust = (!A.thrustAB ? t * A.thrust // no afterburner: full throttle is takeoff thrust
@@ -2339,7 +2423,7 @@ function physics(dt) {
     const ll = liftDir.length();
     if (ll > 1e-4) force.addScaledVector(liftDir, qS * CL / ll * (0.15 + 0.85 * (S.dmg.wingL + S.dmg.wingR) / 2)); // missing wing = missing lift
     const CD = A.cd0 + A.k * CL * CL + (Math.abs(alpha) > A.stallA ? 0.15 : 0) + A.wave[2] * smooth(A.wave[0], A.wave[1], mach) // transonic drag rise
-      + 0.015 * S.gearT + (S.brake ? 0.05 : 0) + (S.bombs + S.nukes) * 0.0015 + Math.abs(beta) * 0.2;
+      + 0.015 * S.gearT + (S.brake ? 0.05 : 0) + (S.bombs * (A.bombCd || 0.0015) + S.nukes * 0.0015) + Math.abs(beta) * 0.2;
     force.addScaledVector(vhat, -qS * CD);
     force.addScaledVector(R, -qS * 0.5 * Math.sin(beta));
   }
@@ -2760,7 +2844,7 @@ function updateHUD() {
   el.gl.style.color = S.g > 7 || S.g < -1.5 ? 'var(--amber)' : '';
   setText(el.gun, 'GUN ' + S.ammo);
   el.gun.style.color = S.firing && S.ammo > 0 ? 'var(--amber)' : S.ammo ? '' : 'var(--dim)';
-  setText(el.bombs, 'MK-82 ×' + S.bombs);
+  setText(el.bombs, (A.bombName || 'MK-82') + ' ×' + S.bombs);
   setText(el.nukes, 'B61 ×' + S.nukes);
   el.nukes.style.color = S.nukes ? 'var(--amber)' : 'var(--dim)';
   el.bombs.style.color = S.bombs ? '' : 'var(--dim)';
@@ -2784,21 +2868,22 @@ function updateHUD() {
   if (Dh.wingR < 0.995) dm.push('R WING ' + pct(Dh.wingR));
   if (Dh.stab < 0.995) dm.push((A.id === 'typhoon' ? 'CANARD ' : 'STAB ') + pct(Dh.stab));
   if (Dh.fin < 0.995) dm.push('FIN ' + pct(Dh.fin));
-  if (Dh.engL < 0.5) dm.push('L ENG OUT');
-  if (Dh.engR < 0.5) dm.push('R ENG OUT');
+  if (Dh.engL < 0.995) dm.push(Dh.engL < 0.01 ? 'L ENG OUT' : 'L ENG ' + pct(Dh.engL));
+  if (Dh.engR < 0.995) dm.push(Dh.engR < 0.01 ? 'R ENG OUT' : 'R ENG ' + pct(Dh.engR));
   if (Dh.legsLost) dm.push('GEAR LEG LOST');
   const dmEl = document.getElementById('cDmg');
   dmEl.hidden = !dm.length;
   setText(dmEl, 'DMG ' + dm.join(' · '));
   el.ab.classList.toggle('on', !!A.thrustAB && S.throttle > AB_AT);
   el.ab.hidden = !A.thrustAB;
-  el.gun.hidden = el.bombs.hidden = !A.weapons;
+  el.gun.hidden = !A.weapons || !A.ammo;
+  el.bombs.hidden = !A.weapons;
   el.nukes.hidden = !A.nukes;
   setText(el.alt, Math.round(ft / 10) * 10 + '');
   setText(el.vs, (fpm >= 0 ? '+' : '−') + String(Math.round(Math.abs(fpm) / 10) * 10).padStart(4, '0'));
   setText(el.aoa, (S.alpha * 180 / Math.PI).toFixed(1) + '°');
   el.aoa.style.color = S.alpha > 0.2 ? 'var(--amber)' : '';
-  const dx = -S.pos.x, dz = -S.pos.z, nm = Math.hypot(dx, dz) / 1852, brg = (Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360;
+  const dx = -S.pos.x, dz = RWY_Z - S.pos.z, nm = Math.hypot(dx, dz) / 1852, brg = (Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360;
   setText(el.rwy, `RWY 36 · ${nm.toFixed(1)} NM · ${String(Math.round(brg) % 360).padStart(3, '0')}°`);
   el.gnd.classList.toggle('on', S.onGround);
   el.brk.classList.toggle('on', S.brake);
@@ -2947,6 +3032,8 @@ function updateVisuals(dt) {
     if (abOn) { const k = 0.55 + (S.throttle - AB_AT) / (1 - AB_AT) * 0.45; ab.scale.set(1, 1, k * (0.9 + Math.random() * 0.2)); }
   }
   emitStumps(dt);
+  S.bayOpen = Math.max(0, (S.bayOpen || 0) - dt);
+  for (const D of parts.bayDoors) D.pivot.rotation.z += (D.sign * (S.bayOpen > 0 ? 1.4 : 0) - D.pivot.rotation.z) * Math.min(1, dt * 3);
   const focus = S.crashed && W.main ? W.main.obj.position : S.pos;
   sun.position.copy(focus).addScaledVector(SUN_DIR, 400);
   sun.target.position.copy(focus);
