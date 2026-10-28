@@ -689,10 +689,10 @@ const AC = {
     id: 'b757', mass: 80000, wing: 185, thrust: 380000, thrustAB: 0,
     CL0: 0.35, CLA: 5.0, stallA: 0.28, cd0: 0.022, k: 0.045, wave: [0.78, 0.95, 0.08],
     gLimit: 2.5, effV: 85, rates: [0.35, 0.15, 0.6], stabRoll: 0, tailStrike: 0.2, gear: 4.4, weapons: false,
-    ammo: 0, nukes: 0, muzzle: [0, 0, 0], stabSign: 1,
-    box: new THREE.Box3(new THREE.Vector3(-19, -3.8, -23.5), new THREE.Vector3(19, 10.5, 24.6)), slideI: 420,
-    hitPts: [[23, 0, 0], [-24, 0, 0], [-4.7, 19, 0.6], [-4.7, -19, 0.6], [-23.5, 0, 10.5], [-21.5, 7.5, 1.4], [-21.5, -7.5, 1.4], [0, 0, -1.9], [4.5, 5.8, -3.6], [4.5, -5.8, -3.6]],
-    chase: [13, 85, 70], eye: [0.55, 19.6], scale: 2.3, shadow: 34, airStart: [125, 0.5], fireball: 1.8, crashBlast: [50, 1600],
+    ammo: 0, nukes: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B757.gltf.json', rig: { ab: [], bombs: [], nuke: null },
+    box: new THREE.Box3(new THREE.Vector3(-19, -3.95, -23.65), new THREE.Vector3(19, 9.2, 23.65)), slideI: 420,
+    hitPts: [[23.65, 0, -0.35], [-23.65, 0, 1.0], [-3.4, 19, 0.55], [-3.4, -19, 0.55], [-21.9, 0, 9.2], [-21.0, 7.6, 1.42], [-21.0, -7.6, 1.42], [0, 0, -1.9], [7.15, 6.5, -3.9], [7.15, -6.5, -3.9]],
+    chase: [13, 85, 70], eye: [0.9, 19.7], scale: 2.3, shadow: 34, airStart: [125, 0.5], fireball: 1.8, crashBlast: [50, 1600],
     sound: { whine: [350, 900, 1.6], roar: [110, 300, 1.25] },
     eyebrow: 'BOEING 757-200 · TWIN-ENGINE AIRLINER',
     desc: 'Fly a Boeing 757 out of a city airport, with downtown towers just north of the runway, a river, suburbs, hills and the sea to the east. It weighs 80 tonnes, has no weapons, turns gently and carries a lot of momentum, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
@@ -716,7 +716,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-const MODELS = { f15: null, typhoon: null }; // Blender-built models, filled in as they load
+const MODELS = { f15: null, typhoon: null, b757: null }; // Blender-built models, filled in as they load
 const AB_MATS = [['#ff8c3a', 0.75], ['#fff1c4', 0.9]].map(([c, o]) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
@@ -814,8 +814,8 @@ function buildFromGltf(model) {
     m4.multiplyMatrices(turn, src.matrixWorld).decompose(m.position, m.quaternion, m.scale);
     m.castShadow = true; m.receiveShadow = true;
     const n = src.name.toLowerCase();
-    if (/wheel|strut/.test(n)) gear.add(m);
-    else if (/stabilator|canard/.test(n)) {
+    if (/wheel|strut|bogie/.test(n)) gear.add(m);
+    else if (/stabilator|stabili[sz]er|canard/.test(n)) {
       // the Blender object origin is already on the pivot; wrap it so rotation.x tilts it about the sim's X axis
       const pivot = new THREE.Group(); pivot.position.copy(m.position); plane.add(pivot);
       m.position.set(0, 0, 0); pivot.add(m);
@@ -861,8 +861,10 @@ function buildTyphoon() {
   parts.gear = gear;
 }
 
-// Boeing 757-200: 47.3 m long, 38 m span, 3.8 m fuselage, two underwing turbofans, tall landing gear
+// Boeing 757-200: 47.3 m long, 38 m span, 3.8 m fuselage, two underwing turbofans, tall landing gear.
+// The Blender model (B757.gltf.json) replaces this simple stand-in once it loads.
 function build757() {
+  if (MODELS.b757) return buildFromGltf(MODELS.b757);
   const white = M('#f1f1ee', 0.45, 0.1), blue = M('#1f4e8c', 0.5, 0.1), eng = M('#c9ccd0', 0.4, 0.4), wingMat = M('#cdd1d6', 0.5, 0.3);
   const dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75), win = M('#28323d', 0.2, 0.5);
   // fuselage barrel, nose and an upswept tail cone
@@ -923,7 +925,7 @@ scene.add(plane);
 // load the Blender-built models published next to this page, then swap each in
 if (THREE.GLTFLoader) {
   const loader = new THREE.GLTFLoader();
-  for (const id of ['f15', 'typhoon']) {
+  for (const id of ['f15', 'typhoon', 'b757']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
         // glTF colours are linear; this renderer treats material colours as already display-ready
