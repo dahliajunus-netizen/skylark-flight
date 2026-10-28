@@ -372,11 +372,15 @@ const CITY0 = { x0: -3400, x1: 3700, z0: -7200, z1: 2800 }; // the city's origin
 const CITY = { x0: CITY0.x0 * MAP_K, x1: CITY0.x1 * MAP_K, z0: mapZ(CITY0.z0), z1: mapZ(CITY0.z1) };
 // tower districts: the old downtown plus new centres across the larger city (r: how far its towers reach)
 const DISTRICTS = [
-  { x: 400 * MAP_K, z: mapZ(-4600), r: 1500, w: 1 },
-  { x: -6200, z: -13500, r: 900, w: 0.72 },
-  { x: 6800, z: -26500, r: 1000, w: 0.78 },
-  { x: -5600, z: -30500, r: 800, w: 0.62 },
-  { x: 6200, z: -8200, r: 750, w: 0.58 }
+  { x: 400 * MAP_K, z: mapZ(-4600), r: 1900, w: 1 },
+  { x: -6200, z: -13500, r: 1100, w: 0.8 },
+  { x: 6800, z: -26500, r: 1200, w: 0.85 },
+  { x: -5600, z: -30500, r: 950, w: 0.7 },
+  { x: 6200, z: -8200, r: 900, w: 0.68 },
+  { x: 2400, z: -17000, r: 1000, w: 0.75 },
+  { x: -8600, z: -23800, r: 850, w: 0.66 },
+  { x: 9600, z: -15200, r: 900, w: 0.7 },
+  { x: -2400, z: -6400, r: 800, w: 0.62 }
 ];
 // the river keeps its width; its course is spread out with the map
 const RIVER = { z: mapZ(-2600), a1: 300 * MAP_K, w1: 1100 * MAP_K, a2: 120 * MAP_K, w2: 430 * MAP_K };
@@ -614,50 +618,99 @@ vWN = normalize(mat3(modelMatrix) * wn);`);
     .replace('#include <color_fragment>', '#include <color_fragment>\n' + colorCode)
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + emissiveCode);
 }
-const inAirport = () => false; // the airport is on its own island now
-const isPark = (ix, iz) => ((ix * 7 + iz * 13) % 23 + 23) % 23 === 0;
+// ---------------- street network ----------------
+// An irregular grid: street lines are BLOCK apart on average, but each one is nudged off the grid, every seventh is
+// a wide avenue, some are narrow lanes, and about a quarter of the street segments are left out so neighbouring
+// blocks merge into bigger, odd-shaped superblocks. The same tables place the buildings and, through a texture,
+// paint the streets, so the two always agree.
+const NET = (() => {
+  const rnd = mulberry(5150);
+  const ix0 = Math.ceil(CITY.x0 / BLOCK), iz0 = Math.ceil(CITY.z0 / BLOCK);
+  const nx = Math.floor(CITY.x1 / BLOCK) - ix0, nz = Math.floor(CITY.z1 / BLOCK) - iz0; // cells across and down
+  const lines = (n, i0) => Array.from({ length: n + 1 }, (_, i) => {
+    const avenue = (i0 + i) % 7 === 0 || i === 0 || i === n, lane = !avenue && rnd() < 0.22;
+    return { at: (i0 + i) * BLOCK + (avenue ? 0 : Math.round((rnd() - 0.5) * 72)), hw: avenue ? 16 : lane ? 8 : 12 };
+  });
+  const X = lines(nx, ix0), Z = lines(nz, iz0);
+  // vx[j * (nx + 1) + i]: x-line i carries a street along cell row j; hz[i * (nz + 1) + j]: z-line j along cell column i
+  const vx = new Uint8Array((nx + 1) * nz), hz = new Uint8Array((nz + 1) * nx), park = new Uint8Array(nx * nz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i <= nx; i++) vx[j * (nx + 1) + i] = X[i].hw === 16 || rnd() > 0.26 ? 1 : 0;
+  for (let i = 0; i < nx; i++) for (let j = 0; j <= nz; j++) hz[i * (nz + 1) + j] = Z[j].hw === 16 || rnd() > 0.26 ? 1 : 0;
+  for (let c = 0; c < nx * nz; c++) park[c] = rnd() < 0.04 ? 1 : 0;
+  const V = (i, j) => j >= 0 && j < nz && i >= 0 && i <= nx && vx[j * (nx + 1) + i] === 1;
+  const H = (j, i) => i >= 0 && i < nx && j >= 0 && j <= nz && hz[i * (nz + 1) + j] === 1;
+  // texture 1, one texel per cell corner: R = street on its west line, G = street on its north line, B = park
+  const W1 = nx + 1, H1 = nz + 1, t1 = new Uint8Array(W1 * H1 * 4);
+  for (let j = 0; j < H1; j++) for (let i = 0; i < W1; i++) {
+    const o = (j * W1 + i) * 4;
+    t1[o] = V(i, j) ? 255 : 0; t1[o + 1] = H(j, i) ? 255 : 0; t1[o + 2] = i < nx && j < nz && park[j * nx + i] ? 255 : 0; t1[o + 3] = 255;
+  }
+  // texture 2, the lines: row 0 the x-lines, row 1 the z-lines; R = offset from the grid + 128, G = half-width
+  const W2 = Math.max(nx, nz) + 1, t2 = new Uint8Array(W2 * 2 * 4);
+  X.forEach((l, i) => { const o = i * 4; t2[o] = l.at - (ix0 + i) * BLOCK + 128; t2[o + 1] = l.hw; t2[o + 3] = 255; });
+  Z.forEach((l, j) => { const o = (W2 + j) * 4; t2[o] = l.at - (iz0 + j) * BLOCK + 128; t2[o + 1] = l.hw; t2[o + 3] = 255; });
+  const tex = (data, w, h) => { const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t; };
+  return { ix0, iz0, nx, nz, X, Z, V, H, isPark: (i, j) => park[j * nx + i] === 1, tex1: tex(t1, W1, H1), tex2: tex(t2, W2, 2), W1, H1, W2 };
+})();
 
-// streets, sidewalks, lots and parks, painted onto one flat plane
+// streets, sidewalks, lots and parks, painted onto one flat plane from the network textures
 (function buildStreets() {
-  const w = CITY.x1 - CITY.x0, d = CITY.z1 - CITY.z0;
+  const w = CITY.x1 - CITY.x0, d = CITY.z1 - CITY.z0, f = v => v.toFixed(1);
   const geo = new THREE.PlaneGeometry(w, d, 1, 1);
   geo.rotateX(-Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95 });
-  mat.onBeforeCompile = s => worldPosShader(s, '', `{
+  mat.onBeforeCompile = s => {
+    s.uniforms.uNet = { value: NET.tex1 };
+    s.uniforms.uLines = { value: NET.tex2 };
+    worldPosShader(s, `uniform sampler2D uNet; uniform sampler2D uLines;
+vec4 netAt(float i, float j) { return texture2D(uNet, vec2((i + 0.5) / ${f(NET.W1)}, (j + 0.5) / ${f(NET.H1)})); }
+vec4 xLine(float i) { return texture2D(uLines, vec2((i + 0.5) / ${f(NET.W2)}, 0.25)); }
+vec4 zLine(float j) { return texture2D(uLines, vec2((j + 0.5) / ${f(NET.W2)}, 0.75)); }
+float xAt(float i) { return (i + ${f(NET.ix0)}) * ${f(BLOCK)} + floor(xLine(i).r * 255.0 + 0.5) - 128.0; }
+float zAt(float j) { return (j + ${f(NET.iz0)}) * ${f(BLOCK)} + floor(zLine(j).r * 255.0 + 0.5) - 128.0; }`, `{
   vec2 p = vWPos.xz;
-  float bx = mod(p.x, ${BLOCK}.0), bz = mod(p.y, ${BLOCK}.0);
-  float roadX = 1.0 - step(${ROAD}.0, bx) * step(bx, ${BLOCK - ROAD}.0);
-  float roadZ = 1.0 - step(${ROAD}.0, bz) * step(bz, ${BLOCK - ROAD}.0);
-  float road = max(roadX, roadZ);
   float rz = ${RIVER.z.toFixed(1)} + ${RIVER.a1.toFixed(1)} * sin(p.x / ${RIVER.w1.toFixed(1)}) + ${RIVER.a2.toFixed(1)} * sin(p.x / ${RIVER.w2.toFixed(1)} + 1.3);
-  if (abs(p.y - rz) < 80.0 && road < 0.5) discard; // river; streets carry on as bridges
-  vec2 blk = floor(p / ${BLOCK}.0);
-  float park = step(mod(blk.x * 7.0 + blk.y * 13.0, 23.0), 0.5);
-  float h = fract(sin(dot(blk, vec2(12.9898, 78.233))) * 43758.5453);
+  if (abs(p.y - rz) < 82.0) discard; // the river; the streets cross it on bridges
+  // which cell of the nudged grid this is
+  float i = clamp(floor(p.x / ${f(BLOCK)}) - ${f(NET.ix0)}, 0.0, ${f(NET.nx - 1)});
+  if (p.x < xAt(i) && i > 0.0) i -= 1.0; else if (p.x >= xAt(i + 1.0) && i < ${f(NET.nx - 1)}) i += 1.0;
+  float j = clamp(floor(p.y / ${f(BLOCK)}) - ${f(NET.iz0)}, 0.0, ${f(NET.nz - 1)});
+  if (p.y < zAt(j) && j > 0.0) j -= 1.0; else if (p.y >= zAt(j + 1.0) && j < ${f(NET.nz - 1)}) j += 1.0;
+  vec4 c0 = netAt(i, j), cE = netAt(i + 1.0, j), cS = netAt(i, j + 1.0);
+  float sW = step(0.5, c0.r), sE = step(0.5, cE.r), sN = step(0.5, c0.g), sS = step(0.5, cS.g);
+  float hW = floor(xLine(i).g * 255.0 + 0.5), hE = floor(xLine(i + 1.0).g * 255.0 + 0.5);
+  float hN = floor(zLine(j).g * 255.0 + 0.5), hS = floor(zLine(j + 1.0).g * 255.0 + 0.5);
+  float dW = p.x - xAt(i), dE = xAt(i + 1.0) - p.x, dN = p.y - zAt(j), dS = zAt(j + 1.0) - p.y;
+  float rX = max(sW * step(dW, hW), sE * step(dE, hE)); // in a north-south street
+  float rZ = max(sN * step(dN, hN), sS * step(dS, hS)); // in an east-west street
+  float road = max(rX, rZ);
+  float walk = max(max(sW * step(dW, hW + 3.0), sE * step(dE, hE + 3.0)), max(sN * step(dN, hN + 3.0), sS * step(dS, hS + 3.0)));
+  float park = step(0.5, c0.b);
+  float h = fract(sin(dot(vec2(i, j), vec2(12.9898, 78.233))) * 43758.5453);
   vec3 c = mix(vec3(0.52, 0.5, 0.47), vec3(0.64, 0.61, 0.56), h);
   c = mix(c, vec3(0.33, 0.48, 0.25), park);
-  float walk = 1.0 - step(${ROAD + 3}.0, bx) * step(bx, ${BLOCK - ROAD - 3}.0) * step(${ROAD + 3}.0, bz) * step(bz, ${BLOCK - ROAD - 3}.0);
   c = mix(c, vec3(0.66, 0.65, 0.62), walk * (1.0 - park));
   c = mix(c, vec3(0.2, 0.21, 0.23), road);
   float fade = 1.0 - smoothstep(500.0, 2500.0, distance(vWPos, cameraPosition));
-  float dcx = min(bx, ${BLOCK}.0 - bx), dcz = min(bz, ${BLOCK}.0 - bz);
-  float dash = roadX * (1.0 - roadZ) * step(dcx, 0.3) * step(fract(p.y / 12.0), 0.5)
-             + roadZ * (1.0 - roadX) * step(dcz, 0.3) * step(fract(p.x / 12.0), 0.5);
-  c = mix(c, vec3(0.86, 0.73, 0.32), dash * fade);
+  float dash = max(sW * step(dW, 0.3), sE * step(dE, 0.3)) * (1.0 - rZ) * step(fract(p.y / 12.0), 0.5)
+             + max(sN * step(dN, 0.3), sS * step(dS, 0.3)) * (1.0 - rX) * step(fract(p.x / 12.0), 0.5);
+  c = mix(c, vec3(0.86, 0.73, 0.32), min(dash, 1.0) * fade);
   diffuseColor.rgb = c;
 }`, '');
+  };
   const m = new THREE.Mesh(geo, mat);
   m.position.set((CITY.x0 + CITY.x1) / 2, CITY_H + 0.06, (CITY.z0 + CITY.z1) / 2);
   m.receiveShadow = true;
   scene.add(m);
 })();
 
-// buildings: axis-aligned boxes, kept in a per-block table for collisions
+// buildings: axis-aligned boxes, kept in a coarse grid table (BLOCK squares) for collisions
 const BLD = [];               // x0, z0, x1, z1, top  (5 numbers per building)
 const bCol = [];              // original colour per building
 let cityMesh = null;
-const blockMap = new Map();   // block key -> building indices
+const blockMap = new Map();   // grid square key -> building indices (a building is listed in every square it covers)
 const blockKey = (ix, iz) => ix * 100000 + iz;
+// stacked tower tiers overlap; the first listed wins, so taller (narrower) tiers are listed before the ones below them
 function buildingAt(x, z) {
   const list = blockMap.get(blockKey(Math.floor(x / BLOCK), Math.floor(z / BLOCK)));
   if (!list) return -1;
@@ -672,68 +725,158 @@ function wallNormal(i, p, out) {
   const m = d.indexOf(Math.min(...d));
   return out.set([-1, 1, 0, 0, 0][m], m === 4 ? 1 : 0, [0, 0, -1, 1, 0][m]);
 }
+// supertall towers (heights in metres; 820 m is ~2,690 ft), set back in tiers, in the main downtown and two districts
+const SUPERTALLS = [
+  { x: DISTRICTS[0].x, z: DISTRICTS[0].z, h: 820 }, { x: DISTRICTS[0].x + 430, z: DISTRICTS[0].z - 280, h: 725 },
+  { x: DISTRICTS[0].x - 390, z: DISTRICTS[0].z + 310, h: 634 }, { x: DISTRICTS[0].x + 160, z: DISTRICTS[0].z + 620, h: 545 },
+  { x: DISTRICTS[2].x, z: DISTRICTS[2].z, h: 591 }, { x: DISTRICTS[1].x, z: DISTRICTS[1].z, h: 552 }
+];
+const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn, not collidable)
 (function buildCity() {
   const rnd = mulberry(4242);
   const PAL = {
-    tower: ['#5f7386', '#73879a', '#9aa6b0', '#4f5d6a', '#b4b8b6'],
-    mid: ['#b9b2a6', '#a39b8f', '#8c5a45', '#a87a5c', '#c4bcae', '#7f8a90'],
-    house: ['#d8cfc0', '#c9b79c', '#e4ddd0', '#b9a68c']
+    super: ['#6d8193', '#7b90a2', '#5c6f80'],
+    tower: ['#5f7386', '#73879a', '#9aa6b0', '#4f5d6a', '#b4b8b6', '#87969f', '#3f4b56'],
+    mid: ['#b9b2a6', '#a39b8f', '#8c5a45', '#a87a5c', '#c4bcae', '#7f8a90', '#9c9184', '#6f7a80'],
+    house: ['#d8cfc0', '#c9b79c', '#e4ddd0', '#b9a68c'],
+    bridge: ['#8e8c87']
   };
   const boxes = [];
   const put = (x0, z0, x1, z1, h, pal) => {
+    if (x1 - x0 < 2 || z1 - z0 < 2 || h < 0.3) return -1;
     const i = BLD.length / 5;
     BLD.push(x0, z0, x1, z1, CITY_H + h);
     boxes.push([x0, z0, x1, z1, h, pal[Math.floor(rnd() * pal.length)]]);
+    for (let bx = Math.floor(x0 / BLOCK); bx <= Math.floor(x1 / BLOCK); bx++) for (let bz = Math.floor(z0 / BLOCK); bz <= Math.floor(z1 / BLOCK); bz++) {
+      const key = blockKey(bx, bz);
+      let list = blockMap.get(key);
+      if (!list) blockMap.set(key, list = []);
+      list.push(i);
+    }
     return i;
   };
-  for (let ix = Math.ceil(CITY.x0 / BLOCK); ix < Math.floor(CITY.x1 / BLOCK); ix++) {
-    for (let iz = Math.ceil(CITY.z0 / BLOCK); iz < Math.floor(CITY.z1 / BLOCK); iz++) {
-      const x0 = ix * BLOCK + ROAD + 4, z0 = iz * BLOCK + ROAD + 4, size = BLOCK - 2 * ROAD - 8;
-      const cx = x0 + size / 2, cz = z0 + size / 2;
-      if (isPark(ix, iz) || inAirport(cx, cz, 120)) continue;
-      if ([[x0, z0], [x0 + size, z0], [x0, z0 + size], [x0 + size, z0 + size]].some(([x, z]) => Math.abs(z - riverZ(x)) < 100)) continue;
-      // how much this block belongs to a tower district, and how far it is from the nearest one (in district radii)
+  // split [a, b] into n parts at uneven points
+  const cuts = (a, b, n) => { const w = [], out = [a]; let t = 0; for (let k = 0; k < n; k++) { const v = 0.6 + rnd() * 0.8; w.push(v); t += v; } let x = a; for (let k = 0; k < n; k++) { x += (b - a) * w[k] / t; out.push(x); } return out; };
+  // a tower: optionally set back once, tallest tier first
+  const tower = (x0, z0, x1, z1, h, pal) => {
+    const w = x1 - x0, d = z1 - z0;
+    if (rnd() < 0.45 && w > 24 && d > 24) {
+      const s = 0.55 + rnd() * 0.2, cx = x0 + w * (0.3 + rnd() * 0.4), cz = z0 + d * (0.3 + rnd() * 0.4);
+      put(Math.max(x0, cx - w * s / 2), Math.max(z0, cz - d * s / 2), Math.min(x1, cx + w * s / 2), Math.min(z1, cz + d * s / 2), h, pal);
+      put(x0, z0, x1, z1, h * (0.35 + rnd() * 0.35), pal);
+    } else put(x0, z0, x1, z1, h, pal);
+  };
+  const supertall = (x0, z0, x1, z1, H) => {
+    const side = Math.min(x1 - x0, z1 - z0) * 0.92, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const tiers = [[0.07, 1], [0.28, 0.93], [0.42, 0.82], [0.56, 0.66], [0.72, 0.42]]; // footprint fraction, height fraction
+    for (const [fs, fh] of tiers) put(cx - side * fs / 2, cz - side * fs / 2, cx + side * fs / 2, cz + side * fs / 2, H * fh, PAL.super);
+    put(x0, z0, x1, z1, 30 + rnd() * 25, PAL.tower); // podium
+  };
+  // cells holding a supertall
+  const superAt = new Map();
+  for (const T of SUPERTALLS) {
+    let i = 0, j = 0;
+    while (i < NET.nx - 1 && NET.X[i + 1].at <= T.x) i++;
+    while (j < NET.nz - 1 && NET.Z[j + 1].at <= T.z) j++;
+    superAt.set(i * 10000 + j, T.h);
+  }
+  const nearRiver = (x0, z0, x1, z1) => [x0, (x0 + x1) / 2, x1].some(x => { const r = riverZ(x); return r > z0 - 108 && r < z1 + 108; });
+  for (let i = 0; i < NET.nx; i++) {
+    for (let j = 0; j < NET.nz; j++) {
+      // the lot: the cell inside its streets; where a street is missing the lot runs on into the next one
+      const xa = NET.X[i].at, xb = NET.X[i + 1].at, za = NET.Z[j].at, zb = NET.Z[j + 1].at;
+      const x0 = xa + (NET.V(i, j) ? NET.X[i].hw + 4 : 2), x1 = xb - (NET.V(i + 1, j) ? NET.X[i + 1].hw + 4 : 2);
+      const z0 = za + (NET.H(j, i) ? NET.Z[j].hw + 4 : 2), z1 = zb - (NET.H(j + 1, i) ? NET.Z[j + 1].hw + 4 : 2);
+      const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      if (w < 12 || d < 12 || NET.isPark(i, j) || nearRiver(x0, z0, x1, z1)) continue;
+      const st = superAt.get(i * 10000 + j);
+      if (st) { supertall(x0, z0, x1, z1, st); continue; }
+      // how much this lot belongs to a tower district, and how far it is from the nearest one (in district radii)
       let tall = 0, near = Infinity;
       for (const D of DISTRICTS) {
-        const d = Math.hypot(cx - D.x, (cz - D.z) * 0.9) / D.r;
-        tall = Math.max(tall, D.w * Math.exp(-d * d)); near = Math.min(near, d);
+        const dd = Math.hypot(cx - D.x, (cz - D.z) * 0.9) / D.r;
+        tall = Math.max(tall, D.w * Math.exp(-dd * dd)); near = Math.min(near, dd);
       }
-      const cap = 1e9;
-      const first = BLD.length / 5;
-      if (tall > 0.3) {
-        // downtown: one or two towers per block
-        const n = rnd() < 0.55 ? 2 : 1;
-        for (let t = 0; t < n; t++) {
-          const w = n === 2 ? 30 + rnd() * 18 : 42 + rnd() * 45, dp = n === 2 ? 30 + rnd() * 18 : 42 + rnd() * 45;
-          const ox = n === 2 ? (t ? size - w - 4 : 4) : (size - w) * rnd(), oz = n === 2 ? (t ? size - dp - 4 : 4) : (size - dp) * rnd();
-          const h = Math.min(cap, 45 + 290 * tall * Math.pow(rnd(), 0.8));
-          put(x0 + ox, z0 + oz, x0 + ox + w, z0 + oz + dp, h, PAL.tower);
+      if (tall > 0.2) {
+        // towers: one to three per lot, split unevenly along the long side, some set back, some on a podium
+        const n = Math.max(w, d) < 80 ? 1 : rnd() < 0.35 ? 1 : rnd() < 0.6 ? 2 : 3;
+        const along = w > d, cs = along ? cuts(x0, x1, n) : cuts(z0, z1, n);
+        const first = boxes.length;
+        for (let k = 0; k < n; k++) {
+          const a = cs[k] + 2, b = cs[k + 1] - 2, f = 0.6 + rnd() * 0.35;
+          const span = (along ? d : w) * f, off = ((along ? d : w) - span) * rnd();
+          const h = 50 + 450 * tall * Math.pow(rnd(), 0.85);
+          if (along) tower(a, z0 + off, b, z0 + off + span, h, PAL.tower); else tower(x0 + off, a, x0 + off + span, b, h, PAL.tower);
         }
-      } else if (near < 2.85) {
-        // mid-rise: four lots per block
-        const lot = size / 2;
-        for (let q = 0; q < 4; q++) {
-          if (rnd() < 0.12) continue;
-          const fx = 0.65 + rnd() * 0.3, fz = 0.65 + rnd() * 0.3;
-          const lx = x0 + (q & 1) * lot, lz = z0 + (q >> 1) * lot;
-          const h = Math.min(cap, 9 + rnd() * 14 + 80 * tall * rnd());
-          put(lx + (1 - fx) * lot / 2, lz + (1 - fz) * lot / 2, lx + (1 + fx) * lot / 2, lz + (1 + fz) * lot / 2, h, PAL.mid);
+        if (first === boxes.length) put(x0, z0, x1, z1, 40 + 200 * tall, PAL.tower);
+        else if (n > 1 && rnd() < 0.3) put(x0, z0, x1, z1, 10 + rnd() * 16, PAL.mid); // a podium joining them, listed after the towers
+      } else if (near < 3.4) {
+        // dense mid-rise: the lot cut into uneven parcels; now and then one big low block or an open plaza
+        const r = rnd();
+        if (r < 0.06) continue;
+        if (r < 0.14) { put(x0 + 3, z0 + 3, x1 - 3, z1 - 3, 9 + rnd() * 14, PAL.mid); continue; }
+        const kx = w > 110 ? 3 : 2, kz = d > 110 ? 3 : 2, xs = cuts(x0, x1, kx), zs = cuts(z0, z1, kz);
+        for (let a = 0; a < kx; a++) for (let b = 0; b < kz; b++) {
+          if (rnd() < 0.08) continue;
+          const pw = xs[a + 1] - xs[a], pd = zs[b + 1] - zs[b], fx = 0.72 + rnd() * 0.25, fz = 0.72 + rnd() * 0.25;
+          const ox = xs[a] + (pw - pw * fx) * rnd(), oz = zs[b] + (pd - pd * fz) * rnd();
+          const h = 12 + rnd() * 28 + 160 * tall * Math.pow(rnd(), 1.6) + (rnd() < 0.07 ? 40 + rnd() * 60 : 0);
+          put(ox, oz, ox + pw * fx, oz + pd * fz, h, PAL.mid);
+        }
+      } else if (near < 6) {
+        // apartment blocks
+        const xs = cuts(x0, x1, 2), zs = cuts(z0, z1, 2);
+        for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
+          if (rnd() < 0.15) continue;
+          const pw = xs[a + 1] - xs[a], pd = zs[b + 1] - zs[b], fx = 0.6 + rnd() * 0.3, fz = 0.6 + rnd() * 0.3;
+          const ox = xs[a] + (pw - pw * fx) * rnd(), oz = zs[b] + (pd - pd * fz) * rnd();
+          put(ox, oz, ox + pw * fx, oz + pd * fz, 8 + rnd() * 14, rnd() < 0.5 ? PAL.mid : PAL.house);
         }
       } else {
         // suburbs: small houses; far out they thin out, with fields between the streets
-        const far = near > 7;
+        const far = near > 9;
         if (far && rnd() < 0.3) continue;
-        const per = isTouch || far ? 2 : 3, lot = size / per;
+        const per = isTouch || far ? 2 : 3, lw = w / per, ld = d / per;
         for (let q = 0; q < per * per; q++) {
           if (rnd() < 0.25) continue;
-          const lx = x0 + (q % per) * lot + lot / 2, lz = z0 + Math.floor(q / per) * lot + lot / 2;
-          const hw = 6 + rnd() * 4, hd = 5 + rnd() * 3;
+          const lx = x0 + (q % per) * lw + lw / 2 + (rnd() - 0.5) * lw * 0.3, lz = z0 + Math.floor(q / per) * ld + ld / 2 + (rnd() - 0.5) * ld * 0.3;
+          const hw = Math.min(lw * 0.4, 6 + rnd() * 4), hd = Math.min(ld * 0.4, 5 + rnd() * 3);
           put(lx - hw, lz - hd, lx + hw, lz + hd, 5 + rnd() * 4, PAL.house);
         }
       }
-      const ids = [];
-      for (let i = first; i < BLD.length / 5; i++) ids.push(i);
-      if (ids.length) blockMap.set(blockKey(ix, iz), ids);
+    }
+  }
+  // bridges: a deck with railings wherever a street crosses the river, on piers standing in the water
+  const deck = (x0, z0, x1, z1, alongZ) => {
+    if (alongZ) { put(x0, z0, x0 + 0.5, z1, 1.7, PAL.bridge); put(x1 - 0.5, z0, x1, z1, 1.7, PAL.bridge); }
+    else { put(x0, z0, x1, z0 + 0.5, 1.7, PAL.bridge); put(x0, z1 - 0.5, x1, z1, 1.7, PAL.bridge); }
+    put(x0, z0, x1, z1, 0.6, PAL.bridge); // the deck, after its railings so they count where they stand
+  };
+  for (let i = 0; i <= NET.nx; i++) { // north-south streets crossing the river
+    const L = NET.X[i], rz = riverZ(L.at);
+    if (rz < CITY.z0 || rz > CITY.z1) continue;
+    let j = 0;
+    while (j < NET.nz - 1 && NET.Z[j + 1].at <= rz) j++;
+    if (!NET.V(i, j)) continue;
+    deck(L.at - L.hw - 2, rz - 122, L.at + L.hw + 2, rz + 122, true);
+    for (let k = -2; k <= 2; k++) bridgePiers.push([L.at, rz + k * 42, L.hw * 1.3, 3]);
+  }
+  for (let j = 0; j <= NET.nz; j++) { // east-west streets the meandering river cuts across
+    const L = NET.Z[j];
+    let start = null;
+    for (let x = CITY.x0; x <= CITY.x1 + 6; x += 6) {
+      const wet = x <= CITY.x1 && Math.abs(L.at - riverZ(x)) < 104;
+      if (wet && start === null) start = x;
+      if (!wet && start !== null) {
+        const x0 = start - 14, x1 = x + 8;
+        let i = 0;
+        while (i < NET.nx - 1 && NET.X[i + 1].at <= (x0 + x1) / 2) i++;
+        if (x1 - x0 < 720 && NET.H(j, i)) {
+          deck(x0, L.at - L.hw - 2, x1, L.at + L.hw + 2, false);
+          for (let px = x0 + 20; px < x1 - 10; px += 42) bridgePiers.push([px, L.at, 3, L.hw * 1.3]);
+        }
+        start = null;
+      }
     }
   }
   const geo = new THREE.BoxGeometry(1, 1, 1);
@@ -763,6 +906,11 @@ function wallNormal(i, p, out) {
   mesh.receiveShadow = true;
   scene.add(mesh);
   cityMesh = mesh;
+  // bridge piers: plain concrete columns from the river bed up to the deck
+  const piers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#7d7b76', roughness: 0.9 }), Math.max(1, bridgePiers.length));
+  bridgePiers.forEach(([x, z, w, d], i) => { p.set(x, (CITY_H - 8) / 2, z); s.set(w, CITY_H + 8, d); piers.setMatrixAt(i, m.compose(p, q, s)); });
+  piers.count = bridgePiers.length;
+  scene.add(piers);
 })();
 
 // ---------------- aircraft ----------------
@@ -2372,10 +2520,13 @@ function updateCity(dt) {
 // blast: damage every building within R (by distance to its nearest surface), and the jet if it's too close
 function blast(p, R, power) {
   const ix0 = Math.floor((p.x - R) / BLOCK), ix1 = Math.floor((p.x + R) / BLOCK), iz0 = Math.floor((p.z - R) / BLOCK), iz1 = Math.floor((p.z + R) / BLOCK);
+  const seen = new Set(); // a building spanning several grid squares is listed in each of them
   for (let ix = ix0; ix <= ix1; ix++) for (let iz = iz0; iz <= iz1; iz++) {
     const list = blockMap.get(blockKey(ix, iz));
     if (!list) continue;
     for (const i of list) {
+      if (seen.has(i)) continue;
+      seen.add(i);
       const k = i * 5;
       const d = Math.hypot(clamp(p.x, BLD[k], BLD[k + 2]) - p.x, clamp(p.y, CITY_H, BLD[k + 4]) - p.y, clamp(p.z, BLD[k + 1], BLD[k + 3]) - p.z);
       if (d < R * 0.5) damageAt(i, p, R * 0.5, power / 45); // blows out the cells within reach
