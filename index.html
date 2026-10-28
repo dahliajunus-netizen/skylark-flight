@@ -79,7 +79,14 @@ h2 { margin: 0; font-size: 30px; text-wrap: balance; }
 .specs { display: flex; gap: 6px; flex-wrap: wrap; }
 .specs span { font-family: var(--font-num); font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--fg); }
 .pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
-.lopick { grid-template-columns: repeat(2, 1fr); }
+.lopick, .ctlpick { grid-template-columns: repeat(2, 1fr); }
+/* mouse aim: the circle is where you point, the cross is where the nose is */
+.ret.aim { width: 18px; height: 18px; margin: -9px 0 0 -9px; border-color: #fff; opacity: .85; }
+.ret.aim::after { background: #fff; }
+.ret.nose { width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 0; border-radius: 0; }
+.ret.nose::before, .ret.nose::after { content: ""; position: absolute; background: var(--cyan); border-radius: 1px; }
+.ret.nose::before { left: 0; top: 7px; width: 16px; height: 2px; }
+.ret.nose::after { left: 7px; top: 0; width: 2px; height: 16px; margin: 0; }
 .pickb { font: 700 13px var(--font-ui); padding: 10px 8px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--dim); cursor: pointer; }
 .pickb:hover { color: var(--fg); }
 .pickb[aria-pressed="true"] { background: rgba(79,216,234,.14); border-color: rgba(79,216,234,.5); color: var(--cyan); }
@@ -164,6 +171,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 
 <div id="flash"></div>
 <div id="gunRet" class="ret" hidden></div>
+<div id="aimRet" class="ret aim" hidden></div>
+<div id="noseRet" class="ret nose" hidden></div>
 <div id="ccipN" class="ret ccip nuke" hidden><span>B61</span></div>
 <div id="ccip" class="ret ccip" hidden><span>BOMB</span></div>
 <div id="warn" hidden></div>
@@ -194,11 +203,13 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <div class="specs" id="acSpecs"></div>
     <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
+    <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <div class="actions">
       <button class="btn primary" id="goRunway">Take off from runway</button>
       <button class="btn" id="goAir">Start airborne</button>
     </div>
     <dl class="keys key-only" id="keyList">
+      <dt>Mouse aim</dt><dd>Pick it below: move the mouse and the nose follows the circle; left click fires the gun. W/S/A/D still override</dd>
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
       <dt>A / D, ← / →</dt><dd>Roll; steers on the ground</dd>
       <dt>Q / E</dt><dd>Rudder</dd>
@@ -249,7 +260,9 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h2>Paused</h2>
     <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
+    <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <dl class="keys key-only">
+      <dt>Mouse aim</dt><dd>Pick it below: move the mouse and the nose follows the circle; left click fires the gun. W/S/A/D still override</dd>
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
       <dt>A / D, ← / →</dt><dd>Roll; steers on the ground</dd>
       <dt>Q / E</dt><dd>Rudder</dd>
@@ -2531,6 +2544,11 @@ const S = {
 const inp = { pitch: 0, roll: 0, yaw: 0 };
 const touchIn = { x: 0, y: 0, active: false, brake: false, gun: false };
 let running = false, paused = false, camMode = 'chase', lastMode = 'runway', invertPitch = false, muted = false, camSnap = true;
+// flight controls: 'keys' (WASD / arrows) or 'mouse' (the nose chases a point you steer with the mouse); remembered per browser
+let controlMode = 'keys';
+try { if (localStorage.getItem('skylark.controls') === 'mouse' && !isTouch) controlMode = 'mouse'; } catch (e) {}
+const aim = { dir: new THREE.Vector3(0, 0, -1), fire: false };
+const mouseAim = () => controlMode === 'mouse' && !isTouch;
 
 // per-aircraft numbers live in AC (see the aircraft section); these are shared
 const RHO = 1.225, AB_AT = 0.85, G = 9.81, STEP = 1 / 120;
@@ -2593,6 +2611,7 @@ function reset(mode) {
 
 function crash(msg) {
   if (S.crashed) return;
+  lockPointer.releasing = true; unlockPointer(); aim.fire = false;
   const building = S.hitBuilding >= 0;
   const n = building ? wallNormal(S.hitBuilding, S.hitPoint, new THREE.Vector3()) : new THREE.Vector3(0, 1, 0);
   const V = S.vel.length(), vn = Math.max(0, -S.vel.dot(n));
@@ -2756,7 +2775,8 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (k === 'c') toggleCam();
   else if (k === 'm') toggleMute();
-  else if (k === 'p' || k === 'escape') togglePause();
+  else if (k === 'p') togglePause();
+  else if (k === 'escape') togglePause(mouseAim() ? true : undefined); // in mouse aim Esc also frees the mouse, so it only pauses
   else if (k === 'h') togglePause(true);
   else if (k === 'i') { invertPitch = !invertPitch; toast(invertPitch ? 'Pitch inverted: W pulls the nose up' : 'Pitch normal: S pulls the nose up'); }
   else if (k === 'g') toggleGear();
@@ -2773,8 +2793,27 @@ function updateInputs(dt) {
   let tp = (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0);
   if (invertPitch) tp = -tp;
   let tr = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
-  const ty = (keys.e ? 1 : 0) - (keys.q ? 1 : 0);
+  let ty = (keys.e ? 1 : 0) - (keys.q ? 1 : 0);
   if (touchIn.active) { tp = touchIn.y; tr = touchIn.x; }
+  if (mouseAim() && !S.crashed) {
+    // fly the nose onto the aim point: bank toward it, pull it up into the nose, a touch of rudder;
+    // any stick key held overrides that axis
+    axes(S.quat);
+    const f = aim.dir.dot(F), r = aim.dir.dot(R), u = aim.dir.dot(U);
+    const side = Math.atan2(r, f), up = Math.atan2(u, Math.hypot(f, r));
+    const roll = Math.atan2(-R.y, U.y), maxBank = A.gLimit > 4 ? 1.35 : 0.55;
+    let mp = up * 7 - S.ang.x * 1.0, mr, my = clamp(side * 2.5, -1, 1);
+    if (S.onGround) { mr = clamp(side * 4, -1, 1); mp = Math.max(mp, -0.2); } // nose-wheel steering; don't shove the nose down
+    else {
+      const bank = clamp(side * 5, -maxBank, maxBank); // the further off to the side, the steeper the bank
+      mr = (bank - roll) * 2.5 - S.ang.z * 0.5;
+      mp *= clamp(Math.cos(roll) * 1.4, 0.15, 1); // don't pull hard until the wings are over
+      if (Math.sign(roll) === Math.sign(side)) mp += Math.abs(side) * Math.abs(Math.sin(roll)) * 6; // banked toward it: pull round
+    }
+    if (!(keys.w || keys.s || keys.arrowup || keys.arrowdown)) tp = clamp(mp, -1, 1);
+    if (!(keys.a || keys.d || keys.arrowleft || keys.arrowright)) tr = clamp(mr, -1, 1);
+    if (!(keys.q || keys.e)) ty = my * 0.6;
+  }
   const ramp = (cur, tgt, rate) => cur + clamp(tgt - cur, -rate * dt, rate * dt);
   inp.pitch = ramp(inp.pitch, tp, 3.5);
   inp.roll = ramp(inp.roll, tr, 4.5);
@@ -2783,7 +2822,7 @@ function updateInputs(dt) {
   if (keys.f) S.throttle = Math.max(0, S.throttle - 0.5 * dt);
   if (keys.r || keys.f) setThrottleUI();
   S.brake = !!(keys.b || touchIn.brake);
-  S.firing = !!(keys[' '] || touchIn.gun);
+  S.firing = !!(keys[' '] || touchIn.gun || (mouseAim() && aim.fire));
 }
 
 // free look: hold the right mouse button and drag; let go and the camera eases back to the chase view
@@ -2797,22 +2836,58 @@ function seedOrbit(focus, lo, hi) {
   look.yaw = Math.atan2(tA.x, tA.z);
   look.pitch = Math.asin(clamp(tA.y / l, -1, 1));
 }
+const locked = () => document.pointerLockElement === canvas;
+function lockPointer() { if (!locked() && canvas.requestPointerLock) try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (err) {} }
+function unlockPointer() { if (locked()) document.exitPointerLock(); }
+// mouse aim: start the aim point on the nose and take the mouse
+function takeMouse() {
+  if (!mouseAim() || !running || paused || S.crashed) return;
+  axes(S.quat); aim.dir.copy(F);
+  lockPointer();
+}
+document.addEventListener('pointerlockchange', () => {
+  // Esc (or anything else) took the mouse away mid-flight: hold, like the pause key
+  if (!locked() && mouseAim() && running && !paused && !S.crashed && !lockPointer.releasing) togglePause(true);
+  lockPointer.releasing = false;
+});
+document.addEventListener('mousemove', e => {
+  if (!locked() || !mouseAim() || look.active || !running || paused || S.crashed) return;
+  // turn the aim point: left/right about the vertical, up/down about the camera's right
+  const k = 0.0022, dy = (invertPitch ? -1 : 1) * e.movementY;
+  aim.dir.applyAxisAngle(worldUp, -e.movementX * k);
+  tA.crossVectors(aim.dir, worldUp).normalize();
+  const el = Math.asin(clamp(aim.dir.y, -1, 1)) - dy * k;
+  if (Math.abs(el) < 1.45) aim.dir.applyAxisAngle(tA, -dy * k);
+  aim.dir.normalize();
+});
+canvas.addEventListener('mousedown', e => {
+  if (e.button !== 0 || !mouseAim() || !running) return;
+  if (!locked()) { takeMouse(); return; } // the first click takes the mouse
+  aim.fire = true;
+});
+addEventListener('mouseup', e => { if (e.button === 0) aim.fire = false; });
 canvas.addEventListener('pointerdown', e => {
   if (e.button !== 2 || !running || (S.crashed && !bombCam.mode)) return;
   look.active = true; look.id = e.pointerId; look.x = e.clientX; look.y = e.clientY;
   try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  lockPointer(); // the cursor stays put while you drag the view around
   if (bombCam.mode) bombCam.free = ''; // updateCamera sets up the orbit around the bomb or blast
   else if (camMode === 'chase') seedOrbit(S.pos, 12, 300);
 });
 canvas.addEventListener('pointermove', e => {
-  if (!look.active || e.pointerId !== look.id) return;
-  const dx = e.clientX - look.x, dy = e.clientY - look.y;
+  if (!look.active || (e.pointerId !== look.id && !locked())) return;
+  // with the pointer locked the cursor doesn't move, so read the raw movement
+  const dx = locked() ? e.movementX : e.clientX - look.x, dy = locked() ? e.movementY : e.clientY - look.y;
   look.x = e.clientX; look.y = e.clientY;
   look.yaw -= dx * 0.006;
   if (camMode === 'chase' || bombCam.mode) look.pitch = clamp(look.pitch + dy * 0.006, -1.3, 1.45);
   else { look.pitch = clamp(look.pitch - dy * 0.006, -1.2, 1.4); look.yaw = clamp(look.yaw, -2.7, 2.7); }
 });
-const endLook = e => { if (e.button === 2 || e.type !== 'pointerup') look.active = false; };
+const endLook = e => {
+  if (!(e.button === 2 || e.type !== 'pointerup')) return;
+  look.active = false;
+  if (!mouseAim() || !running || paused || S.crashed) { lockPointer.releasing = true; unlockPointer(); } // mouse aim keeps the mouse
+};
 canvas.addEventListener('pointerup', endLook);
 canvas.addEventListener('pointercancel', endLook);
 addEventListener('blur', () => { look.active = false; });
@@ -2882,6 +2957,7 @@ function start(mode) {
   $('#menu').hidden = true; $('#crash').hidden = true; $('#pause').hidden = true;
   hud.hidden = false; tools.hidden = false; touchUI.hidden = !isTouch;
   canvas.focus?.();
+  takeMouse();
 }
 $('#goRunway').onclick = $('#reRunway').onclick = $('#pRunway').onclick = () => start('runway');
 $('#goAir').onclick = $('#reAir').onclick = $('#pAir').onclick = () => start('air');
@@ -2931,6 +3007,16 @@ document.querySelectorAll('.pickb[data-ac]').forEach(b => {
     toast(b.textContent + ' selected');
   };
 });
+function setControls(mode) {
+  controlMode = mode;
+  try { localStorage.setItem('skylark.controls', mode); } catch (e) {}
+  document.querySelectorAll('.pickb[data-ctl]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ctl === mode)));
+  toast(mode === 'mouse' ? 'Mouse aim: the nose follows the circle. Click to take the mouse, left click fires' : 'Keyboard controls: WASD or the arrow keys');
+}
+document.querySelectorAll('.pickb[data-ctl]').forEach(b => {
+  b.setAttribute('aria-pressed', String(b.dataset.ctl === controlMode));
+  b.onclick = () => setControls(b.dataset.ctl);
+});
 function toggleUI() {
   if (!running) return;
   const off = document.body.classList.toggle('noui');
@@ -2945,6 +3031,7 @@ function togglePause(force) {
   if (!running || S.crashed) return;
   paused = typeof force === 'boolean' ? force : !paused;
   $('#pause').hidden = !paused;
+  if (paused) { lockPointer.releasing = true; unlockPointer(); aim.fire = false; } else if (mouseAim()) lockPointer();
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden && running && !S.crashed) togglePause(true); });
 
@@ -3104,7 +3191,7 @@ function placeReticle(node, p) {
   node.hidden = false;
   node.style.transform = `translate(${(prj.x + 1) / 2 * innerWidth}px, ${(1 - prj.y) / 2 * innerHeight}px)`;
 }
-const el = { nukes: $('#nukes'), ccipN: $('#ccipN'), gun: $('#gun'), bombs: $('#bombs'), gunRet: $('#gunRet'), ccip: $('#ccip'), spd: $('#spd'), mach: $('#mach'), gl: $('#gload'), alt: $('#alt'), vs: $('#vs'), aoa: $('#aoa'), rwy: $('#rwy'), gnd: $('#cGnd'), brk: $('#cBrk'), gear: $('#cGear'), ab: $('#cAb'), ra: $('#cRa'), warn: $('#warn') };
+const el = { aimRet: $('#aimRet'), noseRet: $('#noseRet'), nukes: $('#nukes'), ccipN: $('#ccipN'), gun: $('#gun'), bombs: $('#bombs'), gunRet: $('#gunRet'), ccip: $('#ccip'), spd: $('#spd'), mach: $('#mach'), gl: $('#gload'), alt: $('#alt'), vs: $('#vs'), aoa: $('#aoa'), rwy: $('#rwy'), gnd: $('#cGnd'), brk: $('#cBrk'), gear: $('#cGear'), ab: $('#cAb'), ra: $('#cRa'), warn: $('#warn') };
 const setText = (node, s) => { if (node.textContent !== s) node.textContent = s; };
 function updateHUD() {
   const att = attitude();
@@ -3126,6 +3213,11 @@ function updateHUD() {
     tmp.copy(S.pos).addScaledVector(S.vel, 0.6).addScaledVector(F, MUZZLE_V * 0.6); tmp.y -= 0.5 * G * 0.36;
     placeReticle(el.gunRet, tmp);
   } else el.gunRet.hidden = true;
+  if (live && mouseAim() && !bombCam.mode) {
+    axes(S.quat);
+    placeReticle(el.aimRet, tmp.copy(S.pos).addScaledVector(aim.dir, 2000));
+    placeReticle(el.noseRet, tmp.copy(S.pos).addScaledVector(F, 2000));
+  } else el.aimRet.hidden = el.noseRet.hidden = true;
   const ccip = live && S.bombs > 0 && !S.onGround ? ccipPoint(tmp) : null;
   if (ccip) placeReticle(el.ccip, ccip); else el.ccip.hidden = true;
   const ccipN = live && S.nukes > 0 && !S.onGround ? ccipPoint(tmp, parts.nuke.userData.nk) : null;
@@ -3270,6 +3362,21 @@ function updateCamera(dt, now) {
     camera.up.copy(worldUp);
     camera.lookAt(S.pos);
     camera.fov = 60;
+  } else if (camMode === 'chase' && mouseAim() && !S.crashed) {
+    // behind the jet along the aim line, level with the horizon, so the aim circle sits mid-screen
+    tmp.copy(S.pos).addScaledVector(aim.dir, -A.chase[1]).addScaledVector(worldUp, A.chase[0]);
+    const gh = Math.max(0, floorAt(tmp.x, tmp.z)) + 1.5;
+    if (tmp.y < gh) tmp.y = gh;
+    if (camSnap) { camera.position.copy(tmp); camSnap = false; }
+    else { camera.position.addScaledVector(S.vel, dt); camera.position.lerp(tmp, 1 - Math.exp(-dt * 9)); }
+    if (W.shake > 0.01) {
+      camera.position.x += (Math.random() - 0.5) * W.shake;
+      camera.position.y += (Math.random() - 0.5) * W.shake;
+      W.shake *= Math.exp(-dt * 3);
+    }
+    camera.up.copy(worldUp);
+    camera.lookAt(tmp.copy(S.pos).addScaledVector(aim.dir, 2000));
+    camera.fov = 60 + Math.min(14, S.V * 0.04);
   } else if (camMode === 'chase') {
     tmp.set(0, A.chase[0], A.chase[1]).applyQuaternion(S.quat).add(S.pos);
     const gh = Math.max(0, floorAt(tmp.x, tmp.z)) + 1.5;
