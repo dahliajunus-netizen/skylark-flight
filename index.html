@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15 or a Boeing 757 over a destructible city.">
+<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15, a Eurofighter Typhoon or a Boeing 757 over a destructible city.">
 <style>:root{color-scheme:dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -78,7 +78,7 @@ h2 { margin: 0; font-size: 30px; text-wrap: balance; }
 .card p { margin: 0; line-height: 1.5; color: #cdd8df; font-size: 14px; max-width: 60ch; }
 .specs { display: flex; gap: 6px; flex-wrap: wrap; }
 .specs span { font-family: var(--font-num); font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--fg); }
-.pick { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
+.pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
 .pickb { font: 700 13px var(--font-ui); padding: 10px 8px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--dim); cursor: pointer; }
 .pickb:hover { color: var(--fg); }
 .pickb[aria-pressed="true"] { background: rgba(79,216,234,.14); border-color: rgba(79,216,234,.5); color: var(--cyan); }
@@ -190,7 +190,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h1>Skylark</h1>
     <p id="acDesc"></p>
     <div class="specs" id="acSpecs"></div>
-    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C Eagle</button><button class="pickb" data-ac="b757" aria-pressed="false">Boeing 757-200</button></div>
+    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C Eagle</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">Boeing 757-200</button></div>
     <div class="actions">
       <button class="btn primary" id="goRunway">Take off from runway</button>
       <button class="btn" id="goAir">Start airborne</button>
@@ -243,7 +243,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="card glass">
     <div class="eyebrow">HOLDING</div>
     <h2>Paused</h2>
-    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C Eagle</button><button class="pickb" data-ac="b757" aria-pressed="false">Boeing 757-200</button></div>
+    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C Eagle</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">Boeing 757-200</button></div>
     <dl class="keys key-only">
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
       <dt>A / D, ← / →</dt><dd>Roll; steers on the ground</dd>
@@ -656,6 +656,8 @@ const AC = {
     id: 'f15', mass: 20000, wing: 56.5, thrust: 130000, thrustAB: 210000,
     CL0: 0.175, CLA: 3.5, stallA: 0.45, cd0: 0.022, k: 0.12, wave: [0.85, 1.05, 0.03],
     gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 1.95, weapons: true,
+    ammo: 940, nukes: 1, muzzle: [1.6, 0.8, 3.0], stabSign: 1, model: 'F-15C.gltf.json',
+    rig: { ab: [[-0.74, 0.02, 9.5], [0.74, 0.02, 9.5]], bombs: [[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2]], nuke: [0, -1.10, -0.885] },
     box: new THREE.Box3(new THREE.Vector3(-6.6, -0.75, -10.1), new THREE.Vector3(6.6, 3.8, 9.8)), slideI: 60,
     // nose, wingtips, tail, fin, belly (forward, right, up): touching a building with any of these is a crash
     hitPts: [[9.8, 0, 0], [0, 6.5, 0], [0, -6.5, 0], [-9.5, 0, 0], [-8, 0, 3.6], [0, 0, -0.8]],
@@ -666,10 +668,28 @@ const AC = {
     specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', '4 × MK-82', 'B61 NUCLEAR BOMB', 'RWY 36 · 4,600 FT'],
     tip: 'Takeoff: full throttle, pull back at 150 kt, then raise the gear. With the stick centered the jet holds level flight; the throttle sets your speed. Lower the gear before landing.'
   },
+  typhoon: {
+    // Eurofighter Typhoon: ~17 t with bombs, 51.2 m² delta, two EJ200s (~60 kN dry, ~90 kN reheat each)
+    id: 'typhoon', mass: 16000, wing: 51.2, thrust: 120000, thrustAB: 180000,
+    CL0: 0.15, CLA: 3.2, stallA: 0.5, cd0: 0.02, k: 0.14, wave: [0.9, 1.1, 0.025],
+    gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 1.95, weapons: true,
+    // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
+    ammo: 150, nukes: 0, muzzle: [0.75, -0.25, 2.0], stabSign: -1, model: 'Typhoon.gltf.json',
+    rig: { ab: [[-0.5, -0.16, 7.98], [0.5, -0.16, 7.98]], bombs: [[-3.9, -0.98, 2.62], [3.9, -0.98, 2.62], [-2.7, -0.98, 2.62], [2.7, -0.98, 2.62]], nuke: null },
+    box: new THREE.Box3(new THREE.Vector3(-5.5, -1.25, -8.0), new THREE.Vector3(5.5, 3.35, 8.0)), slideI: 45,
+    hitPts: [[7.98, 0, -0.1], [-7.98, 0, -0.16], [-5.4, 5.47, -0.46], [-5.4, -5.47, -0.46], [-6.2, 0, 3.33], [1.2, 2.15, -0.12], [1.2, -2.15, -0.12], [0, 0, -1.1]],
+    chase: [5, 30, 28], eye: [0.8, 3.05], scale: 0.9, shadow: 14, airStart: [165, 0.5], fireball: 0.95, crashBlast: [28, 450],
+    sound: { whine: [700, 1500, 1], roar: [170, 480, 1] },
+    eyebrow: 'EUROFIGHTER TYPHOON · DELTA-CANARD FIGHTER',
+    desc: 'Fly a Eurofighter Typhoon out of a city airport, with downtown towers just north of the runway, a river, suburbs, hills and the sea to the east. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
+    specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', '4 × MK-82', 'RWY 36 · 4,600 FT'],
+    tip: 'Takeoff: full throttle, pull back at about 155 kt, then raise the gear. Watch the canards: they tilt nose-up to pitch up. Lower the gear and land at about 145 kt.'
+  },
   b757: {
     id: 'b757', mass: 80000, wing: 185, thrust: 380000, thrustAB: 0,
     CL0: 0.35, CLA: 5.0, stallA: 0.28, cd0: 0.022, k: 0.045, wave: [0.78, 0.95, 0.08],
     gLimit: 2.5, effV: 85, rates: [0.35, 0.15, 0.6], stabRoll: 0, tailStrike: 0.2, gear: 4.4, weapons: false,
+    ammo: 0, nukes: 0, muzzle: [0, 0, 0], stabSign: 1,
     box: new THREE.Box3(new THREE.Vector3(-19, -3.8, -23.5), new THREE.Vector3(19, 10.5, 24.6)), slideI: 420,
     hitPts: [[23, 0, 0], [-24, 0, 0], [-4.7, 19, 0.6], [-4.7, -19, 0.6], [-23.5, 0, 10.5], [-21.5, 7.5, 1.4], [-21.5, -7.5, 1.4], [0, 0, -1.9], [4.5, 5.8, -3.6], [4.5, -5.8, -3.6]],
     chase: [13, 85, 70], eye: [0.55, 19.6], scale: 2.3, shadow: 34, airStart: [125, 0.5], fireball: 1.8, crashBlast: [50, 1600],
@@ -696,7 +716,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-let f15Model = null;
+const MODELS = { f15: null, typhoon: null }; // Blender-built models, filled in as they load
 const AB_MATS = [['#ff8c3a', 0.75], ['#fff1c4', 0.9]].map(([c, o]) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
@@ -743,7 +763,7 @@ function addBombs(positions) {
 }
 
 function buildF15() {
-  if (f15Model) return buildF15Glb();
+  if (MODELS.f15) return buildFromGltf(MODELS.f15);
   const grey = M('#8f99a4'), greyD = M('#78828d'), radome = M('#b7bcc1'), dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
   const glass = new THREE.MeshStandardMaterial({ color: '#4d4a33', roughness: 0.08, metalness: 0.85, transparent: true, opacity: 0.88 });
   add(tube(0.85, 0.07, 2.6), radome, 0, 0.1, -8.8);
@@ -779,13 +799,15 @@ function buildF15() {
   parts.gear = gear;
 }
 
-// The Blender model points its nose along glTF +Z; turning it 180° about Y puts the nose on -Z like the sim.
-function buildF15Glb() {
+// Blender models point their nose along glTF +Z; turning them 180° about Y puts the nose on -Z like the sim.
+// Parts are found by name: wheels/struts become the gear, stabilators/canards pivot for pitch and roll,
+// a speed brake or airbrake hinges on its front edge. Afterburners and stores come from the aircraft's rig.
+function buildFromGltf(model) {
   const turn = new THREE.Matrix4().makeRotationY(Math.PI), m4 = new THREE.Matrix4();
-  f15Model.updateMatrixWorld(true);
+  model.updateMatrixWorld(true);
   const gear = new THREE.Group(); plane.add(gear);
   const meshes = [];
-  f15Model.traverse(o => { if (o.isMesh) meshes.push(o); });
+  model.traverse(o => { if (o.isMesh) meshes.push(o); });
   for (const src of meshes) {
     const m = new THREE.Mesh(src.geometry, src.material);
     m.name = src.name;
@@ -793,13 +815,12 @@ function buildF15Glb() {
     m.castShadow = true; m.receiveShadow = true;
     const n = src.name.toLowerCase();
     if (/wheel|strut/.test(n)) gear.add(m);
-    else if (/stabilator/.test(n)) {
+    else if (/stabilator|canard/.test(n)) {
       // the Blender object origin is already on the pivot; wrap it so rotation.x tilts it about the sim's X axis
       const pivot = new THREE.Group(); pivot.position.copy(m.position); plane.add(pivot);
       m.position.set(0, 0, 0); pivot.add(m);
       parts[pivot.position.x < 0 ? 'stabL' : 'stabR'] = pivot;
-    } else if (/speed.?brake/.test(n)) {
-      // hinge the dorsal speed brake on its front edge
+    } else if (/speed.?brake|airbrake/.test(n)) {
       if (!src.geometry.boundingBox) src.geometry.computeBoundingBox();
       const bb = src.geometry.boundingBox.clone().applyMatrix4(m4.compose(m.position, m.quaternion, m.scale));
       const pivot = new THREE.Group(); pivot.position.set(0, bb.max.y, bb.min.z); plane.add(pivot);
@@ -808,10 +829,36 @@ function buildF15Glb() {
     } else plane.add(m);
   }
   parts.gear = gear;
-  for (const sx of [-1, 1]) addAfterburner(sx < 0 ? 'abL' : 'abR', sx * 0.74, 0.02, 9.5);
-  // under the Blender model's wing pylons (twin rack each) and centreline pylon
-  addBombs([[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2]]);
-  addNuke(0, -1.10, -0.885); // B61 on the centreline pylon
+  const r = A.rig;
+  r.ab.forEach(([x, y, z], i) => addAfterburner(i ? 'abR' : 'abL', x, y, z));
+  addBombs(r.bombs);
+  if (r.nuke) addNuke(...r.nuke);
+}
+
+// Eurofighter Typhoon: 15.96 m long, 10.95 m span. The Blender model replaces this simple stand-in once it loads.
+function buildTyphoon() {
+  if (MODELS.typhoon) return buildFromGltf(MODELS.typhoon);
+  const grey = M('#a6b2b9'), greyD = M('#8c989f'), dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
+  add(tube(0.6, 0.05, 15.2, 16), grey, 0, 0, 0.2);
+  add(new THREE.BoxGeometry(1.6, 0.9, 8.5), grey, 0, -0.65, 0.8);
+  for (const sx of [-1, 1]) {
+    add(planform([[0.8, -1.3], [5.3, 4.7], [5.3, 6.1], [0.8, 6.3]].map(([x, z]) => [x * sx, z]), 0.2), grey, 0, -0.4, 0);
+    const cn = new THREE.Group(); cn.position.set(sx * 0.55, -0.05, -2.38); plane.add(cn);
+    add(planform([[0, -0.9], [1.6, 0.95], [1.6, 1.5], [0, 0.75]].map(([x, z]) => [x * sx, z]), 0.08), grey, 0, 0, 0, cn);
+    parts[sx < 0 ? 'stabL' : 'stabR'] = cn;
+    add(tube(0.44, 0.48, 1.0, 14), metal, sx * 0.5, -0.16, 7.5);
+  }
+  add(profile([[2.2, 0.45], [5.6, 3.33], [6.9, 3.33], [7.1, 0.45]], 0.12), greyD, 0, 0, 0);
+  const r = A.rig;
+  r.ab.forEach(([x, y, z], i) => addAfterburner(i ? 'abR' : 'abL', x, y, z));
+  addBombs(r.bombs);
+  const gear = new THREE.Group(); plane.add(gear);
+  const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.24, 14); g.rotateZ(Math.PI / 2); return g; };
+  for (const [x, z, rad] of [[0, -1.6, 0.28], [-1.3, 2.1, 0.38], [1.3, 2.1, 0.38]]) {
+    add(wheel(rad), dark, x, -GEAR + rad, z, gear);
+    add(new THREE.BoxGeometry(0.12, GEAR - rad - 0.9, 0.12), metal, x, -(GEAR - rad + 0.9) / 2, z, gear);
+  }
+  parts.gear = gear;
 }
 
 // Boeing 757-200: 47.3 m long, 38 m span, 3.8 m fuselage, two underwing turbofans, tall landing gear
@@ -866,28 +913,31 @@ function setAircraft(id) {
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
   parts.bombs = []; parts.spoilers = [];
-  (A.id === 'b757' ? build757 : buildF15)();
+  ({ f15: buildF15, typhoon: buildTyphoon, b757: build757 })[A.id]();
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
   updateAircraftUI();
 }
 setAircraft('f15');
 scene.add(plane);
-// load the Blender-built F-15C published next to this page, then swap it in
+// load the Blender-built models published next to this page, then swap each in
 if (THREE.GLTFLoader) {
-  new THREE.GLTFLoader().load('F-15C.gltf.json', gltf => {
-    gltf.scene.traverse(o => {
-      // glTF colours are linear; this renderer treats material colours as already display-ready
-      if (o.isMesh && o.material && o.material.color) o.material.color.convertLinearToSRGB();
-    });
-    f15Model = gltf.scene;
-    if (A.id === 'f15') {
-      const hidden = parts.bombs.map(b => !b.visible), nukeGone = !!parts.nuke && !parts.nuke.visible;
-      setAircraft('f15');
-      parts.bombs.forEach((b, i) => { b.visible = !hidden[i]; }); // keep any bombs already dropped
-      if (nukeGone) parts.nuke.visible = false;
-    }
-  }, undefined, err => console.warn('F-15C model did not load; using the simple model.', err));
+  const loader = new THREE.GLTFLoader();
+  for (const id of ['f15', 'typhoon']) {
+    loader.load(AC[id].model, gltf => {
+      gltf.scene.traverse(o => {
+        // glTF colours are linear; this renderer treats material colours as already display-ready
+        if (o.isMesh && o.material && o.material.color) o.material.color.convertLinearToSRGB();
+      });
+      MODELS[id] = gltf.scene;
+      if (A.id === id) {
+        const hidden = parts.bombs.map(b => !b.visible), nukeGone = !!parts.nuke && !parts.nuke.visible;
+        setAircraft(id);
+        parts.bombs.forEach((b, i) => { b.visible = !hidden[i]; }); // keep any bombs already dropped
+        if (nukeGone && parts.nuke) parts.nuke.visible = false;
+      }
+    }, undefined, err => console.warn(AC[id].model + ' did not load; using the simple model.', err));
+  }
 }
 
 // ---------------- particles: fire, smoke, sparks, splash, dust ----------------
@@ -1385,7 +1435,7 @@ const tracers = new THREE.LineSegments(trGeo, new THREE.LineBasicMaterial({ vert
 tracers.frustumCulled = false;
 scene.add(tracers);
 const muzzle = new THREE.Vector3();
-function muzzlePos(out) { axes(S.quat); return out.copy(S.pos).addScaledVector(R, 1.6).addScaledVector(U, 0.8).addScaledVector(F, 3.0); }
+function muzzlePos(out) { axes(S.quat); const [r, u, f] = A.muzzle; return out.copy(S.pos).addScaledVector(R, r).addScaledVector(U, u).addScaledVector(F, f); }
 function fireRound() {
   const i = bul.next;
   bul.next = (i + 1) % BMAX;
@@ -1457,11 +1507,12 @@ function releaseStore(src, kind) {
 function dropBomb() {
   if (!running || paused || S.crashed || S.bombs <= 0) return;
   if (S.onGround) { toast('Bombs release only in the air'); return; }
-  releaseStore(parts.bombs[BOMBS_MAX - S.bombs], 'mk82');
+  releaseStore(parts.bombs[parts.bombs.length - S.bombs], 'mk82');
   S.bombs--;
 }
 function dropNuke() {
   if (!running || paused || S.crashed || !A.weapons) return;
+  if (!A.nukes) { toast('Only the F-15 carries the B61'); return; }
   if (S.nukes <= 0) { toast('The B61 is gone'); return; }
   if (S.onGround) { toast('Bombs release only in the air'); return; }
   releaseStore(parts.nuke, 'nuke');
@@ -1714,7 +1765,7 @@ function attitude() {
 function reset(mode) {
   lastMode = mode;
   Object.assign(S, { crashed: false, time: 0, maxAlt: 0, maxSpd: 0, brake: false, hitBuilding: -1,
-    ammo: A.weapons ? AMMO_MAX : 0, bombs: A.weapons ? BOMBS_MAX : 0, nukes: A.weapons ? NUKES_MAX : 0, firing: false });
+    ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: A.nukes || 0, firing: false });
   clearWeapons();
   restoreCity();
   S.ang.set(0, 0, 0);
@@ -2219,7 +2270,8 @@ function updateHUD() {
   el.gear.classList.toggle('cy', S.gearDown);
   el.ab.classList.toggle('on', !!A.thrustAB && S.throttle > AB_AT);
   el.ab.hidden = !A.thrustAB;
-  el.gun.hidden = el.bombs.hidden = el.nukes.hidden = !A.weapons;
+  el.gun.hidden = el.bombs.hidden = !A.weapons;
+  el.nukes.hidden = !A.nukes;
   setText(el.alt, Math.round(ft / 10) * 10 + '');
   setText(el.vs, (fpm >= 0 ? '+' : '−') + String(Math.round(Math.abs(fpm) / 10) * 10).padStart(4, '0'));
   setText(el.aoa, (S.alpha * 180 / Math.PI).toFixed(1) + '°');
@@ -2354,8 +2406,8 @@ function updateCamera(dt, now) {
 function updateVisuals(dt) {
   plane.position.copy(S.pos);
   plane.quaternion.copy(S.quat);
-  parts.stabL.rotation.x = -inp.pitch * 0.3 + inp.roll * A.stabRoll;
-  parts.stabR.rotation.x = -inp.pitch * 0.3 - inp.roll * A.stabRoll;
+  parts.stabL.rotation.x = -inp.pitch * 0.3 * A.stabSign + inp.roll * A.stabRoll;
+  parts.stabR.rotation.x = -inp.pitch * 0.3 * A.stabSign - inp.roll * A.stabRoll;
   for (const sp of parts.spoilers) sp.rotation.x += ((S.brake && running ? -0.75 : 0) - sp.rotation.x) * Math.min(1, dt * 4);
   parts.gear.visible = S.gearDown;
   const abOn = running && !S.crashed && !!A.thrustAB && S.throttle > AB_AT;
