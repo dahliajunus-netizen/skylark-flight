@@ -206,7 +206,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>Space</dt><dd>Fire the 20 mm cannon (hold)</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
       <dt>N</dt><dd>Drop the B61 (F-15); it lands on the dashed amber marker. Get 2.2 km away</dd>
-      <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off</dd>
+      <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
       <dt>U</dt><dd>Hide or show the instruments and buttons</dd>
       <dt>Right mouse</dt><dd>Hold and drag to look around (scroll to zoom); let go to snap back</dd>
@@ -256,7 +256,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>Space</dt><dd>Fire the 20 mm cannon (hold)</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
       <dt>N</dt><dd>Drop the B61 (F-15); it lands on the dashed amber marker. Get 2.2 km away</dd>
-      <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off</dd>
+      <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
     </dl>
     <div class="actions">
@@ -2291,7 +2291,7 @@ function nukeBoom(dist) {
 
 // ---------------- bomb camera ----------------
 // Hold Z (or the BOMB CAM button): follow the latest bomb down, then watch where it went off.
-const bombCam = { btn: false, mode: '', ang: 0 };
+const bombCam = { btn: false, mode: '', ang: 0, free: '' }; // free: the mode the free-look orbit was last set up for
 function bombCamTarget() {
   for (let i = bombsFlying.length - 1; i >= 0; i--) if (bombsFlying[i].kind === 'nuke') return bombsFlying[i];
   if (bombsFlying.length) return bombsFlying[bombsFlying.length - 1];
@@ -2566,24 +2566,27 @@ function updateInputs(dt) {
 // free look: hold the right mouse button and drag; let go and the camera eases back to the chase view
 const look = { active: false, yaw: 0, pitch: 0, dist: 34, x: 0, y: 0, id: null };
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+// start orbiting from wherever the camera is now, so nothing jumps
+function seedOrbit(focus, lo, hi) {
+  tA.subVectors(camera.position, focus);
+  const l = tA.length() || 1;
+  look.dist = clamp(l, lo, hi);
+  look.yaw = Math.atan2(tA.x, tA.z);
+  look.pitch = Math.asin(clamp(tA.y / l, -1, 1));
+}
 canvas.addEventListener('pointerdown', e => {
-  if (e.button !== 2 || !running || S.crashed) return;
+  if (e.button !== 2 || !running || (S.crashed && !bombCam.mode)) return;
   look.active = true; look.id = e.pointerId; look.x = e.clientX; look.y = e.clientY;
   try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
-  if (camMode === 'chase') {
-    // start orbiting from wherever the camera is now, so nothing jumps
-    tA.subVectors(camera.position, S.pos);
-    look.dist = clamp(tA.length(), 12, 300);
-    look.yaw = Math.atan2(tA.x, tA.z);
-    look.pitch = Math.asin(clamp(tA.y / (tA.length() || 1), -1, 1));
-  }
+  if (bombCam.mode) bombCam.free = ''; // updateCamera sets up the orbit around the bomb or blast
+  else if (camMode === 'chase') seedOrbit(S.pos, 12, 300);
 });
 canvas.addEventListener('pointermove', e => {
   if (!look.active || e.pointerId !== look.id) return;
   const dx = e.clientX - look.x, dy = e.clientY - look.y;
   look.x = e.clientX; look.y = e.clientY;
   look.yaw -= dx * 0.006;
-  if (camMode === 'chase') look.pitch = clamp(look.pitch + dy * 0.006, -1.3, 1.45);
+  if (camMode === 'chase' || bombCam.mode) look.pitch = clamp(look.pitch + dy * 0.006, -1.3, 1.45);
   else { look.pitch = clamp(look.pitch - dy * 0.006, -1.2, 1.4); look.yaw = clamp(look.yaw, -2.7, 2.7); }
 });
 const endLook = e => { if (e.button === 2 || e.type !== 'pointerup') look.active = false; };
@@ -2591,9 +2594,10 @@ canvas.addEventListener('pointerup', endLook);
 canvas.addEventListener('pointercancel', endLook);
 addEventListener('blur', () => { look.active = false; });
 canvas.addEventListener('wheel', e => {
-  if (!look.active || camMode !== 'chase') return;
+  if (!look.active || (camMode !== 'chase' && !bombCam.mode)) return;
   e.preventDefault();
-  look.dist = clamp(look.dist * Math.exp(e.deltaY * 0.001), 12, 300);
+  look.dist *= Math.exp(e.deltaY * 0.001);
+  if (!bombCam.mode) look.dist = clamp(look.dist, 12, 300); // the bomb cam clamps its own range
 }, { passive: false });
 
 // touch: stick
@@ -2915,9 +2919,26 @@ function updateCamera(dt, now) {
   }
   const bc = keys.z || bombCam.btn ? bombCamTarget() : null;
   if (bc) {
-    if (bc.obj) {
+    const blast = !bc.obj;
+    if (!blast) bombCam.mode = 'bomb';
+    else if (bombCam.mode !== 'blast') { bombCam.mode = 'blast'; bombCam.ang = Math.atan2(camera.position.x - bc.p.x, camera.position.z - bc.p.z); }
+    if (blast) tmp2.set(bc.p.x, bc.p.y + (bc.nuke ? 1200 : 10), bc.p.z);
+    else tmp2.copy(bc.obj.position);
+    if (look.active) {
+      // free look: drag with the right mouse to orbit the bomb or the blast, scroll to zoom
+      const lo = blast ? 20 : 8, hi = blast ? (bc.nuke ? 20000 : 2000) : 500;
+      if (bombCam.free !== bombCam.mode) { seedOrbit(tmp2, lo, hi); bombCam.free = bombCam.mode; }
+      look.dist = clamp(look.dist, lo, hi);
+      const cp = Math.cos(look.pitch);
+      tmp.set(Math.sin(look.yaw) * cp, Math.sin(look.pitch), Math.cos(look.yaw) * cp).multiplyScalar(look.dist).add(tmp2);
+      tmp.y = Math.max(tmp.y, Math.max(0, floorAt(tmp.x, tmp.z)) + 2);
+      camera.position.copy(tmp);
+      camera.up.copy(worldUp);
+      camera.lookAt(tmp2);
+      camera.fov = 55;
+    } else if (!blast) {
       // ride along behind the falling bomb
-      bombCam.mode = 'bomb';
+      bombCam.free = '';
       tA.copy(bc.v);
       if (tA.lengthSq() < 1) tA.set(0, -1, 0);
       tA.normalize();
@@ -2926,18 +2947,18 @@ function updateCamera(dt, now) {
       if (camera.position.distanceTo(tmp) > 400) camera.position.copy(tmp);
       else camera.position.lerp(tmp, 1 - Math.exp(-dt * 8));
       camera.up.copy(worldUp);
-      camera.lookAt(bc.obj.position);
+      camera.lookAt(tmp2);
       camera.fov = 55;
     } else {
       // it went off: pull back and slowly circle the blast (kilometres out for the B61)
-      if (bombCam.mode !== 'blast') { bombCam.mode = 'blast'; bombCam.ang = Math.atan2(camera.position.x - bc.p.x, camera.position.z - bc.p.z); }
+      if (bombCam.free) { bombCam.free = ''; bombCam.ang = Math.atan2(camera.position.x - bc.p.x, camera.position.z - bc.p.z); } // carry on circling from where free look left off
       bombCam.ang += dt * (bc.nuke ? 0.02 : 0.08);
       const Rd = bc.nuke ? 7000 : 150, H = bc.nuke ? 1300 : 55;
       tmp.set(bc.p.x + Math.sin(bombCam.ang) * Rd, bc.p.y + H, bc.p.z + Math.cos(bombCam.ang) * Rd);
       tmp.y = Math.max(tmp.y, Math.max(0, floorAt(tmp.x, tmp.z)) + 5);
       camera.position.lerp(tmp, 1 - Math.exp(-dt * 1.8));
       camera.up.copy(worldUp);
-      camera.lookAt(tA.set(bc.p.x, bc.p.y + (bc.nuke ? 1200 : 10), bc.p.z));
+      camera.lookAt(tmp2);
       camera.fov = 55;
     }
     if (W.shake > 0.01) {
@@ -2948,7 +2969,10 @@ function updateCamera(dt, now) {
     camera.updateProjectionMatrix();
     return;
   }
-  if (bombCam.mode) { bombCam.mode = ''; camSnap = true; } // let go: jump straight back to the jet
+  if (bombCam.mode) { // let go: jump straight back to the jet
+    bombCam.mode = bombCam.free = ''; camSnap = true;
+    look.active = false; look.yaw = look.pitch = 0; look.dist = 34; // the orbit was around the bomb, not the jet
+  }
   if (S.crashed && W.main) {
     // crash cam: hang back, follow the main wreckage, slowly circle it
     W.camAng += dt * 0.1;
