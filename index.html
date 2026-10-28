@@ -1011,12 +1011,13 @@ const AC = {
       [-0.42, -0.2, -4.75], [0.42, -0.2, -4.75], [-0.42, -0.2, 0.25], [0.42, -0.2, 0.25]] },
     box: new THREE.Box3(new THREE.Vector3(-28.2, -3.0, -24.25), new THREE.Vector3(28.2, 9.0, 24.25)), slideI: 900,
     hitPts: [[24.25, 0, -0.3], [-24.25, 0, 0.8], [-9.0, 28.2, 0.2], [-9.0, -28.2, 0.2], [-19.0, 0, 9.0], [0, 0, -1.8]],
-    chase: [16, 115, 95], eye: [1.25, 19.6], scale: 2.6, shadow: 42, airStart: [150, 0.6], fireball: 2.2, crashBlast: [60, 2000],
+    chase: [16, 115, 95], eye: [1.25, 19.6], scale: 2.6, shadow: 42, airStart: [220, 0.6, 9144], // starts at 30,000 ft, Mach 0.73
+    fireball: 2.2, crashBlast: [60, 2000],
     sound: { whine: [280, 700, 1.4], roar: [80, 240, 1.6] },
     eyebrow: 'BOEING B-52H STRATOFORTRESS · HEAVY BOMBER',
     desc: 'Fly a B-52 from the island airbase 15 km south of the city. It is huge and slow to answer, with eight engines. Pick twenty 2,000 lb Mk-84s, eight under the wings and twelve in the bomb bay, each blowing a crater out of whatever it lands on, or a single B28 nuclear bomb in the bay.',
     specs: ['ROTATE 160 KT', 'APPROACH 155 KT', '2 G LIMIT', '8 × TF33 ENGINES', 'STORES', 'RWY 36 · 13,100 FT'],
-    tip: 'Takeoff: full throttle and a long roll; the B-52 lifts off almost level at about 160 kt with a gentle pull. Drop bombs from at least 1,500 ft, wing bombs first, then the bay. Lower the gear and land at about 155 kt.'
+    tip: 'Start airborne puts you at 30,000 ft over the sea, cruising toward the city. Takeoff: full throttle and a long roll; the B-52 lifts off almost level at about 160 kt with a gentle pull. Drop bombs from at least 1,500 ft, wing bombs first, then the bay. Lower the gear and land at about 155 kt.'
   },
   b757: {
     id: 'b757', mass: 80000, wing: 185, thrust: 380000, thrustAB: 0,
@@ -3140,7 +3141,7 @@ function reset(mode) {
     S.gearDown = true; S.gearT = 1; S.doorT = 1;
   } else {
     const x = 120, z = 7500;
-    S.pos.set(x, Math.max(900, heightAt(x, z) + 600), z);
+    S.pos.set(x, Math.max(A.airStart[2] || 900, heightAt(x, z) + 600), z); // optional per-aircraft start altitude (m)
     S.quat.setFromEuler(eul.set(0, 0.02, 0, 'YXZ'));
     axes(S.quat);
     S.vel.copy(F).multiplyScalar(A.airStart[0]);
