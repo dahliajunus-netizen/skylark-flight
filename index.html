@@ -154,6 +154,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <span class="small" id="gload">1.0 G</span>
     <span class="rwy" id="rwy">RWY 36</span>
     <span class="chip cy" id="cGear">GEAR DN</span>
+    <span class="chip on" id="cDmg" hidden>DMG</span>
     <span class="chip" id="cGnd">GND</span>
     <span class="chip" id="cBrk">BRK</span>
     <span class="chip cy" id="cRa">RA ----</span>
@@ -813,6 +814,7 @@ function buildFromGltf(model) {
     m.name = src.name;
     m4.multiplyMatrices(turn, src.matrixWorld).decompose(m.position, m.quaternion, m.scale);
     m.castShadow = true; m.receiveShadow = true;
+    m.userData.fromModel = true;
     const n = src.name.toLowerCase();
     if (/wheel|strut|bogie/.test(n)) gear.add(m);
     else if (/stabilator|stabili[sz]er|canard/.test(n)) {
@@ -833,6 +835,7 @@ function buildFromGltf(model) {
   r.ab.forEach(([x, y, z], i) => addAfterburner(i ? 'abR' : 'abL', x, y, z));
   addBombs(r.bombs);
   if (r.nuke) addNuke(...r.nuke);
+  buildZones();
 }
 
 // Eurofighter Typhoon: 15.96 m long, 10.95 m span. The Blender model replaces this simple stand-in once it loads.
@@ -914,7 +917,7 @@ function setAircraft(id) {
   GEAR = A.gear;
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.spoilers = [];
+  parts.bombs = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false;
   ({ f15: buildF15, typhoon: buildTyphoon, b757: build757 })[A.id]();
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
@@ -953,7 +956,246 @@ function rigGear() {
     }
     // nose legs (and the F-15's mains) fold forward; the others fold inward toward the centreline
     const fwd = key === 'nose' || A.mainRetract === 'fwd';
-    parts.gearLegs.push({ pivot, upper, lower, nose: key === 'nose', len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key === 'R' ? -1 : 1 });
+    const leg = { pivot, upper, lower, nose: key === 'nose', len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key === 'R' ? -1 : 1 };
+    parts.gearLegs.push(leg);
+    const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
+    parts.zones.push({ kind: 'gear', side: key === 'nose' ? '' : key, leg, alive: true, label: key === 'nose' ? 'Nose gear leg' : (key === 'L' ? 'Left' : 'Right') + ' main gear leg',
+      pts: [new THREE.Vector3(cx, bb.min.y, cz), new THREE.Vector3(cx, (bb.min.y + bb.max.y) / 2, cz)] });
+  }
+}
+
+// ---------------- structural damage ----------------
+// The airframe is split into zones by part name: each wing (with its pods, pylons, flaps, spoilers and stores),
+// each tailplane or canard, each fin, each 757 engine and each gear leg. Everything else is the core.
+// Zones carry sample points from their own vertices; when one touches a building, the ground or the water,
+// that zone is torn off at the point of impact and the jet flies on without it. Only the core hitting is a crash.
+const ZONE_RULES = [['eng', /nacelle|fan_face|exhaust_cone|engine_pylon/], ['wing', /wing(?!_body)|spoiler|flap_fairing/],
+  ['stab', /stabilator|stabili[sz]er|canard/], ['fin', /vertical_tail|^fin$/]];
+const SURFACE = /^wing[lr]?$|stabilator|stabili[sz]er|canard|vertical_tail|^fin$/;
+const nameOf = m => (m.name || '').toLowerCase();
+const _inv = new THREE.Matrix4(), _v = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+function localMatrix(mesh) {
+  plane.updateMatrixWorld(true);
+  _inv.copy(plane.matrixWorld).invert();
+  return new THREE.Matrix4().multiplyMatrices(_inv, mesh.matrixWorld);
+}
+function forTris(geo, M, fn) {
+  const pos = geo.attributes.position, idx = geo.index, cnt = idx ? idx.count : pos.count;
+  for (let t = 0; t < cnt; t += 3) {
+    const i0 = idx ? idx.getX(t) : t, i1 = idx ? idx.getX(t + 1) : t + 1, i2 = idx ? idx.getX(t + 2) : t + 2;
+    _a.fromBufferAttribute(pos, i0).applyMatrix4(M); _b.fromBufferAttribute(pos, i1).applyMatrix4(M); _c.fromBufferAttribute(pos, i2).applyMatrix4(M);
+    const area = _v.subVectors(_b, _a).cross(tA.subVectors(_c, _a)).length() / 2;
+    fn(i0, i1, i2, _a, _b, _c, area);
+  }
+}
+function areaOf(geo, M) { let a = 0; forTris(geo, M, (i0, i1, i2, p, q, r, ar) => { a += ar; }); return a; }
+const coordOf = (axis, v) => axis === 'x' ? Math.abs(v.x) : axis === 'y' ? v.y : Infinity;
+// split a mesh's triangles at a station: the outer part gets its own copy of the vertex data so it can be moved
+function splitGeometry(geo, M, axis, cut) {
+  const keep = [], lose = [];
+  let areaOut = 0;
+  forTris(geo, M, (i0, i1, i2, p, q, r, ar) => {
+    const cen = axis === 'x' ? Math.abs(p.x + q.x + r.x) / 3 : (p.y + q.y + r.y) / 3;
+    if (cen > cut) { lose.push(i0, i1, i2); areaOut += ar; } else keep.push(i0, i1, i2);
+  });
+  const mk = (list, copy) => {
+    if (!list.length) return null;
+    const g = new THREE.BufferGeometry();
+    for (const k in geo.attributes) g.setAttribute(k, copy ? geo.attributes[k].clone() : geo.attributes[k]);
+    g.setIndex(list);
+    return g;
+  };
+  return { inner: mk(keep, false), outer: mk(lose, true), areaOut };
+}
+function samplePoints(meshes, max) {
+  const mats = meshes.map(localMatrix), total = meshes.reduce((t, m) => t + m.geometry.attributes.position.count, 0);
+  const stride = Math.max(1, Math.ceil(total / max)), pts = [];
+  meshes.forEach((m, j) => {
+    const pos = m.geometry.attributes.position, ext = [];
+    for (let i = 0; i < pos.count; i++) {
+      _v.fromBufferAttribute(pos, i).applyMatrix4(mats[j]);
+      for (let k = 0; k < 3; k++) {
+        const c = ['x', 'y', 'z'][k];
+        if (!ext[2 * k] || _v[c] < ext[2 * k][c]) ext[2 * k] = _v.clone();
+        if (!ext[2 * k + 1] || _v[c] > ext[2 * k + 1][c]) ext[2 * k + 1] = _v.clone();
+      }
+      if (i % stride === 0) pts.push(_v.clone());
+    }
+    pts.push(...ext);
+  });
+  return pts;
+}
+function buildZones() {
+  const groups = {}, core = [];
+  plane.updateMatrixWorld(true);
+  plane.traverse(o => {
+    if (!o.isMesh || !o.userData.fromModel || parts.gear && isInside(o, parts.gear)) return;
+    // podded engines only exist on the 757; the fighters' "nacelles" are their intake and engine-bay bodies (core)
+    const nm = nameOf(o), rule = ZONE_RULES.find(([k, re]) => re.test(nm) && (k !== 'eng' || A.id === 'b757'));
+    if (!rule) { core.push(o); return; }
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const cx = o.geometry.boundingBox.getCenter(_v).applyMatrix4(localMatrix(o)).x;
+    const side = Math.abs(cx) < 0.3 ? '' : cx < 0 ? 'L' : 'R';
+    const key = rule[0] + side;
+    (groups[key] = groups[key] || { kind: rule[0], side, meshes: [] }).meshes.push(o);
+  });
+  const sideWord = sd => sd === 'L' ? 'Left ' : sd === 'R' ? 'Right ' : '';
+  for (const z of Object.values(groups)) {
+    const surf = z.meshes.filter(m => SURFACE.test(nameOf(m)));
+    z.cut = z.kind === 'fin' ? 'y' : z.kind === 'eng' ? null : 'x';
+    z.area0 = z.area = surf.reduce((a, m) => a + areaOf(m.geometry, localMatrix(m)), 0);
+    z.root = Infinity;
+    for (const m of surf) { const M = localMatrix(m); forTris(m.geometry, M, (i0, i1, i2, p) => { z.root = Math.min(z.root, coordOf(z.cut, p)); }); }
+    const word = { wing: 'wing', eng: 'engine', fin: z.side ? 'vertical tail' : 'fin',
+      stab: surf.some(m => /canard/.test(nameOf(m))) ? 'canard' : surf.some(m => /stabilator/.test(nameOf(m))) ? 'stabilator' : 'tailplane' }[z.kind];
+    z.label = (sideWord(z.side) + word).replace(/^./, c => c.toUpperCase());
+    z.pts = samplePoints(z.meshes, { wing: 40, stab: 18, fin: 18, eng: 16 }[z.kind]);
+    z.alive = true;
+    parts.zones.push(z);
+  }
+  if (core.length) { parts.zones.push({ kind: 'core', side: '', meshes: core, pts: samplePoints(core, 90), alive: true }); parts.hasCore = true; }
+  parts.reach = 2 + Math.max(...parts.zones.flatMap(z => z.pts.map(p => p.length())));
+}
+function isInside(o, root) { for (let p = o.parent; p; p = p.parent) if (p === root) return true; return false; }
+
+// turn a mesh (or a copy of part of it) into tumbling debris at its current place in the world
+function spawnPartDebris(mesh, geo) {
+  mesh.updateMatrixWorld(true);
+  const d = new THREE.Mesh(geo, mesh.material);
+  mesh.matrixWorld.decompose(d.position, d.quaternion, d.scale);
+  geo.computeBoundingBox();
+  const c = geo.boundingBox.getCenter(new THREE.Vector3());
+  geo.translate(-c.x, -c.y, -c.z);
+  geo.computeBoundingBox();
+  d.position.add(c.multiply(d.scale).applyQuaternion(d.quaternion));
+  d.castShadow = true;
+  rubbleGroup.add(d);
+  launchDebris(addPiece(d, geo.boundingBox, true, rubble));
+}
+function spawnGroupDebris(obj, box) {
+  obj.updateWorldMatrix(true, true);
+  rubbleGroup.attach(obj);
+  obj.visible = true;
+  launchDebris(addPiece(obj, box, false, rubble));
+}
+function launchDebris(p) {
+  axes(S.quat);
+  const omega = new THREE.Vector3().addScaledVector(R, S.ang.x).addScaledVector(U, -S.ang.y).addScaledVector(F, S.ang.z);
+  tR.subVectors(p.obj.position, S.pos);
+  p.v.copy(S.vel).add(_v.crossVectors(omega, tR)).multiplyScalar(0.7); // once it stops flying it slows fast
+  p.v.x += (Math.random() - 0.5) * 6; p.v.y += Math.random() * 4; p.v.z += (Math.random() - 0.5) * 6;
+  p.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(6 / (0.5 + p.size * 0.1));
+  p.mu = 0.7;
+}
+
+function ripZone(z, pl, pw) {
+  pw = pw.clone();
+  S.damaged = true;
+  for (let i = 0; i < 16; i++) emit('spark', pw, (Math.random() - 0.5) * 20, rr([2, 12]), (Math.random() - 0.5) * 20);
+  for (let i = 0; i < 6; i++) emit('dust', pw, (Math.random() - 0.5) * 6, rr([1, 4]), (Math.random() - 0.5) * 6, 0.8);
+  for (let i = 0; i < 10; i++) emit('fire', pw, (Math.random() - 0.5) * 8, rr([0, 6]), (Math.random() - 0.5) * 8, 0.7);
+  if (z.kind === 'gear') {
+    spawnGroupDebris(z.leg.pivot, new THREE.Box3(new THREE.Vector3(-0.5, -z.leg.len - 0.8, -0.8), new THREE.Vector3(0.5, 0, 0.8)));
+    parts.gearLegs = parts.gearLegs.filter(L => L !== z.leg);
+    z.alive = false;
+    updateDamage();
+    toast(z.label + ' torn off');
+    return;
+  }
+  // tear at the impact point (a little toward the root); hits close to the root take the whole part
+  let cut = -Infinity;
+  if (z.cut) { cut = coordOf(z.cut, pl) - 0.6; if (cut < z.root + 0.4) cut = -Infinity; }
+  let lost = 0;
+  for (const m of [...z.meshes]) {
+    const M = localMatrix(m);
+    if (cut !== -Infinity && SURFACE.test(nameOf(m))) {
+      const sp = splitGeometry(m.geometry, M, z.cut, cut);
+      lost += sp.areaOut;
+      if (sp.outer) spawnPartDebris(m, sp.outer);
+      if (sp.inner) { m.geometry = sp.inner; continue; }
+    } else {
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      if (coordOf(z.cut, m.geometry.boundingBox.getCenter(_v).applyMatrix4(M)) <= cut) continue;
+      if (SURFACE.test(nameOf(m))) lost += areaOf(m.geometry, M);
+      spawnPartDebris(m, m.geometry.clone());
+    }
+    m.parent.remove(m);
+    z.meshes.splice(z.meshes.indexOf(m), 1);
+  }
+  if (z.kind === 'wing') {
+    // bombs hanging outboard of the tear go with the wing, and so does a 757's engine
+    for (const b of [...parts.bombs]) {
+      if (!b.visible || (b.position.x < 0) !== (z.side === 'L') || Math.abs(b.position.x) <= cut) continue;
+      parts.bombs.splice(parts.bombs.indexOf(b), 1);
+      S.bombs = Math.max(0, S.bombs - 1);
+      spawnGroupDebris(b, new THREE.Box3(new THREE.Vector3(-0.2, -0.2, -1.3), new THREE.Vector3(0.2, 0.2, 1.3)));
+    }
+    for (const e of parts.zones) {
+      if (e.kind !== 'eng' || !e.alive || e.side !== z.side) continue;
+      const ex = e.pts.reduce((t, p) => t + Math.abs(p.x), 0) / e.pts.length;
+      if (ex > cut) ripZone(e, e.pts[0], pw);
+    }
+  }
+  z.area = Math.max(0, z.area - lost);
+  z.pts = z.pts.filter(p => coordOf(z.cut, p) <= cut);
+  if (!z.meshes.length || !z.pts.length || cut === -Infinity) z.alive = false;
+  updateDamage();
+  // the stump smokes (and burns, for fuel-carrying wings and engines)
+  const stump = pl.clone();
+  if (z.cut === 'x') stump.x = Math.sign(pl.x || 1) * Math.max(z.root, cut === -Infinity ? z.root : cut);
+  else if (z.cut === 'y') stump.y = cut === -Infinity ? z.root : cut;
+  S.stumps.push({ p: stump, fire: z.kind === 'wing' || z.kind === 'eng', t: 0 });
+  const left = z.area0 ? Math.round(100 * z.area / z.area0) : 0;
+  toast(z.alive ? `${z.label} damaged: ${left}% left` : `${z.label} torn off`);
+}
+function updateDamage() {
+  const frac = (kind, side) => {
+    const zs = parts.zones.filter(z => z.kind === kind && (side === undefined || z.side === side));
+    if (!zs.length) return 1;
+    return zs.reduce((t, z) => t + (z.area0 ? z.area / z.area0 : z.alive ? 1 : 0), 0) / zs.length;
+  };
+  S.dmg = { wingL: frac('wing', 'L'), wingR: frac('wing', 'R'), stab: frac('stab'), fin: frac('fin'), engL: frac('eng', 'L'), engR: frac('eng', 'R'),
+    legsLost: parts.zones.filter(z => z.kind === 'gear' && !z.alive).length };
+}
+// returns true if the core hit something (a crash)
+function checkStructure() {
+  const reach = parts.reach || 25;
+  const nearGround = !S.onGround && S.pos.y - Math.max(0, heightAt(S.pos.x, S.pos.z)) < reach + 2;
+  const nearCity = S.pos.y - reach < CITY_H + 400 && S.pos.x > CITY.x0 - reach && S.pos.x < CITY.x1 + reach && S.pos.z > CITY.z0 - reach && S.pos.z < CITY.z1 + reach;
+  if (!nearGround && !nearCity) return false;
+  for (const z of parts.zones) {
+    if (!z.alive || (z.kind === 'gear' && S.gearT < 0.5)) continue;
+    for (const p of z.pts) {
+      tC.copy(p).applyQuaternion(S.quat).add(S.pos);
+      let bi = -1, ground = null;
+      if (nearCity) { const b = buildingAt(tC.x, tC.z); if (b >= 0 && tC.y < BLD[b * 5 + 4]) bi = b; }
+      if (bi < 0 && nearGround && z.kind !== 'gear') {
+        const h = heightAt(tC.x, tC.z);
+        // the core gets a metre of slack so a flared landing doesn't count the tail as a terrain strike
+        if (tC.y < Math.max(h, 0) - (z.kind === 'core' ? 1.0 : 0.1)) ground = h < 0 ? 'water' : 'ground';
+      }
+      if (bi < 0 && !ground) continue;
+      if (z.kind === 'core') {
+        S.hitBuilding = bi;
+        if (bi >= 0) { S.hitPoint.copy(tC); crash(tC.y > BLD[bi * 5 + 4] - 3 ? 'You hit a rooftop.' : 'You flew into a building.'); }
+        else crash(ground === 'water' ? 'You flew into the water.' : 'You flew into the terrain.');
+        return true;
+      }
+      if (bi >= 0) damageBuilding(bi, z.kind === 'wing' ? 120 : 60); // the building takes some of it too
+      ripZone(z, p, tC);
+      break;
+    }
+  }
+  return false;
+}
+function emitStumps(dt) {
+  if (!S.stumps.length || !running || S.crashed || paused) return;
+  plane.updateMatrixWorld(true);
+  for (const st of S.stumps) {
+    st.t += dt;
+    tA.copy(st.p).applyMatrix4(plane.matrixWorld);
+    for (let k = burst(st.fire && st.t < 30 ? 30 : 0, dt); k > 0; k--) emit('fire', tA, 0, 0, 0, 0.45);
+    for (let k = burst(14, dt); k > 0; k--) emit('smoke', tA, 0, 1, 0, 0.5);
   }
 }
 setAircraft('f15');
@@ -1545,7 +1787,9 @@ function releaseStore(src, kind) {
 function dropBomb() {
   if (!running || paused || S.crashed || S.bombs <= 0) return;
   if (S.onGround) { toast('Bombs release only in the air'); return; }
-  releaseStore(parts.bombs[parts.bombs.length - S.bombs], 'mk82');
+  const src = parts.bombs.find(b => b.visible);
+  if (!src) return;
+  releaseStore(src, 'mk82');
   S.bombs--;
 }
 function dropNuke() {
@@ -1771,7 +2015,7 @@ function bombCamTarget() {
 const S = {
   pos: new THREE.Vector3(), vel: new THREE.Vector3(), quat: new THREE.Quaternion(), ang: new THREE.Vector3(),
   throttle: 0, onGround: true, crashed: false, brake: false, alpha: 0, V: 0, time: 0, maxAlt: 0, maxSpd: 0, wingDrop: 1,
-  gearDown: true, gearT: 1, gearComp: 0, noseDip: 0, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
+  gearDown: true, gearT: 1, gearComp: 0, noseDip: 0, damaged: false, stumps: [], dmg: { wingL: 1, wingR: 1, stab: 1, fin: 1, engL: 1, engR: 1, legsLost: 0 }, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
   ammo: AMMO_MAX, bombs: BOMBS_MAX, nukes: NUKES_MAX, firing: false
 };
 const inp = { pitch: 0, roll: 0, yaw: 0 };
@@ -1802,6 +2046,9 @@ function attitude() {
 
 function reset(mode) {
   lastMode = mode;
+  if (S.damaged) { S.damaged = false; setAircraft(A.id); } // put the torn-off parts back
+  S.stumps = [];
+  updateDamage();
   Object.assign(S, { crashed: false, time: 0, maxAlt: 0, maxSpd: 0, brake: false, hitBuilding: -1,
     ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: A.nukes || 0, firing: false });
   clearWeapons();
@@ -1879,12 +2126,12 @@ function physics(dt) {
   const thrust = (!A.thrustAB ? t * A.thrust // no afterburner: full throttle is takeoff thrust
     : t <= AB_AT ? t / AB_AT * A.thrust : A.thrust + (t - AB_AT) / (1 - AB_AT) * (A.thrustAB - A.thrust)) * Math.pow(rho / RHO, 0.7);
   force.set(0, 0, 0);
-  force.addScaledVector(F, thrust);
+  force.addScaledVector(F, thrust * (S.dmg.engL + S.dmg.engR) / 2);
   if (V > 0.5) {
     vhat.copy(v).divideScalar(V);
     liftDir.crossVectors(R, vhat);
     const ll = liftDir.length();
-    if (ll > 1e-4) force.addScaledVector(liftDir, qS * CL / ll);
+    if (ll > 1e-4) force.addScaledVector(liftDir, qS * CL / ll * (0.15 + 0.85 * (S.dmg.wingL + S.dmg.wingR) / 2)); // missing wing = missing lift
     const CD = A.cd0 + A.k * CL * CL + (Math.abs(alpha) > A.stallA ? 0.15 : 0) + A.wave[2] * smooth(A.wave[0], A.wave[1], mach) // transonic drag rise
       + 0.015 * S.gearT + (S.brake ? 0.05 : 0) + (S.bombs + S.nukes) * 0.0015 + Math.abs(beta) * 0.2;
     force.addScaledVector(vhat, -qS * CD);
@@ -1899,15 +2146,20 @@ function physics(dt) {
   const eff = Math.min(1.2, V / A.effV), stab = Math.min(1, V / 60);
   const aTrim = S.onGround || qS < 1 ? 0 : clamp((MASS * G / qS - A.CL0) / A.CLA, -0.05, Math.min(0.25, A.stallA - 0.04));
   const gCap = A.gLimit * G / Math.max(V, 1);
-  let tp = clamp(inp.pitch * A.rates[0] * eff - (alpha - aTrim) * 1.6 * stab, -gCap * 0.4, gCap);
-  let ty = inp.yaw * A.rates[1] * eff + beta * 2.0 * stab;
-  let tr = inp.roll * A.rates[2] * eff;
+  const Dm = S.dmg;
+  let tp = clamp(inp.pitch * A.rates[0] * eff * Dm.stab - (alpha - aTrim) * 1.6 * stab * (0.35 + 0.65 * Dm.stab), -gCap * 0.4, gCap);
+  let ty = inp.yaw * A.rates[1] * eff * Dm.fin + beta * 2.0 * stab * (0.15 + 0.85 * Dm.fin);
+  let tr = inp.roll * A.rates[2] * eff * (Dm.wingL + Dm.wingR) / 2;
   if (S.onGround) {
     ty += (inp.yaw * 0.5 + inp.roll * 0.3) * Math.min(1, V / 6);
     tr = 0;
   } else if (alpha > A.stallA) {
     tr += S.wingDrop * clamp((alpha - A.stallA) * 8, 0, 1.2); // a wing drops in the stall
   } else if (Math.random() < 0.002) S.wingDrop = Math.random() < 0.5 ? -1 : 1;
+  if (!S.onGround) {
+    tr += (Dm.wingL - Dm.wingR) * 2.8 * Math.min(1.2, V / 90);           // the intact wing lifts alone and rolls toward the stump
+    ty += (Dm.engL - Dm.engR) * 0.12 * S.throttle * Math.min(1, V / 60); // one engine out yaws toward the dead side
+  }
   const k = 1 - Math.exp(-dt * 6);
   S.ang.x += (tp - S.ang.x) * k; S.ang.y += (ty - S.ang.y) * k; S.ang.z += (tr - S.ang.z) * k;
   q.multiply(dq.setFromAxisAngle(AX, S.ang.x * dt));
@@ -1915,8 +2167,10 @@ function physics(dt) {
   q.multiply(dq.setFromAxisAngle(AZ, -S.ang.z * dt));
   q.normalize();
 
-  // buildings
-  if (S.pos.y < CITY_H + 400) {
+  // structure: every zone of the airframe against buildings, the ground and the water
+  if (parts.hasCore) {
+    if ((S.stepN = (S.stepN || 0) + 1) % 2 === 0 && checkStructure()) return;
+  } else if (S.pos.y < CITY_H + 400) {
     axes(q);
     for (const [f, r, u] of A.hitPts) {
       tC.copy(S.pos).addScaledVector(F, f).addScaledVector(R, r).addScaledVector(U, u);
@@ -1943,7 +2197,7 @@ function physics(dt) {
       if (S.gearT < 0.98) return crash(S.gearDown ? 'The landing gear was still coming down when you touched. Lower it earlier.' : 'Belly landing: the landing gear was up. Press G to lower it before you land.');
       if (V > 110) return crash(`You touched down at ${Math.round(V * 1.94384)} kt and the tires and gear failed. Land at about 150 kt.`);
       if (vs < -4.2) return crash(`Hard landing at ${Math.round(-vs * 196.85)} ft/min. Keep the descent under about 800 ft/min.`);
-      if (Math.abs(att.roll) > 0.3) return crash('A wingtip hit the ground. Level the wings before touchdown.');
+      if (S.dmg.legsLost) return crash('A gear leg had been torn off, so the jet collapsed when it touched down.');
       if (att.pitch < -0.12) return crash('The nose gear hit first. Raise the nose a little (flare) just before touchdown.');
       const fpm = Math.round(-vs * 196.85);
       toast(`Touchdown ${fpm} ft/min · ${fpm < 200 ? 'Butter' : fpm < 450 ? 'Smooth' : fpm < 700 ? 'Firm' : 'Hard'}${g.runway ? '' : ' · off-runway'}`);
@@ -1960,6 +2214,7 @@ function physics(dt) {
 
   if (S.onGround) {
     if (g.water) return crash('You rolled into the water.');
+    if (S.dmg.legsLost) return crash('A gear leg was torn off and the jet collapsed onto the ground.');
     if (V > 12 && slopeAt(S.pos.x, S.pos.z) > 0.3) return crash('You ran off into rough terrain.');
     eul.setFromQuaternion(q, 'YXZ');
     eul.z *= Math.exp(-dt * 10);
@@ -2317,6 +2572,17 @@ function updateHUD() {
   setText(el.gear, moving ? (S.gearDown ? 'GEAR ▼' : 'GEAR ▲') : S.gearT >= 1 ? 'GEAR DN' : 'GEAR UP');
   el.gear.classList.toggle('cy', S.gearT >= 1);
   el.gear.classList.toggle('on', moving);
+  const Dh = S.dmg, dm = [], pct = v => Math.round(v * 100) + '%';
+  if (Dh.wingL < 0.995) dm.push('L WING ' + pct(Dh.wingL));
+  if (Dh.wingR < 0.995) dm.push('R WING ' + pct(Dh.wingR));
+  if (Dh.stab < 0.995) dm.push((A.id === 'typhoon' ? 'CANARD ' : 'STAB ') + pct(Dh.stab));
+  if (Dh.fin < 0.995) dm.push('FIN ' + pct(Dh.fin));
+  if (Dh.engL < 0.5) dm.push('L ENG OUT');
+  if (Dh.engR < 0.5) dm.push('R ENG OUT');
+  if (Dh.legsLost) dm.push('GEAR LEG LOST');
+  const dmEl = document.getElementById('cDmg');
+  dmEl.hidden = !dm.length;
+  setText(dmEl, 'DMG ' + dm.join(' · '));
   el.ab.classList.toggle('on', !!A.thrustAB && S.throttle > AB_AT);
   el.ab.hidden = !A.thrustAB;
   el.gun.hidden = el.bombs.hidden = !A.weapons;
@@ -2473,6 +2739,7 @@ function updateVisuals(dt) {
     ab.visible = abOn;
     if (abOn) { const k = 0.55 + (S.throttle - AB_AT) / (1 - AB_AT) * 0.45; ab.scale.set(1, 1, k * (0.9 + Math.random() * 0.2)); }
   }
+  emitStumps(dt);
   const focus = S.crashed && W.main ? W.main.obj.position : S.pos;
   sun.position.copy(focus).addScaledVector(SUN_DIR, 400);
   sun.target.position.copy(focus);
