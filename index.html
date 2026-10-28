@@ -80,6 +80,7 @@ h2 { margin: 0; font-size: 30px; text-wrap: balance; }
 .specs span { font-family: var(--font-num); font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--fg); }
 .pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
 .lopick, .ctlpick { grid-template-columns: repeat(2, 1fr); }
+.lopick { grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); }
 /* AC-130J gunship sensor view and weapon panel: thin lines, restrained colours, dark halo so it reads on any terrain */
 #gsHud { position: fixed; inset: 0; pointer-events: none; font: 700 12px var(--font-num); letter-spacing: .06em; color: #e4ebe4; text-shadow: 0 0 2px #000, 0 0 1px #000, 0 1px 3px rgba(0,0,0,.8); }
 #gsHud .gs-view { display: none; position: absolute; inset: 0; }
@@ -259,7 +260,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
       <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
-      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 on the B-52); it lands on the dashed amber marker. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28</dd>
+      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
       <dt>V (AC-130J)</dt><dd>Gunship sensor camera: 1 / 2 pick the 30 mm or 105 mm, Space or click fires, T reloads the 30 mm, scroll zooms, Y switches TV / IR</dd>
@@ -270,7 +271,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>Left pad</dt><dd>Drag down to pull the nose up, sideways to roll</dd>
       <dt>Right slider</dt><dd>Throttle (top 15% is afterburner)</dd>
       <dt>Brake · Gear</dt><dd>Hold to brake; tap to raise or lower the gear</dd>
-      <dt>Gun · Bomb · Nuke</dt><dd>Hold GUN to fire the cannon; tap BOMB to drop one on the magenta marker; with the B61 or B28 loadout, tap its button for the nuke (get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28)</dd>
+      <dt>Gun · Bomb · Nuke</dt><dd>Hold GUN to fire the cannon; tap BOMB to drop one on the magenta marker; with a nuclear loadout (B61, B28 or B41), tap its button for the nuke (get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41)</dd>
       <dt>Bomb cam</dt><dd>Hold BOMB CAM to follow your last bomb down</dd>
     </dl>
     <p style="font-size:13px;color:var(--dim)" id="acTip"></p>
@@ -313,7 +314,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
       <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
-      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 on the B-52); it lands on the dashed amber marker. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28</dd>
+      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
     </dl>
@@ -429,7 +430,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const HORIZON = new THREE.Color('#eccca4');
 scene.fog = new THREE.Fog(HORIZON, 1800, 16000);
-const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 40000);
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 120000); // far enough to see a 44 km mushroom cloud
 
 const SUN_DIR = new THREE.Vector3(0.62, 0.34, 0.71).normalize();
 scene.add(new THREE.HemisphereLight('#bcd2ff', '#6b5a3e', 0.6));
@@ -921,7 +922,11 @@ const BOMBS_MAX = 4, NUKES_MAX = 1, AMMO_MAX = 940;
 const NUKE_KINDS = {
   b61: { name: 'B61', kg: 320, kt: 0.3, size: [1, 1, 1] }, // lowest dial-a-yield setting
   // B28: 4.3 m long, 0.5 m across, about 1,000 kg, 1.45 Mt. Drop it from high up and turn away hard.
-  b28: { name: 'B28', kg: 1050, kt: 1450, size: [1.5, 1.5, 1.2] }
+  b28: { name: 'B28', kg: 1050, kt: 1450, size: [1.5, 1.5, 1.2] },
+  // B41 (Mk-41): the most powerful US weapon ever deployed. 3.76 m long, 1.32 m across, 4,850 kg, 25 Mt (25,000 kt of TNT).
+  // Through nukeScale: 13.2 km blast, 3.2 km fireball, 44 km cloud top. Free fall, so from 30,000 ft keep going straight
+  // at full power after release: the shock catches a 220 m/s B-52 about 13.7 km out, just past the blast.
+  b41: { name: 'B41', kg: 4850, kt: 25000, size: [3.9, 3.9, 1.05] }
 };
 // Sizes from the yield W in kilotons, following the usual scaling laws (Glasstone & Dolan):
 // blast radius grows as W^(1/3) (here the ~5 psi ring that flattens buildings and kills an aircraft),
@@ -1001,7 +1006,7 @@ const AC = {
     gLimit: 2.0, effV: 95, rates: [0.25, 0.1, 0.35], stabRoll: 0, tailStrike: 0.15, gear: 3.4, weapons: true, gearTime: 10, mainRetract: 'in', travel: 0.5,
     ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B52.gltf.json', podEngines: true,
     bombKg: 925, bombCd: 0.0004, bombName: 'MK-84', bombKind: 'heavy',
-    loadouts: [{ id: 'mk84', name: '20 × MK-84', spec: '20 × MK-84 BOMBS' }, { id: 'b28', name: 'B28', nuke: 'b28', spec: 'B28 NUCLEAR · 1.45 MT' }],
+    loadouts: [{ id: 'mk84', name: '20 × MK-84', spec: '20 × MK-84 BOMBS' }, { id: 'b28', name: 'B28', nuke: 'b28', spec: 'B28 NUCLEAR · 1.45 MT' }, { id: 'b41', name: 'B41', nuke: 'b41', spec: 'B41 NUCLEAR · 25 MT' }],
     // 8 on the two wing pylons (2 abreast, 2 deep), then 12 in the bomb bay (2 abreast, 3 high, 2 deep)
     rig: { ab: [], nuke: [0, -0.9, -2.25], nukeInternal: true, bombScale: 1.6, internalFrom: 8, bombs: [
       [-6.17, -0.16, -4.75], [6.17, -0.16, -4.75], [-6.83, -0.16, -4.75], [6.83, -0.16, -4.75],
@@ -1015,9 +1020,9 @@ const AC = {
     fireball: 2.2, crashBlast: [60, 2000],
     sound: { whine: [280, 700, 1.4], roar: [80, 240, 1.6] },
     eyebrow: 'BOEING B-52H STRATOFORTRESS · HEAVY BOMBER',
-    desc: 'Fly a B-52 from the island airbase 15 km south of the city. It is huge and slow to answer, with eight engines. Pick twenty 2,000 lb Mk-84s, eight under the wings and twelve in the bomb bay, each blowing a crater out of whatever it lands on, or a single B28 nuclear bomb in the bay.',
+    desc: 'Fly a B-52 from the island airbase 15 km south of the city. It is huge and slow to answer, with eight engines. Pick twenty 2,000 lb Mk-84s, eight under the wings and twelve in the bomb bay, each blowing a crater out of whatever it lands on, or a single nuclear bomb in the bay: the 1.45 Mt B28, or the 25 Mt B41, the most powerful bomb the US ever deployed.',
     specs: ['ROTATE 160 KT', 'APPROACH 155 KT', '2 G LIMIT', '8 × TF33 ENGINES', 'STORES', 'RWY 36 · 13,100 FT'],
-    tip: 'Start airborne puts you at 30,000 ft over the sea, cruising toward the city. Takeoff: full throttle and a long roll; the B-52 lifts off almost level at about 160 kt with a gentle pull. Drop bombs from at least 1,500 ft, wing bombs first, then the bay. Lower the gear and land at about 155 kt.'
+    tip: 'Start airborne puts you at 30,000 ft over the sea, cruising toward the city. With the B41, keep flying straight at full power after release: you clear its 13 km blast by about half a kilometre. Takeoff: full throttle and a long roll; the B-52 lifts off almost level at about 160 kt with a gentle pull. Drop bombs from at least 1,500 ft, wing bombs first, then the bay. Lower the gear and land at about 155 kt.'
   },
   b757: {
     id: 'b757', mass: 80000, wing: 185, thrust: 380000, thrustAB: 0,
@@ -2832,7 +2837,7 @@ document.addEventListener('mousemove', e => {
   gunshipSlew(e.movementX * k, (invertPitch ? -1 : 1) * e.movementY * k);
 });
 
-// ---------------- bombs: Mk-82, Mk-84, B61 and B28 ----------------
+// ---------------- bombs: Mk-82, Mk-84, B61, B28 and B41 ----------------
 const bombsFlying = [];
 const BOMB_DRAG = 0.015, NOSE = new THREE.Vector3(0, 0, -1);
 let lastImpact = null; // { p, t, nuke, s } for the bomb camera
@@ -2863,7 +2868,7 @@ function dropNuke() {
   if (!running || paused || S.crashed || !A.weapons) return;
   if (!parts.nuke) {
     const l = (A.loadouts || []).find(l => l.nuke);
-    toast(l ? 'Pick the ' + l.name + ' loadout on the pause screen to carry it' : 'Only the F-15 (B61) and B-52 (B28) carry a nuclear bomb');
+    toast(l ? 'Pick the ' + l.name + ' loadout on the pause screen to carry it' : 'Only the F-15 (B61) and B-52 (B28 or B41) carry a nuclear bomb');
     return;
   }
   const nk = parts.nuke.userData.nk;
