@@ -704,11 +704,11 @@ function wallNormal(i, p, out) {
 // Each aircraft has its own model and numbers. Physics, cameras, crash size and sound all read from A.
 const BOMBS_MAX = 4, NUKES_MAX = 1, AMMO_MAX = 940;
 // Nuclear bombs: kt is the yield, and every size of the blast follows from it (see nukeScale).
-// Both are laydown bombs slowed by a parachute to chuteV.
+// Both fall free like the iron bombs: no parachute.
 const NUKE_KINDS = {
-  b61: { name: 'B61', kg: 320, kt: 0.3, chuteV: 42, size: [1, 1, 1] }, // lowest dial-a-yield setting
-  // B28FI: 4.3 m long, 0.5 m across, about 1,000 kg, 1.45 Mt. Its big laydown chute gives a slow B-52 time to run.
-  b28: { name: 'B28', kg: 1050, kt: 1450, chuteV: 15, size: [1.5, 1.5, 1.2] }
+  b61: { name: 'B61', kg: 320, kt: 0.3, size: [1, 1, 1] }, // lowest dial-a-yield setting
+  // B28: 4.3 m long, 0.5 m across, about 1,000 kg, 1.45 Mt. Drop it from high up and turn away hard.
+  b28: { name: 'B28', kg: 1050, kt: 1450, size: [1.5, 1.5, 1.2] }
 };
 // Sizes from the yield W in kilotons, following the usual scaling laws (Glasstone & Dolan):
 // blast radius grows as W^(1/3) (here the ~5 psi ring that flattens buildings and kills an aircraft),
@@ -2335,11 +2335,6 @@ function updateBullets(dt) {
 // ---------------- bombs: Mk-82, Mk-84, B61 and B28 ----------------
 const bombsFlying = [];
 const BOMB_DRAG = 0.015, NOSE = new THREE.Vector3(0, 0, -1);
-// The B61 and B28 are laydown bombs: a parachute opens after ~1 s and slows them to their chuteV
-// (42 m/s for the B61, 25 m/s for the B28), which gives the aircraft time to get clear before they go off.
-const CHUTE_DELAY = 1.2, chuteC = nk => 9.81 / (nk.chuteV * nk.chuteV); // gravity / terminal speed²
-const CHUTE_GEO = new THREE.SphereGeometry(3.5, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2);
-const CHUTE_MAT = new THREE.MeshStandardMaterial({ color: '#e9e2cf', roughness: 0.9, side: THREE.DoubleSide });
 let lastImpact = null; // { p, t, nuke, s } for the bomb camera
 const clockNow = () => performance.now() / 1000;
 
@@ -2354,7 +2349,7 @@ function releaseStore(src, kind) {
   src.getWorldQuaternion(obj.quaternion);
   scene.add(obj);
   axes(S.quat);
-  bombsFlying.push({ obj, kind, nk: src.userData.nk, t: 0, chute: null, v: S.vel.clone().addScaledVector(U, -4) }); // ejector rack kicks it clear
+  bombsFlying.push({ obj, kind, nk: src.userData.nk, t: 0, v: S.vel.clone().addScaledVector(U, -4) }); // ejector rack kicks it clear
 }
 function dropBomb() {
   if (!running || paused || S.crashed || S.bombs <= 0) return;
@@ -2376,18 +2371,15 @@ function dropNuke() {
   if (S.onGround) { toast('Bombs release only in the air'); return; }
   releaseStore(parts.nuke, 'nuke');
   S.nukes--;
-  toast(nk.name + ' away. Parachute in 1 s. Get at least ' + (nukeScale(nk.kt).killR / 1000).toFixed(1) + ' km clear.');
+  toast(nk.name + ' away, falling free. Turn away and get at least ' + (nukeScale(nk.kt).killR / 1000).toFixed(1) + ' km clear.');
 }
 function updateBombs(dt) {
   for (let b = bombsFlying.length - 1; b >= 0; b--) {
     const B = bombsFlying[b], o = B.obj, v = B.v;
     B.t += dt;
     v.y -= G * dt;
-    if (B.kind === 'nuke' && B.t > CHUTE_DELAY) {
-      if (!B.chute) { B.chute = new THREE.Mesh(CHUTE_GEO, CHUTE_MAT); B.chute.position.set(0, 0, 5); o.add(B.chute); }
-      v.multiplyScalar(1 / (1 + chuteC(B.nk) * v.length() * dt)); // quadratic drag of the canopy
-    } else v.multiplyScalar(Math.exp(-BOMB_DRAG * dt));
-    // fins (or the chute) swing the tail into the airflow
+    v.multiplyScalar(Math.exp(-BOMB_DRAG * dt));
+    // the fins swing the tail into the airflow
     o.quaternion.slerp(tQ.setFromUnitVectors(NOSE, tA.copy(v).normalize()), Math.min(1, dt * 2));
     const steps = Math.max(1, Math.ceil(v.length() * dt / 4));
     let hit = null;
@@ -2411,14 +2403,13 @@ function updateBombs(dt) {
     o.position.addScaledVector(v, dt);
   }
 }
-// CCIP: where a bomb released right now would hit (same gravity, drag and parachute as a real drop)
-function ccipPoint(out, nk = null) {
+// CCIP: where a bomb released right now would hit (same gravity and drag as a real drop)
+function ccipPoint(out) {
   let x = S.pos.x, y = S.pos.y, z = S.pos.z, vx = S.vel.x, vy = S.vel.y, vz = S.vel.z;
-  const dt = 0.1, d = Math.exp(-BOMB_DRAG * dt), C = nk ? chuteC(nk) : 0;
+  const dt = 0.1, d = Math.exp(-BOMB_DRAG * dt);
   for (let i = 0; i < 1500; i++) {
     vy -= G * dt;
-    if (nk && i * dt > CHUTE_DELAY) { const k = 1 / (1 + C * Math.hypot(vx, vy, vz) * dt); vx *= k; vy *= k; vz *= k; }
-    else { vx *= d; vy *= d; vz *= d; }
+    vx *= d; vy *= d; vz *= d;
     x += vx * dt; y += vy * dt; z += vz * dt;
     if (y <= Math.max(0, floorAt(x, z))) return out.set(x, y, z);
   }
@@ -3302,7 +3293,7 @@ function updateHUD() {
   } else el.aimRet.hidden = el.noseRet.hidden = true;
   const ccip = live && S.bombs > 0 && !S.onGround ? ccipPoint(tmp) : null;
   if (ccip) placeReticle(el.ccip, ccip); else el.ccip.hidden = true;
-  const ccipN = live && S.nukes > 0 && !S.onGround ? ccipPoint(tmp, parts.nuke.userData.nk) : null;
+  const ccipN = live && S.nukes > 0 && !S.onGround ? ccipPoint(tmp) : null;
   if (ccipN) placeReticle(el.ccipN, ccipN); else el.ccipN.hidden = true;
   const moving = S.gearDown ? S.gearT < 1 : S.gearT > 0 || S.doorT > 0; // doors count as part of the cycle
   setText(el.gear, moving ? (S.gearDown ? 'GEAR ▼' : 'GEAR ▲') : S.gearT >= 1 ? 'GEAR DN' : 'GEAR UP');
