@@ -79,6 +79,7 @@ h2 { margin: 0; font-size: 30px; text-wrap: balance; }
 .specs { display: flex; gap: 6px; flex-wrap: wrap; }
 .specs span { font-family: var(--font-num); font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--fg); }
 .pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
+.lopick { grid-template-columns: repeat(2, 1fr); }
 .pickb { font: 700 13px var(--font-ui); padding: 10px 8px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--dim); cursor: pointer; }
 .pickb:hover { color: var(--fg); }
 .pickb[aria-pressed="true"] { background: rgba(79,216,234,.14); border-color: rgba(79,216,234,.5); color: var(--cyan); }
@@ -192,6 +193,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <p id="acDesc"></p>
     <div class="specs" id="acSpecs"></div>
     <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="actions">
       <button class="btn primary" id="goRunway">Take off from runway</button>
       <button class="btn" id="goAir">Start airborne</button>
@@ -205,7 +207,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
       <dt>Space</dt><dd>Fire the 20 mm cannon (hold)</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
-      <dt>N</dt><dd>Drop the B61 (F-15); it lands on the dashed amber marker. Get 2.2 km away</dd>
+      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 on the B-52); it lands on the dashed amber marker. Get 2.2 km away from a B61, 3.3 km from a B28</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
       <dt>U</dt><dd>Hide or show the instruments and buttons</dd>
@@ -215,7 +217,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>Left pad</dt><dd>Drag down to pull the nose up, sideways to roll</dd>
       <dt>Right slider</dt><dd>Throttle (top 15% is afterburner)</dd>
       <dt>Brake · Gear</dt><dd>Hold to brake; tap to raise or lower the gear</dd>
-      <dt>Gun · Bomb · B61</dt><dd>Hold GUN to fire the cannon; tap BOMB to drop one on the magenta marker; tap B61 for the nuke (get 2.2 km away)</dd>
+      <dt>Gun · Bomb · Nuke</dt><dd>Hold GUN to fire the cannon; tap BOMB to drop one on the magenta marker; with the B61 or B28 loadout, tap its button for the nuke (get 2.2 km away from a B61, 3.3 km from a B28)</dd>
       <dt>Bomb cam</dt><dd>Hold BOMB CAM to follow your last bomb down</dd>
     </dl>
     <p style="font-size:13px;color:var(--dim)" id="acTip"></p>
@@ -246,6 +248,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <div class="eyebrow">HOLDING</div>
     <h2>Paused</h2>
     <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <dl class="keys key-only">
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
       <dt>A / D, ← / →</dt><dd>Roll; steers on the ground</dd>
@@ -255,7 +258,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
       <dt>Space</dt><dd>Fire the 20 mm cannon (hold)</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
-      <dt>N</dt><dd>Drop the B61 (F-15); it lands on the dashed amber marker. Get 2.2 km away</dd>
+      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 on the B-52); it lands on the dashed amber marker. Get 2.2 km away from a B61, 3.3 km from a B28</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
     </dl>
@@ -687,13 +690,25 @@ function wallNormal(i, p, out) {
 // ---------------- aircraft ----------------
 // Each aircraft has its own model and numbers. Physics, cameras, crash size and sound all read from A.
 const BOMBS_MAX = 4, NUKES_MAX = 1, AMMO_MAX = 940;
+// Nuclear bombs: s scales the fireball, cloud and blast-wave reach; both are laydown bombs slowed by a parachute to chuteV.
+const NUKE_KINDS = {
+  b61: { name: 'B61', kg: 320, s: 1, chuteV: 42, size: [1, 1, 1] },
+  // B28: 4.3 m long, 0.5 m across, about 1,000 kg and far more powerful, so a bigger chute buys a slow B-52 time to run
+  b28: { name: 'B28', kg: 1050, s: 1.5, chuteV: 25, size: [1.5, 1.5, 1.2] }
+};
+// Aircraft with a loadouts list carry either their bombs or one nuclear bomb, picked on the start and pause screens.
+const loadout = { f15: 'mk82', b52: 'mk84' };
+const curLoadout = () => (A.loadouts || []).find(l => l.id === loadout[A.id]) || (A.loadouts || [])[0] || null;
+const nukeKind = () => { const l = curLoadout(); return l && l.nuke ? NUKE_KINDS[l.nuke] : null; };
 const AC = {
   f15: {
     id: 'f15', mass: 20000, wing: 56.5, thrust: 130000, thrustAB: 210000,
     CL0: 0.175, CLA: 3.5, stallA: 0.45, cd0: 0.022, k: 0.12, wave: [0.85, 1.05, 0.03],
     gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'fwd', travel: 0.3,
-    ammo: 940, nukes: 1, muzzle: [1.6, 0.8, 3.0], stabSign: 1, model: 'F-15C.gltf.json',
-    rig: { ab: [[-0.74, 0.02, 9.5], [0.74, 0.02, 9.5]], bombs: [[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2]], nuke: [0, -1.10, -0.885] },
+    ammo: 940, muzzle: [1.6, 0.8, 3.0], stabSign: 1, model: 'F-15C.gltf.json',
+    loadouts: [{ id: 'mk82', name: '6 × MK-82', spec: '6 × MK-82' }, { id: 'b61', name: 'B61', nuke: 'b61', spec: 'B61 NUCLEAR BOMB' }],
+    // four under the wings, then two in tandem on the centerline
+    rig: { ab: [[-0.74, 0.02, 9.5], [0.74, 0.02, 9.5]], bombs: [[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2], [0, -1.10, -2.3], [0, -1.10, 0.5]], nuke: [0, -1.10, -0.885] },
     box: new THREE.Box3(new THREE.Vector3(-6.6, -0.75, -10.1), new THREE.Vector3(6.6, 3.8, 9.8)), slideI: 60,
     // nose, wingtips, tail, fin, belly (forward, right, up): touching a building with any of these is a crash
     hitPts: [[9.8, 0, 0], [0, 6.5, 0], [0, -6.5, 0], [-9.5, 0, 0], [-8, 0, 3.6], [0, 0, -0.8]],
@@ -701,7 +716,7 @@ const AC = {
     sound: { whine: [600, 1400, 1], roar: [160, 450, 1] },
     eyebrow: 'F-15C EAGLE · TWIN-ENGINE FIGHTER',
     desc: 'Fly an F-15 from an island airbase 9 km south of the city, then head north over the water to the downtown towers, the river, the suburbs and the hills. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked, piece by piece, and the damage stays until you choose Rebuild city on the pause screen.',
-    specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', '4 × MK-82', 'B61 NUCLEAR BOMB', 'RWY 36 · 13,100 FT'],
+    specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', 'STORES', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back at 150 kt, then raise the gear. With the stick centered the jet holds level flight; the throttle sets your speed. Lower the gear before landing.'
   },
   typhoon: {
@@ -710,7 +725,7 @@ const AC = {
     CL0: 0.15, CLA: 3.2, stallA: 0.5, cd0: 0.02, k: 0.14, wave: [0.9, 1.1, 0.025],
     gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'in', travel: 0.3,
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
-    ammo: 150, nukes: 0, muzzle: [0.75, -0.25, 2.0], stabSign: -1, model: 'Typhoon.gltf.json',
+    ammo: 150, muzzle: [0.75, -0.25, 2.0], stabSign: -1, model: 'Typhoon.gltf.json',
     rig: { ab: [[-0.5, -0.16, 7.98], [0.5, -0.16, 7.98]], bombs: [[-3.9, -0.98, 2.62], [3.9, -0.98, 2.62], [-2.7, -0.98, 2.62], [2.7, -0.98, 2.62]], nuke: null },
     box: new THREE.Box3(new THREE.Vector3(-5.5, -1.25, -8.0), new THREE.Vector3(5.5, 3.35, 8.0)), slideI: 45,
     hitPts: [[7.98, 0, -0.1], [-7.98, 0, -0.16], [-5.4, 5.47, -0.46], [-5.4, -5.47, -0.46], [-6.2, 0, 3.33], [1.2, 2.15, -0.12], [1.2, -2.15, -0.12], [0, 0, -1.1]],
@@ -722,14 +737,15 @@ const AC = {
     tip: 'Takeoff: full throttle, pull back at about 155 kt, then raise the gear. Watch the canards: they tilt nose-up to pitch up. Lower the gear and land at about 145 kt.'
   },
   b52: {
-    // Boeing B-52H: ~140 t plus 40 t of bombs, 370 m² wing, eight TF33s (~76 kN each)
+    // Boeing B-52H: ~140 t plus up to 18 t of bombs, 370 m² wing, eight TF33s (~76 kN each)
     id: 'b52', mass: 140000, wing: 370, thrust: 608000, thrustAB: 0,
     CL0: 0.4, CLA: 5.0, stallA: 0.22, cd0: 0.022, k: 0.05, wave: [0.78, 0.92, 0.08],
     gLimit: 2.0, effV: 95, rates: [0.25, 0.1, 0.35], stabRoll: 0, tailStrike: 0.15, gear: 3.4, weapons: true, gearTime: 10, mainRetract: 'in', travel: 0.5,
-    ammo: 0, nukes: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B52.gltf.json', podEngines: true,
-    bombKg: 2000, bombCd: 0.0004, bombName: '2000 KG', bombKind: 'heavy',
+    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B52.gltf.json', podEngines: true,
+    bombKg: 925, bombCd: 0.0004, bombName: 'MK-84', bombKind: 'heavy',
+    loadouts: [{ id: 'mk84', name: '20 × MK-84', spec: '20 × MK-84 BOMBS' }, { id: 'b28', name: 'B28', nuke: 'b28', spec: 'B28 NUCLEAR BOMB' }],
     // 8 on the two wing pylons (2 abreast, 2 deep), then 12 in the bomb bay (2 abreast, 3 high, 2 deep)
-    rig: { ab: [], nuke: null, bombScale: 1.6, internalFrom: 8, bombs: [
+    rig: { ab: [], nuke: [0, -0.9, -2.25], nukeInternal: true, bombScale: 1.6, internalFrom: 8, bombs: [
       [-6.17, -0.16, -4.75], [6.17, -0.16, -4.75], [-6.83, -0.16, -4.75], [6.83, -0.16, -4.75],
       [-6.17, -0.16, -0.75], [6.17, -0.16, -0.75], [-6.83, -0.16, -0.75], [6.83, -0.16, -0.75],
       [-0.42, -1.4, -4.75], [0.42, -1.4, -4.75], [-0.42, -1.4, 0.25], [0.42, -1.4, 0.25],
@@ -740,15 +756,15 @@ const AC = {
     chase: [16, 115, 95], eye: [1.25, 19.6], scale: 2.6, shadow: 42, airStart: [150, 0.6], fireball: 2.2, crashBlast: [60, 2000],
     sound: { whine: [280, 700, 1.4], roar: [80, 240, 1.6] },
     eyebrow: 'BOEING B-52H STRATOFORTRESS · HEAVY BOMBER',
-    desc: 'Fly a B-52 from the island airbase 9 km south of the city. It is huge and slow to answer, with eight engines and twenty 2,000 kg bombs: eight under the wings and twelve in the bomb bay. Each one blows a crater out of whatever it lands on.',
-    specs: ['ROTATE 160 KT', 'APPROACH 155 KT', '2 G LIMIT', '8 × TF33 ENGINES', '20 × 2,000 KG BOMBS', 'RWY 36 · 13,100 FT'],
+    desc: 'Fly a B-52 from the island airbase 9 km south of the city. It is huge and slow to answer, with eight engines. Pick twenty 2,000 lb Mk-84s, eight under the wings and twelve in the bomb bay, each blowing a crater out of whatever it lands on, or a single B28 nuclear bomb in the bay.',
+    specs: ['ROTATE 160 KT', 'APPROACH 155 KT', '2 G LIMIT', '8 × TF33 ENGINES', 'STORES', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle and a long roll; the B-52 lifts off almost level at about 160 kt with a gentle pull. Drop bombs from at least 1,500 ft, wing bombs first, then the bay. Lower the gear and land at about 155 kt.'
   },
   b757: {
     id: 'b757', mass: 80000, wing: 185, thrust: 380000, thrustAB: 0,
     CL0: 0.35, CLA: 5.0, stallA: 0.28, cd0: 0.022, k: 0.045, wave: [0.78, 0.95, 0.08],
     gLimit: 2.5, effV: 85, rates: [0.35, 0.15, 0.6], stabRoll: 0, tailStrike: 0.2, gear: 4.4, weapons: false, gearTime: 8, mainRetract: 'in', travel: 0.45,
-    ammo: 0, nukes: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B757.gltf.json', podEngines: true, rig: { ab: [], bombs: [], nuke: null },
+    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B757.gltf.json', podEngines: true, rig: { ab: [], bombs: [], nuke: null },
     box: new THREE.Box3(new THREE.Vector3(-19, -3.95, -23.65), new THREE.Vector3(19, 9.2, 23.65)), slideI: 420,
     hitPts: [[23.65, 0, -0.35], [-23.65, 0, 1.0], [-3.4, 19, 0.55], [-3.4, -19, 0.55], [-21.9, 0, 9.2], [-21.0, 7.6, 1.42], [-21.0, -7.6, 1.42], [0, 0, -1.9], [7.15, 6.5, -3.9], [7.15, -6.5, -3.9]],
     chase: [13, 85, 70], eye: [0.9, 19.7], scale: 2.3, shadow: 34, airStart: [125, 0.5], fireball: 1.8, crashBlast: [50, 1600],
@@ -813,7 +829,15 @@ function makeNuke() {
 }
 function addNuke(x, y, z) {
   if (!nukeTemplate) nukeTemplate = makeNuke();
-  const b = nukeTemplate.clone(); b.position.set(x, y, z); plane.add(b); parts.nuke = b;
+  const nk = nukeKind();
+  const b = nukeTemplate.clone(); b.position.set(x, y, z); b.scale.set(...nk.size);
+  b.userData.kind = 'nuke'; b.userData.nk = nk; b.userData.internal = !!A.rig.nukeInternal;
+  plane.add(b); parts.nuke = b;
+}
+// the picked loadout: the bombs, or the one nuclear bomb
+function addStores(bombs, scale, internalFrom) {
+  if (nukeKind()) addNuke(...A.rig.nuke);
+  else addBombs(bombs, scale, internalFrom);
 }
 // positions are listed in release order, alternating sides to keep the jet balanced
 function addBombs(positions, scale = 1, internalFrom = Infinity) {
@@ -851,8 +875,7 @@ function buildF15() {
   const sb = new THREE.Group(); sb.position.set(0, 1.03, -0.8); plane.add(sb);
   add(new THREE.BoxGeometry(1.3, 0.06, 2.6), greyD, 0, 0, 1.3, sb);
   parts.spoilers.push(sb);
-  addBombs([[-3.64, -0.72, 1.5], [3.64, -0.72, 1.5], [-2.96, -0.72, 1.5], [2.96, -0.72, 1.5]]);
-  addNuke(0, -1.08, 1.0);
+  addStores([[-3.64, -0.72, 1.5], [3.64, -0.72, 1.5], [-2.96, -0.72, 1.5], [2.96, -0.72, 1.5], [0, -1.08, -0.8], [0, -1.08, 2.0]]);
   const gear = new THREE.Group(); plane.add(gear);
   const wheel = r => { const g = new THREE.CylinderGeometry(r, r, 0.26, 14); g.rotateZ(Math.PI / 2); return g; };
   for (const [x, z, r] of [[0, -6.3, 0.35], [-1.5, 1.6, 0.45], [1.5, 1.6, 0.45]]) {
@@ -899,8 +922,7 @@ function buildFromGltf(model) {
   parts.gear = gear;
   const r = A.rig;
   r.ab.forEach(([x, y, z], i) => addAfterburner(i ? 'abR' : 'abL', x, y, z));
-  addBombs(r.bombs, r.bombScale || 1, r.internalFrom);
-  if (r.nuke) addNuke(...r.nuke);
+  addStores(r.bombs, r.bombScale || 1, r.internalFrom);
   buildZones();
 }
 
@@ -937,7 +959,7 @@ function buildB52() {
   add(tube(0.6, 1.2, 48, 16), grey, 0, 0.1, 0);
   for (const sx of [-1, 1]) add(planform([[1.5, -10.25], [28.2, 9.85], [28.2, 13.25], [1.5, 1.25]].map(([x, z]) => [x * sx, z]), 0.5), grey, 0, 1.4, 0);
   add(profile([[12.25, 1.8], [18.25, 9.0], [21.45, 9.0], [21.25, 1.8]], 0.4), grey, 0, 0, 0);
-  addBombs(A.rig.bombs, A.rig.bombScale, A.rig.internalFrom);
+  addStores(A.rig.bombs, A.rig.bombScale, A.rig.internalFrom);
   const gear = new THREE.Group(); plane.add(gear);
   const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.3, 14); g.rotateZ(Math.PI / 2); return g; };
   for (const z of [-10.75, 3.25]) for (const x of [-0.9, 0.9]) { add(wheel(0.55), dark, x, -GEAR + 0.55, z, gear); add(new THREE.BoxGeometry(0.2, GEAR - 2.3, 0.2), metal, x, -(GEAR + 0.6) / 2, z, gear); }
@@ -2049,15 +2071,15 @@ function updateBullets(dt) {
   trGeo.attributes.position.needsUpdate = trGeo.attributes.color.needsUpdate = true;
 }
 
-// ---------------- bombs: Mk-82 and B61 ----------------
+// ---------------- bombs: Mk-82, Mk-84, B61 and B28 ----------------
 const bombsFlying = [];
 const BOMB_DRAG = 0.015, NOSE = new THREE.Vector3(0, 0, -1);
-// The B61 is a laydown bomb: a parachute opens after ~1 s and slows it to about 42 m/s,
-// which gives the jet time to get clear before it goes off.
-const CHUTE_DELAY = 1.2, CHUTE_C = 9.81 / (42 * 42); // gravity / terminal speed²
+// The B61 and B28 are laydown bombs: a parachute opens after ~1 s and slows them to their chuteV
+// (42 m/s for the B61, 25 m/s for the B28), which gives the aircraft time to get clear before they go off.
+const CHUTE_DELAY = 1.2, chuteC = nk => 9.81 / (nk.chuteV * nk.chuteV); // gravity / terminal speed²
 const CHUTE_GEO = new THREE.SphereGeometry(3.5, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2);
 const CHUTE_MAT = new THREE.MeshStandardMaterial({ color: '#e9e2cf', roughness: 0.9, side: THREE.DoubleSide });
-let lastImpact = null; // { p, t, nuke } for the bomb camera
+let lastImpact = null; // { p, t, nuke, s } for the bomb camera
 const clockNow = () => performance.now() / 1000;
 
 function releaseStore(src, kind) {
@@ -2071,7 +2093,7 @@ function releaseStore(src, kind) {
   src.getWorldQuaternion(obj.quaternion);
   scene.add(obj);
   axes(S.quat);
-  bombsFlying.push({ obj, kind, t: 0, chute: null, v: S.vel.clone().addScaledVector(U, -4) }); // ejector rack kicks it clear
+  bombsFlying.push({ obj, kind, nk: src.userData.nk, t: 0, chute: null, v: S.vel.clone().addScaledVector(U, -4) }); // ejector rack kicks it clear
 }
 function dropBomb() {
   if (!running || paused || S.crashed || S.bombs <= 0) return;
@@ -2083,12 +2105,17 @@ function dropBomb() {
 }
 function dropNuke() {
   if (!running || paused || S.crashed || !A.weapons) return;
-  if (!A.nukes) { toast('Only the F-15 carries the B61'); return; }
-  if (S.nukes <= 0) { toast('The B61 is gone'); return; }
+  if (!parts.nuke) {
+    const l = (A.loadouts || []).find(l => l.nuke);
+    toast(l ? 'Pick the ' + l.name + ' loadout on the pause screen to carry it' : 'Only the F-15 (B61) and B-52 (B28) carry a nuclear bomb');
+    return;
+  }
+  const nk = parts.nuke.userData.nk;
+  if (S.nukes <= 0) { toast('The ' + nk.name + ' is gone'); return; }
   if (S.onGround) { toast('Bombs release only in the air'); return; }
   releaseStore(parts.nuke, 'nuke');
   S.nukes--;
-  toast('B61 away. Parachute in 1 s. Get at least 2.2 km clear.');
+  toast(nk.name + ' away. Parachute in 1 s. Get at least ' + (NUKE.KILL_R * nk.s / 1000).toFixed(1) + ' km clear.');
 }
 function updateBombs(dt) {
   for (let b = bombsFlying.length - 1; b >= 0; b--) {
@@ -2097,7 +2124,7 @@ function updateBombs(dt) {
     v.y -= G * dt;
     if (B.kind === 'nuke' && B.t > CHUTE_DELAY) {
       if (!B.chute) { B.chute = new THREE.Mesh(CHUTE_GEO, CHUTE_MAT); B.chute.position.set(0, 0, 5); o.add(B.chute); }
-      v.multiplyScalar(1 / (1 + CHUTE_C * v.length() * dt)); // quadratic drag of the canopy
+      v.multiplyScalar(1 / (1 + chuteC(B.nk) * v.length() * dt)); // quadratic drag of the canopy
     } else v.multiplyScalar(Math.exp(-BOMB_DRAG * dt));
     // fins (or the chute) swing the tail into the airflow
     o.quaternion.slerp(tQ.setFromUnitVectors(NOSE, tA.copy(v).normalize()), Math.min(1, dt * 2));
@@ -2114,8 +2141,8 @@ function updateBombs(dt) {
       const p = tC.clone();
       scene.remove(o);
       bombsFlying.splice(b, 1);
-      if (B.kind === 'nuke') { detonateNuke(p, hit === 'water'); continue; }
-      if (B.kind === 'heavy') { explode(p, 2.2, hit === 'water'); blast(p, hit === 'water' ? 40 : 75, 2800); } // 2,000 kg
+      if (B.kind === 'nuke') { detonateNuke(p, hit === 'water', B.nk); continue; }
+      if (B.kind === 'heavy') { explode(p, 2.2, hit === 'water'); blast(p, hit === 'water' ? 40 : 75, 2800); } // Mk-84, 2,000 lb
       else { explode(p, 1.3, hit === 'water'); blast(p, hit === 'water' ? 25 : 45, 1300); }
       lastImpact = { p, t: clockNow(), nuke: false };
       continue;
@@ -2124,12 +2151,12 @@ function updateBombs(dt) {
   }
 }
 // CCIP: where a bomb released right now would hit (same gravity, drag and parachute as a real drop)
-function ccipPoint(out, kind = 'mk82') {
+function ccipPoint(out, nk = null) {
   let x = S.pos.x, y = S.pos.y, z = S.pos.z, vx = S.vel.x, vy = S.vel.y, vz = S.vel.z;
-  const dt = 0.1, d = Math.exp(-BOMB_DRAG * dt);
+  const dt = 0.1, d = Math.exp(-BOMB_DRAG * dt), C = nk ? chuteC(nk) : 0;
   for (let i = 0; i < 1500; i++) {
     vy -= G * dt;
-    if (kind === 'nuke' && i * dt > CHUTE_DELAY) { const k = 1 / (1 + CHUTE_C * Math.hypot(vx, vy, vz) * dt); vx *= k; vy *= k; vz *= k; }
+    if (nk && i * dt > CHUTE_DELAY) { const k = 1 / (1 + C * Math.hypot(vx, vy, vz) * dt); vx *= k; vy *= k; vz *= k; }
     else { vx *= d; vy *= d; vz *= d; }
     x += vx * dt; y += vy * dt; z += vz * dt;
     if (y <= Math.max(0, floorAt(x, z))) return out.set(x, y, z);
@@ -2153,9 +2180,10 @@ function updateWeapons(dt) {
   updateBombs(dt);
 }
 
-// ---------------- B61 detonation ----------------
+// ---------------- nuclear detonation ----------------
 // A white flash, a fireball that swells to ~300 m and rises, a mushroom cloud that climbs to ~2.5 km,
 // and a blast wave that runs out across the ground at 420 m/s, flattening buildings as it reaches them.
+// Sizes and reach are for the B61; the B28 multiplies them by its s.
 const NUKE = { list: [], KILL_R: 2200, SHOCK_V: 420, PUFFS: 170 };
 const nukeLight = new THREE.PointLight('#ffd9a0', 0, 40000, 1);
 scene.add(nukeLight);
@@ -2163,14 +2191,14 @@ const PUFF_GEO = new THREE.IcosahedronGeometry(1, 1);
 const flashEl = document.getElementById('flash');
 const cT = new THREE.Color(), nM = new THREE.Matrix4(), nQ = new THREE.Quaternion(), nP = new THREE.Vector3(), nS = new THREE.Vector3();
 
-function detonateNuke(p, wet) {
-  const gy = Math.max(0, heightAt(p.x, p.z));
-  const fx = { p: p.clone(), gy, t: 0, idx: 0, near: [], hitPlane: false, camHit: false };
+function detonateNuke(p, wet, nk = NUKE_KINDS.b61) {
+  const gy = Math.max(0, heightAt(p.x, p.z)), sc = nk.s;
+  const fx = { p: p.clone(), gy, sc, killR: NUKE.KILL_R * sc, t: 0, idx: 0, near: [], hitPlane: false, camHit: false };
   // buildings in reach, nearest first, so the blast wave can knock them down in order
   for (let i = 0; i < NB; i++) {
     if (bState[i] !== 0) continue;
     const k = i * 5, d = Math.hypot(clamp(p.x, BLD[k], BLD[k + 2]) - p.x, clamp(p.z, BLD[k + 1], BLD[k + 3]) - p.z);
-    if (d < NUKE.KILL_R) fx.near.push([d, i]);
+    if (d < fx.killR) fx.near.push([d, i]);
   }
   fx.near.sort((a, b) => a[0] - b[0]);
   fx.ball = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), new THREE.MeshBasicMaterial({ color: '#fff7dc', transparent: true, fog: false }));
@@ -2194,22 +2222,22 @@ function detonateNuke(p, wet) {
   nukeLight.intensity = 45;
   const dist = camera.position.distanceTo(p);
   flashEl.style.transition = 'none';
-  flashEl.style.opacity = String(clamp(1.2 - dist / 25000, 0.25, 1));
+  flashEl.style.opacity = String(clamp(1.2 - dist / (25000 * sc), 0.25, 1));
   void flashEl.offsetWidth;
   flashEl.style.transition = 'opacity 2.6s ease-out';
   flashEl.style.opacity = '0';
   setTimeout(() => nukeBoom(dist), dist / 340 * 1000);
-  lastImpact = { p: fx.p, t: clockNow(), nuke: true };
+  lastImpact = { p: fx.p, t: clockNow(), nuke: true, s: sc };
 }
 
 function updateNukes(dt) {
   nukeLight.intensity *= Math.exp(-dt * 1.4);
   const m = nM, q = nQ, pos = nP, scl = nS;
   for (let n = NUKE.list.length - 1; n >= 0; n--) {
-    const fx = NUKE.list[n], p = fx.p, t = (fx.t += dt), gy = fx.gy;
+    const fx = NUKE.list[n], p = fx.p, t = (fx.t += dt), gy = fx.gy, sc = fx.sc;
     // fireball: swells, rises, cools from white through orange to dull red, then fades into the cloud
-    const capY = gy + Math.min(2400, 280 * Math.pow(t, 0.72));
-    const r = 300 * (1 - Math.exp(-t * 1.4));
+    const capY = gy + Math.min(2400 * sc, 280 * sc * Math.pow(t, 0.72));
+    const r = 300 * sc * (1 - Math.exp(-t * 1.4));
     fx.ball.scale.setScalar(r);
     fx.ball.position.set(p.x, Math.max(gy + r * 0.7, capY - r * 0.3), p.z);
     const c = fx.ball.material.color;
@@ -2217,11 +2245,11 @@ function updateNukes(dt) {
     fx.ball.material.opacity = clamp(1 - (t - 5) / 7, 0, 1);
     fx.ball.visible = t < 12;
     // mushroom cloud: cap ring, crown, stem and the dust skirt at the base
-    const Rc = Math.min(1150, 120 + 200 * Math.pow(t, 0.68));
+    const Rc = Math.min(1150 * sc, (120 + 200 * Math.pow(t, 0.68)) * sc);
     const mat = fx.cloud.material;
     mat.emissiveIntensity = Math.max(0, 1.6 - t * 0.09);
     mat.opacity = t > 80 ? clamp(1 - (t - 80) / 25, 0, 1) : Math.min(1, t / 1.2);
-    const grow = Math.min(1, t / 6), skirt = Math.min(2300, 100 * Math.pow(t, 0.9));
+    const grow = Math.min(1, t / 6), skirt = Math.min(2300 * sc, 100 * sc * Math.pow(t, 0.9));
     for (let i = 0; i < NUKE.PUFFS; i++) {
       const [a, b, s] = fx.seed[i];
       let ang, rad, y, size;
@@ -2237,22 +2265,22 @@ function updateNukes(dt) {
     // blast wave across the ground
     const R = NUKE.SHOCK_V * t;
     fx.ring.scale.setScalar(Math.max(1, R));
-    fx.ring.material.opacity = 0.6 * clamp(1 - t / 9, 0, 1);
-    fx.ring.visible = t < 9;
-    if (t < 7) for (let k = burst(60, dt); k > 0; k--) {
+    fx.ring.material.opacity = 0.6 * clamp(1 - t / (9 * sc), 0, 1);
+    fx.ring.visible = t < 9 * sc;
+    if (t < 7 * sc) for (let k = burst(60, dt); k > 0; k--) {
       const a = Math.random() * Math.PI * 2;
       emit('dust', tC.set(p.x + Math.cos(a) * R, gy + 4, p.z + Math.sin(a) * R), Math.cos(a) * 30, rr([4, 14]), Math.sin(a) * 30, 6);
     }
     while (fx.idx < fx.near.length && fx.near[fx.idx][0] <= R) {
       const [d, i] = fx.near[fx.idx++];
-      damageBuilding(i, 22000 * Math.pow(1 - d / NUKE.KILL_R, 1.2) + 150, true);
+      damageBuilding(i, 22000 * Math.pow(1 - d / fx.killR, 1.2) + 150, true);
     }
     if (!fx.hitPlane && running && !S.crashed && S.pos.distanceTo(p) <= R) {
       fx.hitPlane = true;
       const dp = S.pos.distanceTo(p);
-      if (dp < NUKE.KILL_R) {
+      if (dp < fx.killR) {
         S.hitBuilding = -1;
-        crash(`The blast wave caught you ${(dp / 1000).toFixed(1)} km from ground zero. Drop from higher and run: get at least ${NUKE.KILL_R / 1000} km away.`);
+        crash(`The blast wave caught you ${(dp / 1000).toFixed(1)} km from ground zero. Drop from higher and run: get at least ${(fx.killR / 1000).toFixed(1)} km away.`);
       } else {
         S.ang.x += (Math.random() - 0.5) * 1.2; S.ang.z += (Math.random() - 0.5) * 2.5;
         toast('Blast wave passed');
@@ -2260,7 +2288,7 @@ function updateNukes(dt) {
     }
     if (!fx.camHit && camera.position.distanceTo(p) <= R) {
       fx.camHit = true;
-      W.shake = Math.max(W.shake, 5 * clamp(1 - camera.position.distanceTo(p) / 9000, 0.25, 1));
+      W.shake = Math.max(W.shake, 5 * clamp(1 - camera.position.distanceTo(p) / (9000 * sc), 0.25, 1));
     }
     if (t > 110) {
       for (const o of [fx.ball, fx.cloud, fx.ring]) { scene.remove(o); o.geometry !== PUFF_GEO && o.geometry.dispose(); o.material.dispose(); }
@@ -2338,7 +2366,7 @@ function reset(mode) {
   S.stumps = [];
   updateDamage();
   Object.assign(S, { crashed: false, time: 0, maxAlt: 0, maxSpd: 0, brake: false, hitBuilding: -1,
-    ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: A.nukes || 0, firing: false });
+    ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: parts.nuke ? 1 : 0, firing: false });
   clearWeapons();
   S.ang.set(0, 0, 0);
   inp.pitch = inp.roll = inp.yaw = 0;
@@ -2410,7 +2438,7 @@ function physics(dt) {
   S.alpha = alpha; S.V = V; S.rho = rho; S.mach = mach;
   const qS = 0.5 * rho * V * V * A.wing;
   const CL = liftCoef(alpha);
-  const MASS = A.mass + S.bombs * (A.bombKg || 230) + S.nukes * 320; // Mk-82 about 230 kg, B61 about 320 kg
+  const MASS = A.mass + S.bombs * (A.bombKg || 230) + (S.nukes ? parts.nuke.userData.nk.kg : 0); // Mk-82 about 230 kg
 
   const t = S.throttle;
   const thrust = (!A.thrustAB ? t * A.thrust // no afterburner: full throttle is takeoff thrust
@@ -2672,11 +2700,34 @@ function updateAircraftUI() {
   $('#acTip').textContent = A.tip;
   const specs = $('#acSpecs');
   specs.textContent = '';
-  for (const s of A.specs) { const e = document.createElement('span'); e.textContent = s; specs.appendChild(e); }
-  document.querySelectorAll('.pickb').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ac === A.id)));
+  const lo = curLoadout();
+  for (const s of A.specs) { const e = document.createElement('span'); e.textContent = s === 'STORES' ? lo.spec : s; specs.appendChild(e); }
+  document.querySelectorAll('.pickb[data-ac]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ac === A.id)));
+  document.querySelectorAll('.lopick').forEach(g => {
+    g.hidden = !A.loadouts;
+    g.textContent = '';
+    for (const l of A.loadouts || []) {
+      const b = document.createElement('button');
+      b.className = 'pickb'; b.textContent = l.name;
+      b.setAttribute('aria-pressed', String(l === lo));
+      b.onclick = () => pickLoadout(l);
+      g.appendChild(b);
+    }
+  });
   $('#wpn').hidden = !A.weapons;
+  $('#tBomb').hidden = !parts.bombs.length;
+  $('#tNuke').hidden = !parts.nuke;
+  if (parts.nuke) $('#tNuke').textContent = $('#ccipN').firstChild.textContent = parts.nuke.userData.nk.name;
 }
-document.querySelectorAll('.pickb').forEach(b => {
+function pickLoadout(l) {
+  if (loadout[A.id] === l.id) return;
+  loadout[A.id] = l.id;
+  setAircraft(A.id);
+  if (running) start(lastMode); // switching from the pause screen restarts the flight
+  else reset('runway');
+  toast(l.name + ' loaded');
+}
+document.querySelectorAll('.pickb[data-ac]').forEach(b => {
   b.onclick = () => {
     if (b.dataset.ac === A.id) return;
     setAircraft(b.dataset.ac);
@@ -2849,7 +2900,7 @@ function updateHUD() {
   setText(el.gun, 'GUN ' + S.ammo);
   el.gun.style.color = S.firing && S.ammo > 0 ? 'var(--amber)' : S.ammo ? '' : 'var(--dim)';
   setText(el.bombs, (A.bombName || 'MK-82') + ' ×' + S.bombs);
-  setText(el.nukes, 'B61 ×' + S.nukes);
+  setText(el.nukes, (parts.nuke ? parts.nuke.userData.nk.name : 'B61') + ' ×' + S.nukes);
   el.nukes.style.color = S.nukes ? 'var(--amber)' : 'var(--dim)';
   el.bombs.style.color = S.bombs ? '' : 'var(--dim)';
   // gun reticle: where rounds fired now will be in 0.6 s; CCIP: where a bomb released now would land
@@ -2861,7 +2912,7 @@ function updateHUD() {
   } else el.gunRet.hidden = true;
   const ccip = live && S.bombs > 0 && !S.onGround ? ccipPoint(tmp) : null;
   if (ccip) placeReticle(el.ccip, ccip); else el.ccip.hidden = true;
-  const ccipN = live && S.nukes > 0 && !S.onGround ? ccipPoint(tmp, 'nuke') : null;
+  const ccipN = live && S.nukes > 0 && !S.onGround ? ccipPoint(tmp, parts.nuke.userData.nk) : null;
   if (ccipN) placeReticle(el.ccipN, ccipN); else el.ccipN.hidden = true;
   const moving = S.gearT > 0 && S.gearT < 1;
   setText(el.gear, moving ? (S.gearDown ? 'GEAR ▼' : 'GEAR ▲') : S.gearT >= 1 ? 'GEAR DN' : 'GEAR UP');
@@ -2881,8 +2932,8 @@ function updateHUD() {
   el.ab.classList.toggle('on', !!A.thrustAB && S.throttle > AB_AT);
   el.ab.hidden = !A.thrustAB;
   el.gun.hidden = !A.weapons || !A.ammo;
-  el.bombs.hidden = !A.weapons;
-  el.nukes.hidden = !A.nukes;
+  el.bombs.hidden = !A.weapons || !!parts.nuke;
+  el.nukes.hidden = !parts.nuke;
   setText(el.alt, Math.round(ft / 10) * 10 + '');
   setText(el.vs, (fpm >= 0 ? '+' : '−') + String(Math.round(Math.abs(fpm) / 10) * 10).padStart(4, '0'));
   setText(el.aoa, (S.alpha * 180 / Math.PI).toFixed(1) + '°');
@@ -2922,11 +2973,12 @@ function updateCamera(dt, now) {
     const blast = !bc.obj;
     if (!blast) bombCam.mode = 'bomb';
     else if (bombCam.mode !== 'blast') { bombCam.mode = 'blast'; bombCam.ang = Math.atan2(camera.position.x - bc.p.x, camera.position.z - bc.p.z); }
-    if (blast) tmp2.set(bc.p.x, bc.p.y + (bc.nuke ? 1200 : 10), bc.p.z);
+    const ns = bc.s || 1; // nuclear yield scale
+    if (blast) tmp2.set(bc.p.x, bc.p.y + (bc.nuke ? 1200 * ns : 10), bc.p.z);
     else tmp2.copy(bc.obj.position);
     if (look.active) {
       // free look: drag with the right mouse to orbit the bomb or the blast, scroll to zoom
-      const lo = blast ? 20 : 8, hi = blast ? (bc.nuke ? 20000 : 2000) : 500;
+      const lo = blast ? 20 : 8, hi = blast ? (bc.nuke ? 20000 * ns : 2000) : 500;
       if (bombCam.free !== bombCam.mode) { seedOrbit(tmp2, lo, hi); bombCam.free = bombCam.mode; }
       look.dist = clamp(look.dist, lo, hi);
       const cp = Math.cos(look.pitch);
@@ -2953,7 +3005,7 @@ function updateCamera(dt, now) {
       // it went off: pull back and slowly circle the blast (kilometres out for the B61)
       if (bombCam.free) { bombCam.free = ''; bombCam.ang = Math.atan2(camera.position.x - bc.p.x, camera.position.z - bc.p.z); } // carry on circling from where free look left off
       bombCam.ang += dt * (bc.nuke ? 0.02 : 0.08);
-      const Rd = bc.nuke ? 7000 : 150, H = bc.nuke ? 1300 : 55;
+      const Rd = bc.nuke ? 7000 * ns : 150, H = bc.nuke ? 1300 * ns : 55;
       tmp.set(bc.p.x + Math.sin(bombCam.ang) * Rd, bc.p.y + H, bc.p.z + Math.cos(bombCam.ang) * Rd);
       tmp.y = Math.max(tmp.y, Math.max(0, floorAt(tmp.x, tmp.z)) + 5);
       camera.position.lerp(tmp, 1 - Math.exp(-dt * 1.8));
@@ -3098,13 +3150,14 @@ function frame(now) {
 const hot = window.claude && window.claude.hot;
 if (hot && typeof hot.snapshot === 'function') {
   hot.snapshot(() => (running && !S.crashed ? {
-    sim: { ac: A.id, nukes: S.nukes, pos: S.pos.toArray(), vel: S.vel.toArray(), quat: S.quat.toArray(), throttle: S.throttle, onGround: S.onGround, gearDown: S.gearDown, camMode, lastMode, time: S.time }
+    sim: { ac: A.id, lo: { ...loadout }, nukes: S.nukes, pos: S.pos.toArray(), vel: S.vel.toArray(), quat: S.quat.toArray(), throttle: S.throttle, onGround: S.onGround, gearDown: S.gearDown, camMode, lastMode, time: S.time }
   } : {}));
 }
 function boot(data) {
   reset('runway');
   const sim = data && data.sim;
   if (sim) {
+    if (sim.lo) Object.assign(loadout, sim.lo);
     if (sim.ac) setAircraft(sim.ac);
     start(sim.lastMode || 'runway');
     S.pos.fromArray(sim.pos); S.vel.fromArray(sim.vel); S.quat.fromArray(sim.quat);
