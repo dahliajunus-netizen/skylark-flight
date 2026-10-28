@@ -361,10 +361,26 @@ const RUNWAY_H = 10, RUNWAY_LEN = 4000, RUNWAY_W = 60, RWY_Z = 13500;
 const ISLAND = { rx: 1400, rz: 3200 };
 // The city sits on a flat plain: a river cuts across it east-west, the sea is to the east and south,
 // and hills rise beyond the edge of town.
+// The main map is the original layout spread √10× wider (10× the area) away from its southern shore at
+// z = MAP_AZ, so the shore facing the airbase stays put and everything north of it spreads out; heights are
+// unchanged, so the hills are broader rather than taller. The airbase island is not scaled.
+const MAP_K = Math.sqrt(10), MAP_AZ = 5800;
+const mapZ = z => MAP_AZ + (z - MAP_AZ) * MAP_K; // an original z in the scaled map
+const MAP_CZ = mapZ(-2200), MAP_R = 8000 * MAP_K;  // centre and radius of the main landmass
 const CITY_H = 24, BLOCK = 144, ROAD = 12;
-const CITY = { x0: -3400, x1: 3700, z0: -7200, z1: 2800 };
-const DOWNTOWN = { x: 400, z: -4600 };
-const riverZ = x => -2600 + 300 * Math.sin(x / 1100) + 120 * Math.sin(x / 430 + 1.3);
+const CITY0 = { x0: -3400, x1: 3700, z0: -7200, z1: 2800 }; // the city's original bounds
+const CITY = { x0: CITY0.x0 * MAP_K, x1: CITY0.x1 * MAP_K, z0: mapZ(CITY0.z0), z1: mapZ(CITY0.z1) };
+// tower districts: the old downtown plus new centres across the larger city (r: how far its towers reach)
+const DISTRICTS = [
+  { x: 400 * MAP_K, z: mapZ(-4600), r: 1500, w: 1 },
+  { x: -6200, z: -13500, r: 900, w: 0.72 },
+  { x: 6800, z: -26500, r: 1000, w: 0.78 },
+  { x: -5600, z: -30500, r: 800, w: 0.62 },
+  { x: 6200, z: -8200, r: 750, w: 0.58 }
+];
+// the river keeps its width; its course is spread out with the map
+const RIVER = { z: mapZ(-2600), a1: 300 * MAP_K, w1: 1100 * MAP_K, a2: 120 * MAP_K, w2: 430 * MAP_K };
+const riverZ = x => RIVER.z + RIVER.a1 * Math.sin(x / RIVER.w1) + RIVER.a2 * Math.sin(x / RIVER.w2 + 1.3);
 // the airbase island: a flat field around the runway, low hills off to the sides, a steep shore
 function islandHeight(x, z) {
   const e = Math.hypot(x / ISLAND.rx, (z - RWY_Z) / ISLAND.rz);
@@ -377,14 +393,15 @@ function heightAt(x, z) {
   if (z > 7000) return islandHeight(x, z); // south of the main map there is only sea and the island
   // fast path: the city plain is exactly flat away from the river
   if (x > CITY.x0 && x < CITY.x1 && z > CITY.z0 && z < CITY.z1 && Math.abs(z - riverZ(x)) > 96) return CITY_H;
-  const e = fbm(x * 0.00032 + 11.3, z * 0.00032 - 7.1, 6);
+  const u = x / MAP_K, v = MAP_AZ + (z - MAP_AZ) / MAP_K; // the same spot in the original layout
+  const e = fbm(u * 0.00032 + 11.3, v * 0.00032 - 7.1, 6);
   let h = Math.pow(e, 1.7) * 1300 - 120;
-  h += (fbm(x * 0.004, z * 0.004, 3) - 0.5) * 18;
+  h += (fbm(x * 0.004, z * 0.004, 3) - 0.5) * 18; // small bumps stay small
   const dx = Math.max(0, CITY.x0 - x, x - CITY.x1), dz = Math.max(0, CITY.z0 - z, z - CITY.z1);
-  h = CITY_H + (h - CITY_H) * smooth(0, 1800, Math.hypot(dx, dz)); // flat city plain
-  h += (-5 - h) * smooth(95, 60, Math.abs(z - riverZ(x))) * smooth(-6500, -4500, x); // river
-  if (x > 3700) h = Math.min(h, CITY_H - (x - 3700) * 0.25); // eastern shoreline drops into the sea
-  h -= Math.max(0, Math.hypot(x, z + 2200) - 8000) * 0.25; // edge of the map falls into the sea
+  h = CITY_H + (h - CITY_H) * smooth(0, 1800 * MAP_K, Math.hypot(dx, dz)); // flat city plain
+  h += (-5 - h) * smooth(95, 60, Math.abs(z - riverZ(x))) * smooth(-6500 * MAP_K, -4500 * MAP_K, x); // river
+  if (x > CITY.x1) h = Math.min(h, CITY_H - (x - CITY.x1) * 0.25); // eastern shoreline drops into the sea
+  h -= Math.max(0, Math.hypot(x, z - MAP_CZ) - MAP_R) * 0.25; // edge of the map falls into the sea
   return h;
 }
 function ground(x, z) {
@@ -444,10 +461,10 @@ scene.add(sky);
 
 // terrain mesh
 (function buildTerrain() {
-  const SIZE = 18000, SEG = isTouch ? 170 : 220;
+  const SIZE = 18000 * MAP_K, SEG = isTouch ? 340 : 560; // ~100 m cells (~170 m on touch)
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0, -2200);
+  geo.translate(0, 0, MAP_CZ);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
   geo.computeVertexNormals();
@@ -500,12 +517,12 @@ scene.add(sky);
 
 // trees
 (function buildTrees() {
-  const rnd = mulberry(1764), N = isTouch ? 1800 : 3200;
+  const rnd = mulberry(1764), N = isTouch ? 7000 : 16000;
   const mesh = new THREE.InstancedMesh(new THREE.ConeGeometry(3.6, 13, 6), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1 }), N);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), c = new THREE.Color();
   let n = 0;
   for (let tries = 0; tries < N * 12 && n < N; tries++) {
-    const x = (rnd() - 0.5) * 18000, z = (rnd() - 0.5) * 18000 - 2200;
+    const x = (rnd() - 0.5) * 18000 * MAP_K, z = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ;
     if (x > CITY.x0 - 150 && x < CITY.x1 + 150 && z > CITY.z0 - 150 && z < CITY.z1 + 150) continue;
     if (fbm(x * 0.002 + 3, z * 0.002, 3) < 0.52) continue;
     const h = heightAt(x, z);
@@ -524,8 +541,8 @@ scene.add(sky);
 // clouds
 (function buildClouds() {
   const rnd = mulberry(99), PUFFS = [];
-  for (let i = 0; i < 70; i++) {
-    const cx = (rnd() - 0.5) * 18000, cz = (rnd() - 0.5) * 18000, cy = 700 + rnd() * 420;
+  for (let i = 0; i < 520; i++) {
+    const cx = (rnd() - 0.5) * 18000 * MAP_K, cz = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ, cy = 700 + rnd() * 420;
     const k = 4 + Math.floor(rnd() * 5);
     for (let j = 0; j < k; j++) PUFFS.push([cx + (rnd() - 0.5) * 260, cy + (rnd() - 0.3) * 50, cz + (rnd() - 0.5) * 160, 45 + rnd() * 55]);
   }
@@ -612,7 +629,7 @@ const isPark = (ix, iz) => ((ix * 7 + iz * 13) % 23 + 23) % 23 === 0;
   float roadX = 1.0 - step(${ROAD}.0, bx) * step(bx, ${BLOCK - ROAD}.0);
   float roadZ = 1.0 - step(${ROAD}.0, bz) * step(bz, ${BLOCK - ROAD}.0);
   float road = max(roadX, roadZ);
-  float rz = -2600.0 + 300.0 * sin(p.x / 1100.0) + 120.0 * sin(p.x / 430.0 + 1.3);
+  float rz = ${RIVER.z.toFixed(1)} + ${RIVER.a1.toFixed(1)} * sin(p.x / ${RIVER.w1.toFixed(1)}) + ${RIVER.a2.toFixed(1)} * sin(p.x / ${RIVER.w2.toFixed(1)} + 1.3);
   if (abs(p.y - rz) < 80.0 && road < 0.5) discard; // river; streets carry on as bridges
   vec2 blk = floor(p / ${BLOCK}.0);
   float park = step(mod(blk.x * 7.0 + blk.y * 13.0, 23.0), 0.5);
@@ -675,8 +692,12 @@ function wallNormal(i, p, out) {
       const cx = x0 + size / 2, cz = z0 + size / 2;
       if (isPark(ix, iz) || inAirport(cx, cz, 120)) continue;
       if ([[x0, z0], [x0 + size, z0], [x0, z0 + size], [x0 + size, z0 + size]].some(([x, z]) => Math.abs(z - riverZ(x)) < 100)) continue;
-      const dist = Math.hypot(cx - DOWNTOWN.x, (cz - DOWNTOWN.z) * 0.9);
-      const tall = Math.exp(-((dist / 1300) ** 2));
+      // how much this block belongs to a tower district, and how far it is from the nearest one (in district radii)
+      let tall = 0, near = Infinity;
+      for (const D of DISTRICTS) {
+        const d = Math.hypot(cx - D.x, (cz - D.z) * 0.9) / D.r;
+        tall = Math.max(tall, D.w * Math.exp(-d * d)); near = Math.min(near, d);
+      }
       const cap = 1e9;
       const first = BLD.length / 5;
       if (tall > 0.3) {
@@ -688,7 +709,7 @@ function wallNormal(i, p, out) {
           const h = Math.min(cap, 45 + 290 * tall * Math.pow(rnd(), 0.8));
           put(x0 + ox, z0 + oz, x0 + ox + w, z0 + oz + dp, h, PAL.tower);
         }
-      } else if (dist < 3700) {
+      } else if (near < 2.85) {
         // mid-rise: four lots per block
         const lot = size / 2;
         for (let q = 0; q < 4; q++) {
@@ -699,8 +720,10 @@ function wallNormal(i, p, out) {
           put(lx + (1 - fx) * lot / 2, lz + (1 - fz) * lot / 2, lx + (1 + fx) * lot / 2, lz + (1 + fz) * lot / 2, h, PAL.mid);
         }
       } else {
-        // suburbs: small houses
-        const per = isTouch ? 2 : 3, lot = size / per;
+        // suburbs: small houses; far out they thin out, with fields between the streets
+        const far = near > 7;
+        if (far && rnd() < 0.3) continue;
+        const per = isTouch || far ? 2 : 3, lot = size / per;
         for (let q = 0; q < per * per; q++) {
           if (rnd() < 0.25) continue;
           const lx = x0 + (q % per) * lot + lot / 2, lz = z0 + Math.floor(q / per) * lot + lot / 2;
@@ -783,7 +806,7 @@ const AC = {
     chase: [5.5, 34, 30], eye: [0.95, 3.9], scale: 1, shadow: 16, airStart: [165, 0.5], fireball: 1, crashBlast: [30, 500],
     sound: { whine: [600, 1400, 1], roar: [160, 450, 1] },
     eyebrow: 'F-15C EAGLE · TWIN-ENGINE FIGHTER',
-    desc: 'Fly an F-15 from an island airbase 9 km south of the city, then head north over the water to the downtown towers, the river, the suburbs and the hills. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked, piece by piece, and the damage stays until you choose Rebuild city on the pause screen.',
+    desc: 'Fly an F-15 from an island airbase 15 km south of the city, then head north over the water to the downtown towers, the river, the suburbs and the hills. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked, piece by piece, and the damage stays until you choose Rebuild city on the pause screen.',
     specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', 'STORES', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back at 150 kt, then raise the gear. With the stick centered the jet holds level flight; the throttle sets your speed. Lower the gear before landing.'
   },
@@ -800,7 +823,7 @@ const AC = {
     chase: [5, 30, 28], eye: [0.8, 3.05], scale: 0.9, shadow: 14, airStart: [165, 0.5], fireball: 0.95, crashBlast: [28, 450],
     sound: { whine: [700, 1500, 1], roar: [170, 480, 1] },
     eyebrow: 'EUROFIGHTER TYPHOON · DELTA-CANARD FIGHTER',
-    desc: 'Fly a Eurofighter Typhoon from an island airbase 9 km south of the city, with its downtown towers, river, suburbs and hills. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
+    desc: 'Fly a Eurofighter Typhoon from an island airbase 15 km south of the city, with its downtown towers, river, suburbs and hills. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
     specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', '4 × MK-82', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back at about 155 kt, then raise the gear. Watch the canards: they tilt nose-up to pitch up. Lower the gear and land at about 145 kt.'
   },
@@ -819,7 +842,7 @@ const AC = {
     chase: [5, 32, 28], eye: [1.25, 4.9], scale: 1, shadow: 16, airStart: [140, 0.75], fireball: 1, crashBlast: [30, 500],
     sound: { whine: [900, 1700, 1.5], roar: [120, 320, 0.8] },
     eyebrow: 'A-10C THUNDERBOLT II · CLOSE AIR SUPPORT',
-    desc: 'Fly an A-10 Warthog from the island airbase 9 km south of the city. It is slow, tough and turns tight, with eight Mk-82s under its straight wings and the GAU-8 Avenger in the nose: 1,150 rounds of 30 mm that chew through buildings. Short bursts: the recoil slows the jet down.',
+    desc: 'Fly an A-10 Warthog from the island airbase 15 km south of the city. It is slow, tough and turns tight, with eight Mk-82s under its straight wings and the GAU-8 Avenger in the nose: 1,150 rounds of 30 mm that chew through buildings. Short bursts: the recoil slows the jet down.',
     specs: ['ROTATE 135 KT', 'APPROACH 140 KT', '7.3 G LIMIT', 'MAX 400 KT', 'GAU-8/A 30 MM · 1,150 RDS', '8 × MK-82', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back gently at about 135 kt, then raise the gear. There are no afterburners, so keep your speed up in turns. Fire the gun in short bursts. Lower the gear and land at about 140 kt.'
   },
@@ -843,7 +866,7 @@ const AC = {
     chase: [16, 115, 95], eye: [1.25, 19.6], scale: 2.6, shadow: 42, airStart: [150, 0.6], fireball: 2.2, crashBlast: [60, 2000],
     sound: { whine: [280, 700, 1.4], roar: [80, 240, 1.6] },
     eyebrow: 'BOEING B-52H STRATOFORTRESS · HEAVY BOMBER',
-    desc: 'Fly a B-52 from the island airbase 9 km south of the city. It is huge and slow to answer, with eight engines. Pick twenty 2,000 lb Mk-84s, eight under the wings and twelve in the bomb bay, each blowing a crater out of whatever it lands on, or a single B28 nuclear bomb in the bay.',
+    desc: 'Fly a B-52 from the island airbase 15 km south of the city. It is huge and slow to answer, with eight engines. Pick twenty 2,000 lb Mk-84s, eight under the wings and twelve in the bomb bay, each blowing a crater out of whatever it lands on, or a single B28 nuclear bomb in the bay.',
     specs: ['ROTATE 160 KT', 'APPROACH 155 KT', '2 G LIMIT', '8 × TF33 ENGINES', 'STORES', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle and a long roll; the B-52 lifts off almost level at about 160 kt with a gentle pull. Drop bombs from at least 1,500 ft, wing bombs first, then the bay. Lower the gear and land at about 155 kt.'
   },
@@ -857,7 +880,7 @@ const AC = {
     chase: [13, 85, 70], eye: [0.9, 19.7], scale: 2.3, shadow: 34, airStart: [125, 0.5], fireball: 1.8, crashBlast: [50, 1600],
     sound: { whine: [350, 900, 1.6], roar: [110, 300, 1.25] },
     eyebrow: 'BOEING 757-200 · TWIN-ENGINE AIRLINER',
-    desc: 'Fly a Boeing 757 from an island airbase 9 km south of the city, with its downtown towers, river, suburbs and hills. It weighs 80 tonnes, has no weapons, turns gently and carries a lot of momentum, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
+    desc: 'Fly a Boeing 757 from an island airbase 15 km south of the city, with its downtown towers, river, suburbs and hills. It weighs 80 tonnes, has no weapons, turns gently and carries a lot of momentum, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
     specs: ['ROTATE 145 KT', 'APPROACH 140 KT', '2.5 G LIMIT', 'MAX MACH 0.86', 'NO WEAPONS', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back gently at 145 kt, then raise the gear. It rolls slowly, so start turns early. Lower the gear and land at about 140 kt.'
   },
@@ -875,7 +898,7 @@ const AC = {
     chase: [20, 125, 100], eye: [3.6, 31.2], scale: 3.4, shadow: 50, airStart: [130, 0.6], fireball: 2.6, crashBlast: [70, 2600],
     sound: { whine: [300, 800, 1.7], roar: [90, 260, 1.4] },
     eyebrow: 'BOEING 747-8 · FOUR-ENGINE WIDEBODY',
-    desc: 'Fly a Boeing 747-8 from the island airbase 9 km south of the city: 76 m long, 68 m across the wingtips, four engines and 300 tonnes in the air. It answers the controls slowly and takes a long time to stop, so plan every turn and every approach well ahead.',
+    desc: 'Fly a Boeing 747-8 from the island airbase 15 km south of the city: 76 m long, 68 m across the wingtips, four engines and 300 tonnes in the air. It answers the controls slowly and takes a long time to stop, so plan every turn and every approach well ahead.',
     specs: ['ROTATE 165 KT', 'APPROACH 155 KT', '2.5 G LIMIT', 'MAX MACH 0.9', '4 × GENX-2B', 'NO WEAPONS', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle and a long roll; pull back gently at about 165 kt, then raise the gear. Start turns early and keep the bank shallow. Lower the gear early and land at about 155 kt.'
   },
@@ -905,7 +928,7 @@ const AC = {
     chase: [8, 62, 50], eye: [1.9, 11.8], scale: 1.8, shadow: 26, airStart: [120, 0.7], fireball: 1.6, crashBlast: [45, 1200],
     sound: { whine: [480, 700, 1.1], roar: [70, 170, 1.7] },
     eyebrow: 'LOCKHEED MARTIN AC-130J GHOSTRIDER · GUNSHIP',
-    desc: 'Fly the AC-130J Ghostrider from the island airbase 9 km south of the city. It is a C-130J turned into a gunship: four turboprops, a 30 mm cannon and a 105 mm howitzer firing out of its left side. Press V for the gunship sensor camera, circle the target in a left turn and let the fire control work out the lead.',
+    desc: 'Fly the AC-130J Ghostrider from the island airbase 15 km south of the city. It is a C-130J turned into a gunship: four turboprops, a 30 mm cannon and a 105 mm howitzer firing out of its left side. Press V for the gunship sensor camera, circle the target in a left turn and let the fire control work out the lead.',
     specs: ['ROTATE 125 KT', 'APPROACH 130 KT', '3 G LIMIT', '4 × AE 2100D3', 'GAU-23/A 30 MM', 'M102 105 MM', 'RWY 36 · 13,100 FT'],
     tip: 'Takeoff: full throttle, pull back at about 125 kt, then raise the gear. Over the target, bank left into a gentle circle and press V: the sensor stays on the spot you point it at while you orbit. 1 and 2 pick the gun, Space or a click fires.'
   }
