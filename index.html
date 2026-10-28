@@ -891,7 +891,7 @@ const AC = {
     // fires a 15 kg shell at ~494 m/s, about 10 rounds a minute at most, each one loaded by hand. Simulation settings
     // (not published for the J model): the 30 mm reserve, its reload time and the 105 mm stowage.
     gunship: {
-      sensor: [-1.15, -2.15, -10.9], // the nose sensor turret
+      sensor: [-3.2, -1.95, 0.6],    // just outside the sensor turret on the left gear sponson, clear of the airframe
       zoom: [40, 16, 6, 2.4],        // field of view, degrees, for each zoom step
       weapons: [
         { id: 'gau23', name: 'GAU-23/A', cal: '30 MM', kind: 'round', feed: 'supply', muzzle: [-2.95, -0.95, -6.6], mv: 1080, rate: 200 / 60,
@@ -3691,7 +3691,7 @@ function updateCamera(dt, now) {
     return;
   }
   if (gs.cam && A.gunship && !S.crashed && !(keys.z || bombCam.btn)) {
-    // gunship sensor: from the nose turret, locked on the tracked ground point while the aircraft circles
+    // gunship sensor: from the turret on the left gear sponson, locked on the tracked ground point while the aircraft circles
     const ar = (keys.arrowright ? 1 : 0) - (keys.arrowleft ? 1 : 0), au = (keys.arrowdown ? 1 : 0) - (keys.arrowup ? 1 : 0);
     if (ar || au) gunshipSlew(ar * 0.5 * dt * gs.fov / 40, au * 0.5 * dt * gs.fov / 40);
     gsWorld(A.gunship.sensor, camera.position);

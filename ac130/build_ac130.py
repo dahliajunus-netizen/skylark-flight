@@ -242,8 +242,9 @@ make('Fin', [loft([fin_section(z, le, c, 0.0, t) for z, le, c, t in
 
 
 # ---------------- gunship: sensors and guns on the left side ----------------
-# electro-optical / infrared sensor turrets: under the nose (port) and behind the left main gear
-for name, (x, y, z, r) in {'Sensor Turret Nose': (1.15, -10.9, -2.15, 0.42), 'Sensor Turret Aft': (1.7, 4.6, -2.15, 0.36)}.items():
+# electro-optical / infrared sensor turrets: under the nose (port), and on the outside of the left gear sponson,
+# where the gunship camera looks out from
+for name, (x, y, z, r) in {'Sensor Turret Nose': (1.15, -10.9, -2.15, 0.42), 'Sensor Turret Gear': (2.78, 0.6, -1.95, 0.36)}.items():
     make(name, [loft([ring_y(y + r * math.cos(a), r * math.sin(a) + 0.01, r * math.sin(a) + 0.01, z, x, n=16)
                       for a in [math.pi * k / 10 for k in range(11)]])], GREY_D)
     make(name + ' Window', [loft([ring_y(y - r * 0.96 + d, rr, rr, z - 0.06, x + 0.05, n=12) for d, rr in [(0.0, 0.2), (0.02, 0.2)]])], GLASS)
