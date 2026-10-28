@@ -235,6 +235,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <div class="actions">
       <button class="btn primary" id="reRunway">Restart on runway</button>
       <button class="btn" id="reAir">Start airborne</button>
+      <button class="btn" id="reRebuild">Rebuild city</button>
     </div>
     <p class="key-only" style="font-size:12px;color:var(--dim)">Enter restarts the same way you last started.</p>
   </div>
@@ -262,6 +263,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <button class="btn primary" id="resume">Resume</button>
       <button class="btn" id="pRunway">Restart on runway</button>
       <button class="btn" id="pAir">Start airborne</button>
+      <button class="btn" id="pRebuild">Rebuild city</button>
     </div>
   </div>
 </div>
@@ -665,7 +667,7 @@ const AC = {
     chase: [5.5, 34, 30], eye: [0.95, 3.9], scale: 1, shadow: 16, airStart: [165, 0.5], fireball: 1, crashBlast: [30, 500],
     sound: { whine: [600, 1400, 1], roar: [160, 450, 1] },
     eyebrow: 'F-15C EAGLE · TWIN-ENGINE FIGHTER',
-    desc: 'Fly an F-15 out of a city airport. Downtown towers rise just north of the runway, past the river, with streets and suburbs spreading to the hills and the sea on the east side. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked; restarting rebuilds the city.',
+    desc: 'Fly an F-15 out of a city airport. Downtown towers rise just north of the runway, past the river, with streets and suburbs spreading to the hills and the sea on the east side. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked, piece by piece, and the damage stays until you choose Rebuild city on the pause screen.',
     specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', '4 × MK-82', 'B61 NUCLEAR BOMB', 'RWY 36 · 4,600 FT'],
     tip: 'Takeoff: full throttle, pull back at 150 kt, then raise the gear. With the stick centered the jet holds level flight; the throttle sets your speed. Lower the gear before landing.'
   },
@@ -1168,7 +1170,7 @@ function checkStructure() {
     for (const p of z.pts) {
       tC.copy(p).applyQuaternion(S.quat).add(S.pos);
       let bi = -1, ground = null;
-      if (nearCity) { const b = buildingAt(tC.x, tC.z); if (b >= 0 && tC.y < BLD[b * 5 + 4]) bi = b; }
+      if (nearCity) { const b = buildingAt(tC.x, tC.z); if (b >= 0 && solidAt(b, tC.x, tC.y, tC.z)) bi = b; }
       if (bi < 0 && nearGround && z.kind !== 'gear') {
         const h = heightAt(tC.x, tC.z);
         // the core gets a metre of slack so a flared landing doesn't count the tail as a terrain strike
@@ -1181,7 +1183,7 @@ function checkStructure() {
         else crash(ground === 'water' ? 'You flew into the water.' : 'You flew into the terrain.');
         return true;
       }
-      if (bi >= 0) damageBuilding(bi, z.kind === 'wing' ? 120 : 60); // the building takes some of it too
+      if (bi >= 0) damageAt(bi, tC, z.kind === 'wing' ? 3 : 2, 10); // the building takes a bite too
       ripZone(z, p, tC);
       break;
     }
@@ -1468,8 +1470,8 @@ function stepPiece(p, dt) {
     tC.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).applyMatrix4(o.matrixWorld);
     let d = heightAt(tC.x, tC.z) - tC.y;
     const bi = buildingAt(tC.x, tC.z);
-    if (bi >= 0) {
-      const db = BLD[bi * 5 + 4] - tC.y;
+    if (bi >= 0 && solidAt(bi, tC.x, tC.y, tC.z)) {
+      const db = solidTop(bi, tC.x, tC.y, tC.z) - tC.y;
       if (db > 0 && db < 2.5) d = Math.max(d, db); // resting on a roof
       else if (db >= 2.5) { wall = bi; wallPt.copy(tC); } // poking into a wall
     }
@@ -1581,7 +1583,7 @@ function damageBuilding(i, dmg, quiet = false) {
   if (bState[i] !== 0) return;
   bHP[i] -= dmg;
   const f = Math.max(0, bHP[i] / bHPMax[i]);
-  setBuilding(i, bH0[i], 0.35 + 0.65 * f);
+  if (!conv.has(i)) setBuilding(i, bH0[i], 0.35 + 0.65 * f);
   if (bHP[i] <= 0) startCollapse(i, quiet);
   else if (f < 0.5) ignite(i, 40);
 }
@@ -1617,8 +1619,9 @@ function perimeterPoint(i, out, target) {
   return target.set(BLD[k] + t * w, 0, BLD[k + 3] + out);
 }
 function startCollapse(i, quiet = false) {
+  unconvert(i); // a building already in cells comes down whole from its current height
   bState[i] = 1;
-  const k = i * 5, w = BLD[k + 2] - BLD[k], d = BLD[k + 3] - BLD[k + 1], h = bH0[i];
+  const k = i * 5, w = BLD[k + 2] - BLD[k], d = BLD[k + 3] - BLD[k + 1], h = BLD[k + 4] - CITY_H;
   const cx = (BLD[k] + BLD[k + 2]) / 2, cz = (BLD[k + 1] + BLD[k + 3]) / 2;
   collapsing.push({ i, t: 0, T: 1.2 + Math.sqrt(h) * 0.35, h0: h, hr: Math.max(1.5, h * 0.06), quiet });
   const n = quiet ? (Math.random() < 0.3 ? 1 : 0) : Math.round(clamp(Math.sqrt(w * d * h) / 10, 3, 22) * (isTouch ? 0.5 : 1));
@@ -1630,13 +1633,215 @@ function startCollapse(i, quiet = false) {
   const dist = camera.position.distanceTo(tC.set(cx, CITY_H, cz));
   if (!quiet) setTimeout(() => boom(Math.min(0.8, h / 120 + 0.2) * 500 / (500 + dist), false), dist / 340 * 1000);
 }
+function rebuildCity() {
+  restoreCity();
+  clearNukes();
+  clearParticles(glow); clearParticles(haze);
+  toast('City rebuilt');
+}
 function restoreCity() {
+  conv.clear(); dirtyCells.clear(); fallingBlocks.length = 0;
+  cellMesh.count = 0;
   for (const i of [...touched]) { bState[i] = 0; bHP[i] = bHPMax[i]; setBuilding(i, bH0[i], 1); }
   touched.clear();
   collapsing.length = burning.length = rubble.length = 0;
   rubbleGroup.clear();
 }
+
+// ---------------- local building damage: cells ----------------
+// A building that takes a local hit is split into cells (about 5 m across and one or two floors tall),
+// drawn with one shared instanced mesh. A hit crumbles only the cells it reaches. After every change,
+// cells no longer joined to the ground through other cells break away, fall as one block, land on what's
+// left (crushing it, which can bring more down) and crumble.
+const CELL_CAP = isTouch ? 20000 : 60000;
+const cellMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), cityMesh.material, CELL_CAP);
+cellMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+cellMesh.setColorAt(0, cB.set('#ffffff')); // allocates the colour buffer while count is still the full capacity
+cellMesh.count = 0;
+cellMesh.receiveShadow = true;
+cellMesh.frustumCulled = false;
+scene.add(cellMesh);
+const cellOwner = new Int32Array(CELL_CAP), cellIdx = new Int32Array(CELL_CAP);
+const conv = new Map(), dirtyCells = new Set(), fallingBlocks = [];
+const zeroM = new THREE.Matrix4().makeScale(0, 0, 0), cTmp = new THREE.Vector3(), dTmp = new THREE.Vector3();
+let cellsChanged = false;
+
+function cellCenter(B, c, out) {
+  const ix = c % B.nx, iz = Math.floor(c / B.nx) % B.nz, iy = Math.floor(c / (B.nx * B.nz));
+  return out.set(B.x0 + (ix + 0.5) * B.cx, CITY_H + (iy + 0.5) * B.cy, B.z0 + (iz + 0.5) * B.cz);
+}
+function cellMatrix(B, c, drop = 0) {
+  cellCenter(B, c, pB);
+  pB.y -= drop;
+  return mB.compose(pB, qI, sB.set(B.cx, B.cy, B.cz));
+}
+function cellAt(B, x, y, z) {
+  const ix = Math.floor((x - B.x0) / B.cx), iy = Math.floor((y - CITY_H) / B.cy), iz = Math.floor((z - B.z0) / B.cz);
+  if (ix < 0 || iy < 0 || iz < 0 || ix >= B.nx || iy >= B.ny || iz >= B.nz) return -1;
+  return (iy * B.nz + iz) * B.nx + ix;
+}
+function convertBuilding(i) {
+  const k = i * 5, w = BLD[k + 2] - BLD[k], d = BLD[k + 3] - BLD[k + 1], h = BLD[k + 4] - CITY_H;
+  if (h < 1) return null;
+  let nx = Math.max(1, Math.round(w / 5)), nz = Math.max(1, Math.round(d / 5)), ny = Math.max(1, Math.round(h / (h > 40 ? 6.8 : 3.4)));
+  while (nx * ny * nz > 3500) { nx = Math.max(1, Math.round(nx * 0.8)); nz = Math.max(1, Math.round(nz * 0.8)); ny = Math.max(1, Math.round(ny * 0.85)); }
+  const N = nx * ny * nz;
+  if (cellMesh.count + N > CELL_CAP) return null; // out of budget: the caller falls back to whole-building damage
+  const B = { i, nx, ny, nz, cx: w / nx, cy: h / ny, cz: d / nz, x0: BLD[k], z0: BLD[k + 1], lost: 0,
+    alive: new Uint8Array(N).fill(1), hp: new Float32Array(N), inst: new Int32Array(N) };
+  B.hp.fill(4 + B.cx * B.cy * B.cz / 250); // about 5 cannon rounds for a 5 m cell, more for big tower cells
+  cB.fromArray(cityMesh.instanceColor.array, i * 3); // keep any scorching it already has
+  for (let c = 0; c < N; c++) {
+    const slot = cellMesh.count++;
+    cellOwner[slot] = i; cellIdx[slot] = c; B.inst[c] = slot;
+    cellMesh.setMatrixAt(slot, cellMatrix(B, c));
+    cellMesh.setColorAt(slot, cB);
+  }
+  cityMesh.setMatrixAt(i, zeroM);
+  cityMesh.instanceMatrix.needsUpdate = true;
+  conv.set(i, B);
+  touched.add(i);
+  cellsChanged = true;
+  return B;
+}
+// free an instance slot by moving the last instance into it
+function freeSlot(slot) {
+  const last = --cellMesh.count;
+  if (slot !== last) {
+    cellMesh.instanceMatrix.array.copyWithin(slot * 16, last * 16, last * 16 + 16);
+    cellMesh.instanceColor.array.copyWithin(slot * 3, last * 3, last * 3 + 3);
+    const o = cellOwner[last], ci = cellIdx[last];
+    cellOwner[slot] = o; cellIdx[slot] = ci;
+    const OB = conv.get(o);
+    if (OB) OB.inst[ci] = slot;
+  }
+  cellsChanged = true;
+}
+function unconvert(i) {
+  const B = conv.get(i);
+  if (!B) return;
+  for (let c = 0; c < B.inst.length; c++) if (B.inst[c] >= 0) { freeSlot(B.inst[c]); B.inst[c] = -1; }
+  conv.delete(i);
+  for (let f = fallingBlocks.length - 1; f >= 0; f--) if (fallingBlocks[f].B === B) fallingBlocks.splice(f, 1);
+  setBuilding(i, Math.max(0.01, BLD[i * 5 + 4] - CITY_H), 0.4);
+}
+// is the point inside solid structure? (whole box for intact buildings, live cells for damaged ones)
+function solidAt(i, x, y, z) {
+  if (y >= BLD[i * 5 + 4]) return false;
+  const B = conv.get(i);
+  if (!B) return true;
+  const c = cellAt(B, x, Math.max(y, CITY_H + 0.01), z);
+  return c >= 0 && B.alive[c] === 1;
+}
+// top of the solid stack the point is in (for debris landing on a damaged roof)
+function solidTop(i, x, y, z) {
+  const B = conv.get(i);
+  if (!B) return BLD[i * 5 + 4];
+  const c = cellAt(B, x, Math.max(y, CITY_H + 0.01), z), layer = B.nx * B.nz;
+  let iy = Math.floor(c / layer);
+  while (iy + 1 < B.ny && B.alive[c + (iy + 1 - Math.floor(c / layer)) * layer]) iy++;
+  return CITY_H + (iy + 1) * B.cy;
+}
+function crumbleCell(B, c, fx) {
+  B.alive[c] = 0;
+  if (B.inst[c] >= 0) { freeSlot(B.inst[c]); B.inst[c] = -1; }
+  B.lost++;
+  if (!fx) return;
+  cellCenter(B, c, cTmp);
+  for (let k = 0; k < 3; k++) emit('dust', cTmp, (Math.random() - 0.5) * 6, rr([0, 3]), (Math.random() - 0.5) * 6, 0.6 + B.cx / 8);
+  if (Math.random() < 0.35) spawnChunk(B.i, cTmp.x, cTmp.y, cTmp.z, clamp(Math.min(B.cx, B.cz) * rr([0.25, 0.5]), 0.8, 3), (Math.random() - 0.5) * 4, rr([0, 2]), (Math.random() - 0.5) * 4);
+}
+// damage the cells of building i within `radius` of p; `power` is the damage at the centre
+function damageAt(i, p, radius, power) {
+  if (bState[i] !== 0) return;
+  const B = conv.get(i) || convertBuilding(i);
+  if (!B) { damageBuilding(i, power * 3); return; }
+  const r = radius + Math.max(B.cx, B.cy, B.cz) * 0.5;
+  const ix0 = clamp(Math.floor((p.x - r - B.x0) / B.cx), 0, B.nx - 1), ix1 = clamp(Math.floor((p.x + r - B.x0) / B.cx), 0, B.nx - 1);
+  const iy0 = clamp(Math.floor((p.y - r - CITY_H) / B.cy), 0, B.ny - 1), iy1 = clamp(Math.floor((p.y + r - CITY_H) / B.cy), 0, B.ny - 1);
+  const iz0 = clamp(Math.floor((p.z - r - B.z0) / B.cz), 0, B.nz - 1), iz1 = clamp(Math.floor((p.z + r - B.z0) / B.cz), 0, B.nz - 1);
+  let removed = 0;
+  for (let iy = iy0; iy <= iy1; iy++) for (let iz = iz0; iz <= iz1; iz++) for (let ix = ix0; ix <= ix1; ix++) {
+    const c = (iy * B.nz + iz) * B.nx + ix;
+    if (!B.alive[c]) continue;
+    cellCenter(B, c, dTmp);
+    const d = Math.hypot(Math.max(0, Math.abs(dTmp.x - p.x) - B.cx / 2), Math.max(0, Math.abs(dTmp.y - p.y) - B.cy / 2), Math.max(0, Math.abs(dTmp.z - p.z) - B.cz / 2));
+    if (d > radius) continue;
+    B.hp[c] -= power * (1 - 0.8 * d / radius);
+    if (B.hp[c] <= 0) { crumbleCell(B, c, removed < 8); removed++; }
+  }
+  if (removed) dirtyCells.add(i);
+}
+// find cells no longer joined to the ground; they break away and fall as one block
+function settle(B) {
+  const N = B.alive.length, layer = B.nx * B.nz, seen = new Uint8Array(N), stack = [];
+  for (let c = 0; c < layer; c++) if (B.alive[c]) { seen[c] = 1; stack.push(c); }
+  while (stack.length) {
+    const c = stack.pop(), ix = c % B.nx, iz = Math.floor(c / B.nx) % B.nz, iy = Math.floor(c / layer);
+    const nb = [ix > 0 ? c - 1 : -1, ix < B.nx - 1 ? c + 1 : -1, iz > 0 ? c - B.nx : -1, iz < B.nz - 1 ? c + B.nx : -1, iy > 0 ? c - layer : -1, iy < B.ny - 1 ? c + layer : -1];
+    for (const m of nb) if (m >= 0 && B.alive[m] && !seen[m]) { seen[m] = 1; stack.push(m); }
+  }
+  const loose = [];
+  let topY = -1;
+  for (let c = 0; c < N; c++) if (B.alive[c]) { if (seen[c]) topY = Math.max(topY, Math.floor(c / layer)); else loose.push(c); }
+  if (loose.length) {
+    for (const c of loose) B.alive[c] = 0;
+    let drop = Infinity;
+    for (const c of loose) {
+      const iy = Math.floor(c / layer);
+      let below = iy - 1;
+      while (below >= 0 && !B.alive[below * layer + (c % layer)]) below--;
+      drop = Math.min(drop, (iy - below - 1) * B.cy);
+    }
+    fallingBlocks.push({ B, cells: loose, off: 0, v: 0, drop: Math.max(B.cy * 0.5, drop) });
+  }
+  BLD[B.i * 5 + 4] = CITY_H + (topY + 1) * B.cy;
+  if (topY < 0 && !loose.length) bState[B.i] = 2;
+  if (B.lost > N * 0.15) ignite(B.i, 40);
+}
+function updateCells(dt) {
+  for (const i of dirtyCells) { const B = conv.get(i); if (B) settle(B); }
+  dirtyCells.clear();
+  for (let f = fallingBlocks.length - 1; f >= 0; f--) {
+    const FB = fallingBlocks[f], B = FB.B;
+    FB.v += G * dt;
+    FB.off = Math.min(FB.drop, FB.off + FB.v * dt);
+    for (const c of FB.cells) if (B.inst[c] >= 0) cellMesh.setMatrixAt(B.inst[c], cellMatrix(B, c, FB.off));
+    cellsChanged = true;
+    for (let k = burst(Math.min(60, FB.cells.length), dt); k > 0; k--) {
+      cellCenter(B, FB.cells[Math.floor(Math.random() * FB.cells.length)], cTmp);
+      cTmp.y -= FB.off;
+      emit('dust', cTmp, (Math.random() - 0.5) * 4, rr([0, 3]), (Math.random() - 0.5) * 4, 0.8 + B.cx / 6);
+    }
+    if (FB.off < FB.drop) continue;
+    // landed: crush whatever it came down on, then crumble
+    const layer = B.nx * B.nz, perColumn = new Map();
+    for (const c of FB.cells) perColumn.set(c % layer, (perColumn.get(c % layer) || 0) + 1);
+    for (const [col, count] of perColumn) {
+      let iy = B.ny - 1;
+      while (iy >= 0 && !B.alive[iy * layer + col]) iy--;
+      if (iy < 0) continue;
+      const c = iy * layer + col;
+      B.hp[c] -= count * 4;
+      if (B.hp[c] <= 0) crumbleCell(B, c, Math.random() < 0.2);
+    }
+    FB.cells.forEach((c, j) => crumbleCell(B, c, j % Math.max(1, Math.floor(FB.cells.length / 30)) === 0));
+    const k5 = B.i * 5, big = Math.min(2.5, 0.8 + FB.cells.length / 200);
+    for (let k = 0; k < Math.min(80, 10 + FB.cells.length / 4); k++) {
+      perimeterPoint(B.i, 1, cTmp); cTmp.y = Math.max(CITY_H + 2, CITY_H + (FB.drop > 0 ? 0 : 0));
+      emit('dust', cTmp, (cTmp.x - (BLD[k5] + BLD[k5 + 2]) / 2) * 0.3, rr([1, 5]), (cTmp.z - (BLD[k5 + 1] + BLD[k5 + 3]) / 2) * 0.3, big);
+    }
+    if (FB.cells.length > 20) {
+      const dist = camera.position.distanceTo(cTmp);
+      setTimeout(() => boom(Math.min(0.8, FB.cells.length / 300) * 500 / (500 + dist), false), dist / 340 * 1000);
+    }
+    fallingBlocks.splice(f, 1);
+    dirtyCells.add(B.i);
+  }
+  if (cellsChanged) { cellMesh.instanceMatrix.needsUpdate = true; cellMesh.instanceColor.needsUpdate = true; cellsChanged = false; }
+}
 function updateCity(dt) {
+  updateCells(dt);
   for (let c = collapsing.length - 1; c >= 0; c--) {
     const C = collapsing[c], k = C.i * 5;
     C.t += dt;
@@ -1676,7 +1881,7 @@ function blast(p, R, power) {
     for (const i of list) {
       const k = i * 5;
       const d = Math.hypot(clamp(p.x, BLD[k], BLD[k + 2]) - p.x, clamp(p.y, CITY_H, BLD[k + 4]) - p.y, clamp(p.z, BLD[k + 1], BLD[k + 3]) - p.z);
-      if (d < R) damageBuilding(i, power * Math.pow(1 - d / R, 1.5));
+      if (d < R * 0.5) damageAt(i, p, R * 0.5, power / 45); // blows out the cells within reach
     }
   }
   if (running && !S.crashed && S.pos.distanceTo(p) < R * 1.4) {
@@ -1748,7 +1953,7 @@ function updateBullets(dt) {
     for (let n = 1; n <= steps && !hit; n++) {
       const x = bul.pos[j] + vx * dt * n / steps, y = bul.pos[j + 1] + vy * dt * n / steps, z = bul.pos[j + 2] + vz * dt * n / steps;
       const bi = buildingAt(x, z);
-      if (bi >= 0 && y < BLD[bi * 5 + 4]) { damageBuilding(bi, 1.2); hit = [x, y, z, 'building']; }
+      if (bi >= 0 && solidAt(bi, x, y, z)) { damageAt(bi, tV.set(x, y, z), 0.8, A.id === 'typhoon' ? 1.6 : 1); hit = [x, y, z, 'building']; }
       else { const h = heightAt(x, z); if (y <= Math.max(h, 0)) hit = [x, Math.max(h, 0), z, h < 0 ? 'water' : 'ground']; }
     }
     if (hit) { roundImpact(...hit); bul.life[i] = 0; trPos[s + 1] = trPos[s + 4] = -1e6; continue; }
@@ -1818,7 +2023,7 @@ function updateBombs(dt) {
       tC.copy(o.position).addScaledVector(v, dt * n / steps);
       const bi = buildingAt(tC.x, tC.z);
       const h = heightAt(tC.x, tC.z);
-      if (bi >= 0 && tC.y < BLD[bi * 5 + 4]) hit = 'building';
+      if (bi >= 0 && solidAt(bi, tC.x, tC.y, tC.z)) hit = 'building';
       else if (tC.y <= Math.max(h, 0)) { hit = h < 0 ? 'water' : 'ground'; tC.y = Math.max(h, 0); }
     }
     if (hit) {
@@ -1853,7 +2058,6 @@ function clearWeapons() {
   bombsFlying.length = 0;
   parts.bombs.forEach(b => { b.visible = true; });
   if (parts.nuke) parts.nuke.visible = true;
-  clearNukes();
   lastImpact = null;
 }
 function updateWeapons(dt) {
@@ -2052,7 +2256,6 @@ function reset(mode) {
   Object.assign(S, { crashed: false, time: 0, maxAlt: 0, maxSpd: 0, brake: false, hitBuilding: -1,
     ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: A.nukes || 0, firing: false });
   clearWeapons();
-  restoreCity();
   S.ang.set(0, 0, 0);
   inp.pitch = inp.roll = inp.yaw = 0;
   if (mode === 'runway') {
@@ -2074,6 +2277,9 @@ function reset(mode) {
   }
   plane.visible = true;
   clearTimeout(crashTimer);
+  // the old wreck stays where it fell, as scenery, until the city is rebuilt
+  for (const p of W.pieces) { rubbleGroup.attach(p.obj); p.burn = 0; rubble.push(p); }
+  W.pieces.length = 0;
   clearWreck();
   camSnap = true;
   setThrottleUI();
@@ -2093,7 +2299,7 @@ function crash(msg) {
   plane.visible = false;
   // the impact (and any bombs still on the pylons) wrecks what's around it
   if (!wet) {
-    if (building) damageBuilding(S.hitBuilding, 2500);
+    if (building) damageAt(S.hitBuilding, S.hitPoint, 8 * A.scale, 30); // punches a hole where it went in
     if (!gentle || S.bombs > 0) blast(W.site, A.crashBlast[0] + S.bombs * 6, A.crashBlast[1] + S.bombs * 900);
     if (S.bombs > 0) explode(W.site, 1 + S.bombs * 0.25, false);
   }
@@ -2175,7 +2381,7 @@ function physics(dt) {
     for (const [f, r, u] of A.hitPts) {
       tC.copy(S.pos).addScaledVector(F, f).addScaledVector(R, r).addScaledVector(U, u);
       const bi = buildingAt(tC.x, tC.z);
-      if (bi >= 0 && tC.y < BLD[bi * 5 + 4]) {
+      if (bi >= 0 && solidAt(bi, tC.x, tC.y, tC.z)) {
         S.hitBuilding = bi; S.hitPoint.copy(tC);
         return crash(tC.y > BLD[bi * 5 + 4] - 3 ? 'You hit a rooftop.' : 'You flew into a building.');
       }
@@ -2369,6 +2575,7 @@ function start(mode) {
 $('#goRunway').onclick = $('#reRunway').onclick = $('#pRunway').onclick = () => start('runway');
 $('#goAir').onclick = $('#reAir').onclick = $('#pAir').onclick = () => start('air');
 $('#resume').onclick = () => togglePause(false);
+$('#pRebuild').onclick = $('#reRebuild').onclick = () => rebuildCity();
 $('#bCam').onclick = toggleCam;
 $('#bUi').onclick = () => toggleUI();
 function updateAircraftUI() {
