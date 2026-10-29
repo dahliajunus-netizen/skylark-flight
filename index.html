@@ -308,7 +308,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <button class="btn" id="goAir">Start airborne</button>
     </div>
     <dl class="keys key-only" id="keyList">
-      <dt>Mouse aim</dt><dd>Pick it below: move the mouse and the nose follows the circle; left click fires the gun. W/S/A/D still override</dd>
+      <dt>Mouse aim</dt><dd>Pick it in the controls picker (menu or pause): move the mouse and the nose follows the circle; left click fires the gun. W/S/A/D still override</dd>
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
       <dt>A / D, ← / →</dt><dd>Roll; steers on the ground</dd>
       <dt>Q / E</dt><dd>Rudder</dd>
@@ -374,6 +374,17 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <button class="btn" id="pRunway">Restart on runway</button>
       <button class="btn" id="pAir">Start airborne</button>
       <button class="btn" id="pRebuild">Rebuild city</button>
+    </div>
+  </div>
+</div>
+
+<div id="keysPanel" class="overlay" hidden>
+  <div class="card glass">
+    <div class="eyebrow">HOLDING</div>
+    <h2>Keys</h2>
+    <div id="keysBody"></div>
+    <div class="actions">
+      <button class="btn primary" id="kResume">Resume</button>
     </div>
   </div>
 </div>
@@ -3959,7 +3970,7 @@ addEventListener('keydown', e => {
   else if (k === 'm') toggleMute();
   else if (k === 'p') togglePause();
   else if (k === 'escape') togglePause(mouseAim() ? true : undefined); // in mouse aim Esc also frees the mouse, so it only pauses
-  else if (k === 'h') togglePause(true);
+  else if (k === 'h') toggleKeys();
   else if (k === 'i') { invertPitch = !invertPitch; toast(invertPitch ? 'Pitch inverted: W pulls the nose up' : 'Pitch normal: S pulls the nose up'); }
   else if (k === 'g') toggleGear();
   else if (k === 'x') dropBomb();
@@ -4156,7 +4167,7 @@ function start(mode) {
   initAudio();
   reset(mode);
   running = true; paused = false;
-  $('#menu').hidden = true; $('#crash').hidden = true; $('#pause').hidden = true;
+  $('#menu').hidden = true; $('#crash').hidden = true; $('#pause').hidden = true; $('#keysPanel').hidden = true;
   hud.hidden = false; tools.hidden = false; touchUI.hidden = !isTouch;
   canvas.focus?.();
   takeMouse();
@@ -4237,15 +4248,20 @@ function toggleUI() {
 }
 $('#bSnd').onclick = toggleMute;
 $('#bPause').onclick = () => togglePause();
-$('#bHelp').onclick = () => togglePause(true);
+$('#bHelp').onclick = () => toggleKeys();
 function toggleCam() { if (!running) return; camMode = camMode === 'chase' ? 'cockpit' : 'chase'; camSnap = true; look.active = false; look.yaw = look.pitch = 0; toast(camMode === 'chase' ? 'Chase camera' : 'Cockpit view'); }
 function toggleMute() { muted = !muted; $('#bSnd').firstChild.textContent = muted ? 'MUTED' : 'SOUND'; }
-function togglePause(force) {
+// Pause shows the pause menu (aircraft, loadout, controls, restarts); Keys (H) pauses too but shows only the key list
+function togglePause(force, keysOnly = false) {
   if (!running || S.crashed) return;
   paused = typeof force === 'boolean' ? force : !paused;
-  $('#pause').hidden = !paused;
+  $('#pause').hidden = !paused || keysOnly;
+  $('#keysPanel').hidden = !paused || !keysOnly;
   if (paused) { lockPointer.releasing = true; unlockPointer(); aim.fire = false; } else if (mouseAim() || gs.cam) lockPointer();
 }
+function toggleKeys() { togglePause($('#keysPanel').hidden, true); } // H again closes it and resumes
+$('#keysBody').appendChild(Object.assign($('#keyList').cloneNode(true), { id: '' })); // the same list as on the start menu
+$('#kResume').onclick = () => togglePause(false);
 document.addEventListener('visibilitychange', () => { if (document.hidden && running && !S.crashed) togglePause(true); });
 
 let toastTimer = 0;
