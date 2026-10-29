@@ -2419,6 +2419,7 @@ function clearParticles(P) { P.life.fill(0); P.size.fill(0); P.col.fill(0); P.ac
 const debris = new THREE.Group();
 scene.add(debris);
 const charred = new THREE.MeshStandardMaterial({ color: '#2b2826', roughness: 0.95 });
+const charredDS = Object.assign(charred.clone(), { side: THREE.DoubleSide }); // for torn fuselage sections, open at the ends
 const boomLight = new THREE.PointLight('#ff8a3c', 0, 900, 2);
 scene.add(boomLight);
 const W = { pieces: [], main: null, mode: '', site: new THREE.Vector3(), siteFire: 0, siteSmoke: 0, focus: new THREE.Vector3(), camOff: new THREE.Vector3(), camAng: 0, shake: 0 };
@@ -2450,6 +2451,50 @@ function breakOff(mesh) {
   mesh.position.add(c.multiply(mesh.scale).applyQuaternion(mesh.quaternion));
   mesh.castShadow = true;
   return addPiece(mesh, mesh.geometry.boundingBox, true);
+}
+
+// Cut a fuselage mesh into sections along the aircraft's length (z in the airframe's frame), so a breakup leaves a
+// nose, one or two centre sections and a tail instead of one long tube. Each triangle goes to the section its centre
+// falls in; the cuts are tilted and jittered per triangle, which gives torn, ragged edges. The sections are
+// double-sided so the open ends show the inside of the skin. Returns the new meshes, already in the original's place.
+const dsMats = new Map(), tM = new THREE.Matrix4();
+const doubleSided = mat => { if (!dsMats.has(mat)) dsMats.set(mat, Object.assign(mat.clone(), { side: THREE.DoubleSide })); return dsMats.get(mat); };
+function splitFuselage(mesh, wreck, cuts) {
+  const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+  const pos = g.attributes.position, tris = pos.count / 3;
+  tM.copy(wreck.matrixWorld).invert().multiply(mesh.matrixWorld);
+  const sec = new Uint8Array(tris), counts = new Array(cuts.length + 1).fill(0);
+  for (let t = 0; t < tris; t++) {
+    tC.set(0, 0, 0);
+    for (let k = 0; k < 3; k++) tC.add(tA.fromBufferAttribute(pos, t * 3 + k));
+    tC.divideScalar(3).applyMatrix4(tM);
+    let i = 0;
+    for (const c of cuts) if (tC.z + c.a * tC.x + c.b * tC.y + (Math.random() - 0.5) * c.rag > c.z) i++;
+    sec[t] = i; counts[i]++;
+  }
+  if (counts.filter(Boolean).length < 2) return [mesh]; // too short to cut
+  const out = [];
+  counts.forEach((cnt, i) => {
+    if (!cnt) return;
+    const geo = new THREE.BufferGeometry();
+    for (const [name, a] of Object.entries(g.attributes)) {
+      const n = a.itemSize, arr = new Float32Array(cnt * 3 * n), get = [a.getX, a.getY, a.getZ, a.getW].slice(0, n);
+      let o = 0;
+      for (let t = 0; t < tris; t++) {
+        if (sec[t] !== i) continue;
+        for (let v = t * 3; v < t * 3 + 3; v++) for (const gc of get) arr[o++] = gc.call(a, v);
+      }
+      geo.setAttribute(name, new THREE.BufferAttribute(arr, n));
+    }
+    const m = new THREE.Mesh(geo, doubleSided(mesh.material));
+    m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale);
+    m.userData.section = true;
+    mesh.parent.add(m);
+    out.push(m);
+  });
+  if (g !== mesh.geometry) g.dispose();
+  mesh.parent.remove(mesh);
+  return out;
 }
 
 function buildWreck(mode, wet, n, building) {
@@ -2488,12 +2533,19 @@ function buildWreck(mode, wet, n, building) {
   };
 
   if (mode === 'break') {
-    const meshes = [];
+    let meshes = [];
     wreck.traverse(o => { if (o.isMesh && o.visible && o.parent.visible) meshes.push(o); });
+    // the fuselage tears into 3 or 4 sections (the stand-in models have no names: use their biggest mesh)
+    let fus = meshes.filter(m => /fuselage|cent(re|er)_?\s?body/i.test(m.name));
+    const len = m => { if (!m.geometry.boundingBox) m.geometry.computeBoundingBox(); return m.geometry.boundingBox.getSize(tA).length() * m.scale.x; };
+    if (!fus.length) fus = [meshes.reduce((a, b) => (len(b) > len(a) ? b : a))];
+    const z0 = A.box.min.z, L = A.box.max.z - z0, N = Math.random() < 0.5 ? 3 : 4, cuts = [];
+    for (let i = 1; i < N; i++) cuts.push({ z: z0 + L * (i / N + rr([-0.06, 0.06])), a: rr([-0.3, 0.3]), b: rr([-0.4, 0.4]), rag: 0.4 + L * 0.012 });
+    meshes = meshes.flatMap(m => (fus.includes(m) ? splitFuselage(m, wreck, cuts) : [m]));
     for (const m of meshes) {
       const p = breakOff(m);
       launch(p, true);
-      if (Math.random() < 0.5) m.material = charred;
+      if (Math.random() < 0.5) m.material = m.userData.section ? charredDS : charred;
       if (!wet && p.size > 4) { p.burn = rr([10, 25]); p.fireRate = 25; p.smokeRate = 4; }
       else if (!wet && p.size > 1.5 && Math.random() < 0.5) { p.burn = rr([3, 10]); p.fireRate = 12; p.smokeRate = 2; }
     }
