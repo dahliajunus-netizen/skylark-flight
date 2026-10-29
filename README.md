@@ -1,7 +1,7 @@
 # Skylark
 
-A browser flight simulator: fly an F-15C, a Eurofighter Typhoon, a Sukhoi Su-30SM, an A-10C Thunderbolt II, a Boeing 757-200, a Boeing 747-8, a B-52H or an AC-130J Ghostrider gunship from a huge military airbase next to a destructible city.
-Open `index.html` through any static web server. All eight aircraft models (`*.gltf.json`) were built in Blender; the A-10, 747-8, AC-130J and Su-30SM rebuild with `blender --background --python a10/build_a10.py -- A10.gltf.json`, `blender --background --python b747/build_b747.py -- B747.gltf.json`, `blender --background --python ac130/build_ac130.py -- AC130.gltf.json` and `blender --background --python su30/build_su30.py -- SU30.gltf.json`.
+A browser flight simulator: fly an F-15C, a Eurofighter Typhoon, a Sukhoi Su-30SM, an A-10C Thunderbolt II, a Boeing 757-200, a Boeing 747-8, Concorde, a B-52H or an AC-130J Ghostrider gunship from a huge military airbase next to a destructible city.
+Open `index.html` through any static web server. All nine aircraft models (`*.gltf.json`) were built in Blender; the A-10, 747-8, AC-130J, Su-30SM and Concorde rebuild with `blender --background --python a10/build_a10.py -- A10.gltf.json`, `blender --background --python b747/build_b747.py -- B747.gltf.json`, `blender --background --python ac130/build_ac130.py -- AC130.gltf.json`, `blender --background --python su30/build_su30.py -- SU30.gltf.json` and `blender --background --python concorde/build_concorde.py -- CONCORDE.gltf.json`.
 
 ## Multiplayer
 

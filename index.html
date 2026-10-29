@@ -300,7 +300,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h1>Skylark</h1>
     <p id="acDesc"></p>
     <div class="specs" id="acSpecs"></div>
-    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <div class="actions">
@@ -366,7 +366,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="card glass">
     <div class="eyebrow">HOLDING</div>
     <h2>Paused</h2>
-    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <dl class="keys key-only">
@@ -1453,6 +1453,28 @@ const AC = {
     specs: ['ROTATE 165 KT', 'APPROACH 155 KT', '2.5 G LIMIT', 'MAX MACH 0.9', '4 × GENX-2B', 'NO WEAPONS', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle and a long roll; pull back gently at about 165 kt, then raise the gear. Start turns early and keep the bank shallow. Lower the gear early and land at about 155 kt.'
   },
+  concorde: {
+    // Aérospatiale/BAC Concorde: ~150 t at a medium weight, 358 m² ogival delta wing, four Olympus 593 Mk 610
+    // (139 kN dry, 169 kN with reheat each). Reheat is for takeoff and for pushing through Mach 1; it cruises at
+    // Mach 2.04 around 55,000-60,000 ft without it. The delta has no sharp stall but needs a high angle of attack
+    // when slow, so it flies its approach nose-high on the back of the drag curve, with the nose drooped to see over.
+    id: 'concorde', mass: 150000, wing: 358.25, thrust: 557600, thrustAB: 676800,
+    CL0: 0.08, CLA: 3.4, stallA: 0.42, cd0: 0.0105, k: 0.22, wave: [0.95, 1.25, 0.0075],
+    ram: 0.42, mmo: 2.04, // intake pressure recovery: thrust grows with Mach (to Mach 2.04, where the engine control holds it)
+    gLimit: 2.5, effV: 100, rates: [0.38, 0.14, 0.85], stabRoll: 0, tailStrike: 0.24, gear: 6.0, weapons: false, gearTime: 12, mainRetract: 'in', travel: 0.5,
+    droop: 0.218, // the nose droops 12.5° with the gear down, for the view on takeoff and landing
+    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'CONCORDE.gltf.json', podEngines: true,
+    rig: { ab: [[-4.5, -2.35, 16.4], [4.5, -2.35, 16.4], [-5.7, -2.35, 16.4], [5.7, -2.35, 16.4]], bombs: [], nuke: null },
+    box: new THREE.Box3(new THREE.Vector3(-12.8, -3.3, -37.6), new THREE.Vector3(12.8, 6.2, 24.66)), slideI: 900,
+    hitPts: [[37.0, 0, -0.5], [-24.6, 0, 0.4], [-14.1, 12.8, -2.1], [-14.1, -12.8, -2.1], [-23.5, 0, 6.2],
+      [-8.0, 5.1, -3.3], [-8.0, -5.1, -3.3], [0, 0, -1.64], [20.0, 0, -1.6]],
+    chase: [12, 95, 80], eye: [0.85, 29.8], scale: 2.6, shadow: 42, airStart: [210, 0.75], fireball: 2.0, crashBlast: [55, 1900],
+    sound: { whine: [420, 1100, 1.5], roar: [70, 230, 1.7] },
+    eyebrow: 'AÉROSPATIALE/BAC CONCORDE · SUPERSONIC AIRLINER',
+    desc: 'Fly Concorde from the military airbase on the south coast: 61.66 m long, four Olympus engines with reheat, and a cruise at twice the speed of sound. Climb high before going supersonic, where the air is thin enough to let it run at Mach 2. Slow down and it needs a lot of nose-up and a lot of power.',
+    specs: ['ROTATE 200 KT', 'APPROACH 165 KT', '2.5 G LIMIT', 'MACH 2.04 CRUISE', '4 × OLYMPUS 593', 'NO WEAPONS', 'RWY 36 · 16,400 FT'],
+    tip: 'Takeoff: full throttle into reheat, rotate at about 200 kt, raise the gear (the nose comes up with it). Climb to 50,000 ft or more and use reheat to push through Mach 1, then throttle back out of reheat: it holds Mach 2 on dry thrust. Land at about 165 kt, nose high.'
+  },
   ac130: {
     // Lockheed Martin AC-130J Ghostrider: a C-130J-based gunship, ~62 t on a mission, 162 m² wing, four AE 2100D3
     // turboprops (4,637 shp each) on six-blade Dowty R391 propellers. It flies orbits and fires out of its left side.
@@ -1503,7 +1525,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b748: null, b52: null, ac130: null, su30: null }; // Blender-built models, filled in as they load
+const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b748: null, b52: null, ac130: null, su30: null, concorde: null }; // Blender-built models, filled in as they load
 const AB_MATS = [['#ff8c3a', 0.75], ['#fff1c4', 0.9]].map(([c, o]) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
@@ -1636,6 +1658,11 @@ function buildFromGltf(model) {
       m.position.set(0, 0, 0); pivot.add(m);
       if (A.canards && /canard/.test(n)) parts.canards.push(pivot); // a foreplane as well as the tailplane (Su-30)
       else parts[pivot.position.x < 0 ? 'stabL' : 'stabR'] = pivot;
+    } else if (/elevon|droop_nose/.test(n)) {
+      // elevons hinge on their leading edge, the droop nose on its lower edge; both object origins sit on the hinge
+      const pivot = new THREE.Group(); pivot.position.copy(m.position); plane.add(pivot);
+      m.position.set(0, 0, 0); pivot.add(m);
+      parts[/elevon/.test(n) ? 'elevons' : 'droop'].push(pivot);
     } else if (/vectoring_nozzle/.test(n)) {
       const pivot = new THREE.Group(); pivot.position.copy(m.position); plane.add(pivot);
       m.position.set(0, 0, 0); pivot.add(m);
@@ -1653,7 +1680,7 @@ function buildFromGltf(model) {
   }
   parts.gear = gear;
   const r = A.rig;
-  r.ab.forEach(([x, y, z], i) => addAfterburner(i ? 'abR' : 'abL', x, y, z));
+  r.ab.forEach(([x, y, z], i) => addAfterburner(['abL', 'abR', 'abL2', 'abR2'][i], x, y, z));
   addStores(r.bombs, r.bombScale || 1, r.internalFrom);
   buildZones();
 }
@@ -1665,6 +1692,27 @@ function addPropDisc(m) {
   const disc = new THREE.Mesh(new THREE.CircleGeometry(r, 40), new THREE.MeshBasicMaterial({ color: '#2a2d30', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
   disc.position.copy(m.position); plane.add(disc);
   parts.props.push({ m, disc });
+}
+
+// Concorde: 61.66 m long, 25.6 m span. The Blender model (CONCORDE.gltf.json, concorde/build_concorde.py) replaces this stand-in once it loads.
+function buildConcorde() {
+  if (MODELS.concorde) return buildFromGltf(MODELS.concorde);
+  const white = M('#f1f2ef', 0.4, 0.1), grey = M('#dcdfe1', 0.45, 0.1), dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
+  add(tube(0.4, 1.0, 50, 18), white, 0, 0, -6);
+  add(new THREE.ConeGeometry(1.0, 12, 18).rotateX(-Math.PI / 2), white, 0, -0.3, -37 + 6);
+  for (const sx of [-1, 1]) {
+    add(planform([[1.2, -18], [3.4, -9], [7, 0.5], [11.4, 10], [12.8, 13.6], [12.8, 14.6], [1.2, 14.6]].map(([x, z]) => [x * sx, z]), 0.5), white, 0, -1.2, 0);
+    add(new THREE.BoxGeometry(2.4, 1.9, 13.8), grey, sx * 5.1, -2.35, 7.9);
+  }
+  add(profile([[10, 1.3], [21.9, 6.2], [24.1, 6.2], [24.4, 0.8]], 0.3), white, 0, 0, 0);
+  const gear = new THREE.Group(); plane.add(gear);
+  const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.3, 14); g.rotateZ(Math.PI / 2); return g; };
+  for (const [x, z, rad] of [[0, -17, 0.4], [-3.86, 2.4, 0.6], [3.86, 2.4, 0.6]]) {
+    add(wheel(rad), dark, x, -GEAR + rad, z, gear);
+    add(new THREE.BoxGeometry(0.2, GEAR - rad - 1.4, 0.2), metal, x, -(GEAR - rad + 1.4) / 2, z, gear);
+  }
+  parts.gear = gear;
+  A.rig.ab.forEach(([x, y, z], i) => addAfterburner(['abL', 'abR', 'abL2', 'abR2'][i], x, y, z));
 }
 
 // Sukhoi Su-30SM: 21.94 m long, 14.7 m span. The Blender model (SU30.gltf.json, su30/build_su30.py) replaces this stand-in once it loads.
@@ -1728,7 +1776,7 @@ function buildTyphoon() {
   }
   add(profile([[2.2, 0.45], [5.6, 3.33], [6.9, 3.33], [7.1, 0.45]], 0.12), greyD, 0, 0, 0);
   const r = A.rig;
-  r.ab.forEach(([x, y, z], i) => addAfterburner(i ? 'abR' : 'abL', x, y, z));
+  r.ab.forEach(([x, y, z], i) => addAfterburner(['abL', 'abR', 'abL2', 'abR2'][i], x, y, z));
   addStores(r.bombs);
   const gear = new THREE.Group(); plane.add(gear);
   const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.24, 14); g.rotateZ(Math.PI / 2); return g; };
@@ -1864,8 +1912,9 @@ function setAircraft(id) {
   GEAR = A.gear;
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = [];
-  ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30 })[A.id]();
+  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.droop = [];
+  ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
+  if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
   rigGear();
@@ -2299,7 +2348,7 @@ scene.add(plane);
 // load the Blender-built models published next to this page, then swap each in
 if (THREE.GLTFLoader) {
   const loader = new THREE.GLTFLoader();
-  for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130', 'su30']) {
+  for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
         // glTF colours are linear; this renderer treats material colours as already display-ready
@@ -2503,7 +2552,7 @@ function buildWreck(mode, wet, n, building) {
   axes(S.quat);
   const V = S.vel.length(), vn = Math.max(0, -S.vel.dot(n));
   const omega = new THREE.Vector3().addScaledVector(R, S.ang.x).addScaledVector(U, -S.ang.y).addScaledVector(F, S.ang.z);
-  const iGear = plane.children.indexOf(parts.gear), iAb = [parts.abL, parts.abR].filter(Boolean).map(o => plane.children.indexOf(o));
+  const iGear = plane.children.indexOf(parts.gear), iAb = [parts.abL, parts.abR, parts.abL2, parts.abR2].filter(Boolean).map(o => plane.children.indexOf(o));
   plane.updateMatrixWorld(true);
   const wreck = plane.clone();
   wreck.visible = true;
@@ -3780,7 +3829,10 @@ function physics(dt) {
 
   const t = S.throttle;
   const thrust = (!A.thrustAB ? t * A.thrust // no afterburner: full throttle is takeoff thrust
-    : t <= AB_AT ? t / AB_AT * A.thrust : A.thrust + (t - AB_AT) / (1 - AB_AT) * (A.thrustAB - A.thrust)) * Math.pow(rho / RHO, 0.7);
+    : t <= AB_AT ? t / AB_AT * A.thrust : A.thrust + (t - AB_AT) / (1 - AB_AT) * (A.thrustAB - A.thrust)) * Math.pow(rho / RHO, 0.7)
+    // Concorde's variable intakes turn speed into pressure, so its thrust grows with Mach; past its limit Mach the
+    // engine control winds the thrust back so it can't run away above Mach 2.04
+    * (A.ram ? (1 + A.ram * Math.max(0, Math.min(mach, A.mmo) - 0.5)) * clamp((A.mmo + 0.06 - mach) / 0.06, 0, 1) : 1);
   force.set(0, 0, 0);
   force.addScaledVector(F, thrust * (S.dmg.engL + S.dmg.engR) / 2);
   if (A.recoil && S.firing && S.ammo > 0) force.addScaledVector(F, -A.recoil); // the GAU-8 pushes back
@@ -4643,6 +4695,8 @@ function updateVisuals(dt) {
   parts.stabR.rotation.x = -inp.pitch * 0.3 * A.stabSign - inp.roll * A.stabRoll;
   for (const c of parts.canards) c.rotation.x = inp.pitch * 0.35; // foreplanes lead the pitch the other way
   for (const z of parts.tvc) z.rotation.x = -inp.pitch * 0.26; // thrust vectoring: up to 15° with the stick
+  for (const e of parts.elevons) e.rotation.x = -inp.pitch * 0.3 + (e.position.x < 0 ? 1 : -1) * inp.roll * 0.3; // pitch and roll together
+  for (const d of parts.droop) d.rotation.x += (-A.droop * S.gearT - d.rotation.x) * Math.min(1, dt * 0.8);
   // propellers: a visible turn rate (the real ones run ~1,000 rpm, far past what a frame can show) and a blur disc
   const spin = running && !S.crashed ? 14 + 26 * S.throttle : 0;
   for (const p of parts.props) {
@@ -4670,7 +4724,7 @@ function updateVisuals(dt) {
     L.pivot.visible = S.gearT > 0.01;
   }
   const abOn = running && !S.crashed && !!A.thrustAB && S.throttle > AB_AT;
-  for (const ab of [parts.abL, parts.abR].filter(Boolean)) {
+  for (const ab of [parts.abL, parts.abR, parts.abL2, parts.abR2].filter(Boolean)) {
     ab.visible = abOn;
     if (abOn) { const k = 0.55 + (S.throttle - AB_AT) / (1 - AB_AT) * 0.45; ab.scale.set(1, 1, k * (0.9 + Math.random() * 0.2)); }
   }
