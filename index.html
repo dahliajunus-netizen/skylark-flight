@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15, a Eurofighter Typhoon, a Boeing 757 or a B-52 from a huge military airbase next to a destructible city.">
+<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15, a Eurofighter Typhoon, a Boeing 757 or a B-52 from a huge military airbase next to a destructible city, with other players online.">
 <style>:root{color-scheme:dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -63,6 +63,14 @@ body { background: var(--night); color: var(--fg); font-family: var(--font-ui); 
 #toast { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; pointer-events: none; transition: opacity .3s; white-space: nowrap; }
 
 /* ---------- buttons ---------- */
+#mpBar { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); padding: 6px 10px; font-size: 11px; letter-spacing: .08em; color: var(--dim); cursor: default; }
+#mpBar.live { color: #7ee2a8; }
+#mpBar::before { content: '●'; margin-right: 6px; }
+#vote { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; font-size: 13px; max-width: calc(100vw - 32px); flex-wrap: wrap; justify-content: center; }
+#vote .pickb { padding: 5px 14px; }
+.mpTag { position: fixed; left: 0; top: 0; padding: 2px 7px; font-size: 11px; color: #fff; background: rgba(8,14,20,.55); border-radius: 5px; pointer-events: none; white-space: nowrap; will-change: transform; }
+body.noui .mpTag { display: none; }
+.pickb.busy { opacity: .45; text-decoration: line-through; }
 .tools { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); display: flex; gap: 6px; }
 .tbtn { font: 700 11px var(--font-ui); letter-spacing: .1em; color: var(--fg); background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 8px; padding: 9px 11px; cursor: pointer; touch-action: manipulation; }
 .tbtn:hover { border-color: var(--cyan); }
@@ -218,6 +226,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="ccip" class="ret ccip" hidden><span>BOMB</span></div>
 <div id="warn" hidden></div>
 <div id="toast" class="glass" style="opacity:0"></div>
+<div id="mpBar" class="glass">CONNECTING…</div>
+<div id="vote" class="glass" hidden><span id="voteText"></span><button class="pickb" id="voteYes" aria-pressed="false">Yes <kbd>Y</kbd></button><button class="pickb" id="voteNo" aria-pressed="false">No</button></div>
 
 <div class="tools" id="tools" hidden>
   <button class="tbtn" id="bBombCam" title="Hold to follow your last bomb">BOMB CAM<kbd>Z</kbd></button>
@@ -260,8 +270,9 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
       <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
-      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
+      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
+      <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
       <dt>V (AC-130J)</dt><dd>Gunship sensor camera: 1 / 2 pick the 30 mm or 105 mm, Space or click fires, T reloads the 30 mm, scroll zooms, Y switches TV / IR</dd>
       <dt>U</dt><dd>Hide or show the instruments and buttons</dd>
@@ -314,8 +325,9 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
       <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
-      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
+      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
+      <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
     </dl>
     <div class="actions">
@@ -1193,6 +1205,23 @@ function nukeScale(kt) {
     tf: clamp(0.25 * Math.pow(kt, 0.25), 0.4, 3)  // how long the fireball lasts, relative to the old 0.3 kt-ish timings
   };
 }
+// Multiplayer state (the multiplayer section has the rest). It is declared here because setAircraft keeps the
+// B-52 claim in it. Nuclear cooldowns are kept in localStorage, so restarting or reloading doesn't skip them.
+const NUKE_COOLDOWN = { b61: 120, b28: 240, b41: 480 }; // seconds before the same bomb can be dropped again
+const MP = { room: null, self: '', peers: new Map(), act: {}, hits: [], log: [], synced: false, asked: false, failed: false,
+  vote: null, doneVotes: new Set(), claim: 0, t0: performance.now(), name: '', cool: {} };
+try { MP.name = localStorage.getItem('skylark.name') || ''; MP.cool = JSON.parse(localStorage.getItem('skylark.cool') || '{}') || {}; } catch (e) {}
+if (!/^[A-Za-z]+-\d{2}$/.test(MP.name)) {
+  const calls = ['Viper', 'Ghost', 'Maverick', 'Falcon', 'Raptor', 'Talon', 'Reaper', 'Havoc', 'Cobra', 'Spectre', 'Nomad', 'Banshee'];
+  MP.name = calls[Math.floor(Math.random() * calls.length)] + '-' + (10 + Math.floor(Math.random() * 90));
+  try { localStorage.setItem('skylark.name', MP.name); } catch (e) {}
+}
+const nukeId = nk => Object.keys(NUKE_KINDS).find(k => NUKE_KINDS[k] === nk) || 'b61';
+const coolLeft = id => Math.max(0, ((MP.cool[id] || 0) - Date.now()) / 1000);
+function startCooldown(id) {
+  MP.cool[id] = Date.now() + NUKE_COOLDOWN[id] * 1000;
+  try { localStorage.setItem('skylark.cool', JSON.stringify(MP.cool)); } catch (e) {}
+}
 // Aircraft with a loadouts list carry either their bombs or one nuclear bomb, picked on the start and pause screens.
 const loadout = { f15: 'mk82', b52: 'mk84' };
 const curLoadout = () => (A.loadouts || []).find(l => l.id === loadout[A.id]) || (A.loadouts || [])[0] || null;
@@ -1676,6 +1705,7 @@ function build757() {
 
 function setAircraft(id) {
   A = AC[id] || AC.f15;
+  if (A.id !== 'b52') MP.claim = 0; else if (!MP.claim) MP.claim = Date.now(); // the B-52 is one player's at a time
   GEAR = A.gear;
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
@@ -2037,7 +2067,7 @@ function checkStructure() {
         crash('You flew into the terrain.');
         return true;
       }
-      if (bi >= 0) damageAt(bi, tC, z.kind === 'wing' ? 3 : 2, 10); // the building takes a bite too
+      if (bi >= 0) hitAt(bi, tC, z.kind === 'wing' ? 3 : 2, 10); // the building takes a bite too
       ripZone(z, p, tC);
       break;
     }
@@ -2063,7 +2093,7 @@ function hullHit(bi, p) {
   push();
   S.vel.multiplyScalar(0.85);
   S.ang.x += (Math.random() - 0.5) * 1.5; S.ang.y += (Math.random() - 0.5) * 1.5; S.ang.z += (Math.random() - 0.5) * 3;
-  damageAt(bi, p, 3 * A.scale, 25);
+  hitAt(bi, p, 3 * A.scale, 25);
   for (let i = 0; i < 24; i++) emit('spark', p, (Math.random() - 0.5) * 24, rr([2, 14]), (Math.random() - 0.5) * 24);
   for (let i = 0; i < 8; i++) emit('dust', p, (Math.random() - 0.5) * 6, rr([1, 4]), (Math.random() - 0.5) * 6, 0.8);
   S.hitCool = 0.35; S.damaged = true;
@@ -2538,6 +2568,7 @@ function startCollapse(i, quiet = false) {
 }
 function rebuildCity() {
   restoreCity();
+  MP.log.length = 0; MP.hits.length = 0;
   clearNukes();
   clearParticles(glow); clearParticles(haze);
   toast('City rebuilt');
@@ -2776,7 +2807,9 @@ function updateCity(dt) {
 
 // ---------------- explosions ----------------
 // blast: damage every building within R (by distance to its nearest surface), and the jet if it's too close
-function blast(p, R, power) {
+// from: '' for a blast made here, 'remote' for another player's, 'replay' when catching up on the shared city
+function blast(p, R, power, from = '') {
+  if (!from) mpFx({ k: 'b', p: mpV(p), R, pw: power });
   const ix0 = Math.floor((p.x - R) / BLOCK), ix1 = Math.floor((p.x + R) / BLOCK), iz0 = Math.floor((p.z - R) / BLOCK), iz1 = Math.floor((p.z + R) / BLOCK);
   const seen = new Set(); // a building spanning several grid squares is listed in each of them
   for (let ix = ix0; ix <= ix1; ix++) for (let iz = iz0; iz <= iz1; iz++) {
@@ -2790,12 +2823,13 @@ function blast(p, R, power) {
       if (d < R * 0.5) damageAt(i, p, R * 0.5, power / 45); // blows out the cells within reach
     }
   }
-  if (running && !S.crashed && S.pos.distanceTo(p) < R * 1.4) {
+  if (from !== 'replay' && running && !S.crashed && S.pos.distanceTo(p) < R * 1.4) {
     S.hitBuilding = -1;
-    crash('You flew through your own bomb blast. Release from higher up, at least 500 ft.');
+    crash(from ? 'You were caught in another player\'s blast.' : 'You flew through your own bomb blast. Release from higher up, at least 500 ft.');
   }
 }
-function explode(p, k, wet) {
+function explode(p, k, wet, remote = false) {
+  if (!remote) mpFx({ k: 'e', p: mpV(p), s: k, w: wet ? 1 : 0 });
   if (wet) {
     for (let i = 0; i < 130 * k; i++) emit('splash', p, (Math.random() - 0.5) * 16, rr([15, 60]) * k, (Math.random() - 0.5) * 16, 1.3 * k);
     for (let i = 0; i < 20; i++) emit('steam', p, (Math.random() - 0.5) * 8, 3, (Math.random() - 0.5) * 8, k);
@@ -2859,7 +2893,7 @@ function updateBullets(dt) {
     for (let n = 1; n <= steps && !hit; n++) {
       const x = bul.pos[j] + vx * dt * n / steps, y = bul.pos[j + 1] + vy * dt * n / steps, z = bul.pos[j + 2] + vz * dt * n / steps;
       const bi = buildingAt(x, z);
-      if (bi >= 0 && solidAt(bi, x, y, z)) { damageAt(bi, tV.set(x, y, z), 0.8, A.roundDmg || 1); hit = [x, y, z, 'building']; }
+      if (bi >= 0 && solidAt(bi, x, y, z)) { hitAt(bi, tV.set(x, y, z), 0.8, A.roundDmg || 1); hit = [x, y, z, 'building']; }
       else { const h = heightAt(x, z); if (y <= Math.max(h, 0)) hit = [x, Math.max(h, 0), z, h < 0 ? 'water' : 'ground']; }
     }
     if (hit) { roundImpact(...hit); bul.life[i] = 0; trPos[s + 1] = trPos[s + 4] = -1e6; continue; }
@@ -3126,8 +3160,11 @@ function dropNuke() {
   const nk = parts.nuke.userData.nk;
   if (S.nukes <= 0) { toast('The ' + nk.name + ' is gone'); return; }
   if (S.onGround) { toast('Bombs release only in the air'); return; }
+  const left = coolLeft(nukeId(nk));
+  if (left > 0) { toast(`The ${nk.name} is cooling down: ${mmss(left)} left`); return; }
   releaseStore(parts.nuke, 'nuke');
   S.nukes--;
+  startCooldown(nukeId(nk));
   toast(nk.name + ' away, falling free. Turn away and get at least ' + (nukeScale(nk.kt).killR / 1000).toFixed(1) + ' km clear.');
 }
 function updateBombs(dt) {
@@ -3202,7 +3239,8 @@ const PUFF_GEO = new THREE.IcosahedronGeometry(1, 1);
 const flashEl = document.getElementById('flash');
 const cT = new THREE.Color(), nM = new THREE.Matrix4(), nQ = new THREE.Quaternion(), nP = new THREE.Vector3(), nS = new THREE.Vector3();
 
-function detonateNuke(p, wet, nk = NUKE_KINDS.b61) {
+function detonateNuke(p, wet, nk = NUKE_KINDS.b61, remote = false) {
+  if (!remote) mpFx({ k: 'n', p: mpV(p), w: wet ? 1 : 0, id: nukeId(nk) });
   const gy = Math.max(0, heightAt(p.x, p.z)), sz = nukeScale(nk.kt);
   const fx = { p: p.clone(), gy, ...sz, life: Math.max(110, 5 * sz.rise), t: 0, idx: 0, near: [], hitPlane: false, camHit: false };
   // buildings in reach, nearest first, so the blast wave can knock them down in order
@@ -3433,7 +3471,7 @@ function crash(msg) {
   plane.visible = false;
   // the impact (and any bombs still on the pylons) wrecks what's around it
   if (!wet) {
-    if (building) damageAt(S.hitBuilding, S.hitPoint, 8 * A.scale, 30); // punches a hole where it went in
+    if (building) hitAt(S.hitBuilding, S.hitPoint, 8 * A.scale, 30); // punches a hole where it went in
     if (!gentle || S.bombs > 0) blast(W.site, A.crashBlast[0] + S.bombs * 6, A.crashBlast[1] + S.bombs * 900);
     if (S.bombs > 0) explode(W.site, 1 + S.bombs * 0.25, false);
   }
@@ -3800,7 +3838,7 @@ function start(mode) {
 $('#goRunway').onclick = $('#reRunway').onclick = $('#pRunway').onclick = () => start('runway');
 $('#goAir').onclick = $('#reAir').onclick = $('#pAir').onclick = () => start('air');
 $('#resume').onclick = () => togglePause(false);
-$('#pRebuild').onclick = $('#reRebuild').onclick = () => rebuildCity();
+$('#pRebuild').onclick = $('#reRebuild').onclick = () => requestRebuild();
 $('#bCam').onclick = toggleCam;
 $('#bGs').onclick = () => setGunshipCam(!gs.cam);
 $('#gsCamBtn').onclick = () => setGunshipCam(!gs.cam);
@@ -3846,6 +3884,8 @@ function pickLoadout(l) {
 document.querySelectorAll('.pickb[data-ac]').forEach(b => {
   b.onclick = () => {
     if (b.dataset.ac === A.id) return;
+    const holder = b.dataset.ac === 'b52' && b52Holder();
+    if (holder) { toast(holder.name + ' is flying the B-52. Only one player at a time: pick another aircraft.'); return; }
     setAircraft(b.dataset.ac);
     if (running) start(lastMode); // switching from the pause screen restarts the flight
     else reset('runway');
@@ -4049,8 +4089,9 @@ function updateHUD() {
   setText(el.gun, 'GUN ' + S.ammo);
   el.gun.style.color = S.firing && S.ammo > 0 ? 'var(--amber)' : S.ammo ? '' : 'var(--dim)';
   setText(el.bombs, (A.bombName || 'MK-82') + ' ×' + S.bombs);
-  setText(el.nukes, (parts.nuke ? parts.nuke.userData.nk.name : 'B61') + ' ×' + S.nukes);
-  el.nukes.style.color = S.nukes ? 'var(--amber)' : 'var(--dim)';
+  const nkName = parts.nuke ? parts.nuke.userData.nk.name : 'B61', cool = parts.nuke ? coolLeft(nukeId(parts.nuke.userData.nk)) : 0;
+  setText(el.nukes, S.nukes && cool > 0 ? nkName + ' ' + mmss(cool) : nkName + ' ×' + S.nukes);
+  el.nukes.style.color = S.nukes && !cool ? 'var(--amber)' : 'var(--dim)';
   el.bombs.style.color = S.bombs ? '' : 'var(--dim)';
   // gun reticle: where rounds fired now will be in 0.6 s; CCIP: where a bomb released now would land
   const live = !S.crashed && !paused;
@@ -4327,6 +4368,295 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
 });
 
+// ---------------- multiplayer ----------------
+// Peer to peer, with no server. Every open page joins one public room through Trystero (WebRTC; the peers find
+// each other through public Nostr relays). Each player sends their flight ten times a second and draws everyone
+// else's. Everything that changes the city goes to everyone: bomb, shell and crash blasts, cannon and collision
+// hits, and nuclear blasts. Each page applies it to its own copy of the city, which is generated the same way
+// everywhere. A player who joins late gets the log of changes since the last rebuild from someone already in.
+// The shared rules are settled between the pages:
+//  - one B-52 at a time: whoever took it first keeps it; anyone who took it at the same moment is moved off it
+//  - each nuclear bomb has a cooldown after release (NUKE_COOLDOWN), and pages ignore nuclear blasts that come faster
+//  - Rebuild city starts a vote; the city is rebuilt for everyone once at least 2/3 of the players say yes
+const acShort = id => (document.querySelector('.pickb[data-ac="' + id + '"]') || {}).textContent || id;
+const mmss = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+const r1 = v => Math.round(v * 10) / 10;
+const mpV = p => [r1(p.x), r1(p.y), r1(p.z)];
+const num = (v, lim) => typeof v === 'number' && isFinite(v) && Math.abs(v) <= lim;
+const mpTmp = new THREE.Vector3(), mpTgt = new THREE.Vector3();
+const vec = a => Array.isArray(a) && a.length === 3 && a.every(v => num(v, 2e5)) ? new THREE.Vector3(a[0], a[1], a[2]) : null;
+function mpSend(name, data, target) {
+  const a = MP.act[name];
+  if (a && MP.peers.size) try { a.send(data, target ? { target } : undefined); } catch (e) { console.warn('multiplayer send failed', e); }
+}
+const trimLog = () => { if (MP.log.length > 40000) MP.log.splice(0, MP.log.length - 40000); };
+// a change to the city made here: logged for late joiners and sent to everyone
+function mpFx(ev) { if (ev.k !== 'e') { MP.log.push(ev); trimLog(); } mpSend('fx', ev); }
+// a hit on a building made here; hits go out in batches
+function hitAt(bi, p, r, pw) { damageAt(bi, p, r, pw); MP.hits.push(bi, r1(p.x), r1(p.y), r1(p.z), r, pw); }
+// the building damage of a nuclear blast, without the fireball and cloud (for catching up on the log)
+function nukeDamage(p, nk) {
+  const killR = nukeScale(nk.kt).killR;
+  for (let i = 0; i < NB; i++) {
+    if (bState[i] !== 0) continue;
+    const k = i * 5, d = Math.hypot(clamp(p.x, BLD[k], BLD[k + 2]) - p.x, clamp(p.z, BLD[k + 1], BLD[k + 3]) - p.z);
+    if (d < killR) damageBuilding(i, 22000 * Math.pow(1 - d / killR, 1.2) + 150, true);
+  }
+}
+// apply a change to the city that came from another player (or, with replay, from the log of a late join)
+function applyFx(ev, P, replay) {
+  if (!ev || typeof ev !== 'object') return;
+  const p = ev.k === 'h' ? null : vec(ev.p);
+  if (ev.k === 'b' && p && num(ev.R, 400) && num(ev.pw, 1e5)) blast(p, ev.R, ev.pw, replay ? 'replay' : 'remote');
+  else if (ev.k === 'e' && p && num(ev.s, 10)) { if (!replay) explode(p, ev.s, !!ev.w, true); return; }
+  else if (ev.k === 'n' && p && NUKE_KINDS.hasOwnProperty(ev.id)) {
+    const nk = NUKE_KINDS[ev.id];
+    if (replay) nukeDamage(p, nk);
+    else {
+      // a player can't set off the same bomb faster than its cooldown (less some slack for different fall times)
+      const now = performance.now(), last = P && P.lastNuke[ev.id];
+      if (last && now - last < (NUKE_COOLDOWN[ev.id] - 90) * 1000) return;
+      if (P) P.lastNuke[ev.id] = now;
+      detonateNuke(p, !!ev.w, nk, true);
+    }
+  } else if (ev.k === 'h' && Array.isArray(ev.a)) {
+    const a = ev.a;
+    for (let i = 0; i + 5 < a.length; i += 6) {
+      const bi = a[i], x = a[i + 1], y = a[i + 2], z = a[i + 3], r = a[i + 4], pw = a[i + 5];
+      if (!Number.isInteger(bi) || bi < 0 || bi >= NB || !num(x, 2e5) || !num(y, 2e5) || !num(z, 2e5) || !num(r, 50) || !num(pw, 200)) continue;
+      damageAt(bi, mpTmp.set(x, y, z), r, pw);
+      if (!replay && r < 1) roundImpact(x, y, z, 'building');
+    }
+  } else return;
+  MP.log.push(ev); trimLog();
+}
+
+// ---- other players' aircraft ----
+function ghostModel(ac) {
+  const g = new THREE.Group();
+  if (MODELS[ac]) {
+    const m = MODELS[ac].clone(true);
+    m.rotation.y = Math.PI; // the Blender models face +z; the sim's aircraft face -z
+    g.add(m);
+    g.userData.real = true;
+  } else { // a plain stand-in until the model has loaded
+    const mat = M('#9aa3ab'), k = AC[ac].scale || 1;
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(2.4 * k, 2 * k, 18 * k), mat), new THREE.Mesh(new THREE.BoxGeometry(14 * k, 0.4 * k, 4 * k), mat));
+  }
+  g.userData.ac = ac;
+  g.userData.gear = [];
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; if (/wheel|strut|bogie/i.test(o.name)) g.userData.gear.push(o); } });
+  return g;
+}
+function mpPeer(id) {
+  let P = MP.peers.get(id);
+  if (!P) {
+    const tag = document.createElement('div');
+    tag.className = 'mpTag'; tag.hidden = true;
+    document.body.appendChild(tag);
+    P = { id, name: '…', ac: 'f15', r: 0, c: 0, p: new THREE.Vector3(), v: new THREE.Vector3(), q: new THREE.Quaternion(), g: 1, cl: 0, up: 0, t: 0, obj: null, tag, snap: true, lastNuke: {}, tagT: 0 };
+    MP.peers.set(id, P);
+    updateMpBar();
+  }
+  return P;
+}
+function dropPeer(id) {
+  const P = MP.peers.get(id);
+  if (!P) return;
+  if (P.obj) scene.remove(P.obj);
+  P.tag.remove();
+  MP.peers.delete(id);
+  if (P.name !== '…') toast(P.name + ' left');
+  updateMpBar(); updateB52Buttons(); tally();
+}
+function b52Holder() { for (const P of MP.peers.values()) if (P.ac === 'b52' && P.cl) return P; return null; }
+function updateB52Buttons() {
+  const h = A.id === 'b52' ? null : b52Holder();
+  document.querySelectorAll('.pickb[data-ac="b52"]').forEach(b => { b.classList.toggle('busy', !!h); b.title = h ? h.name + ' is flying the B-52' : ''; });
+}
+function stateMsg() {
+  const q = S.quat, still = !running || paused || S.crashed;
+  return {
+    n: MP.name, ac: A.id, r: running ? 1 : 0, c: S.crashed ? 1 : 0, p: mpV(S.pos), v: still ? [0, 0, 0] : mpV(S.vel),
+    q: [q.x, q.y, q.z, q.w].map(v => Math.round(v * 1e4) / 1e4), g: S.gearT > 0.5 ? 1 : 0,
+    cl: A.id === 'b52' ? MP.claim : 0, up: Math.round(performance.now() - MP.t0)
+  };
+}
+function onState(id, d) {
+  if (!d || typeof d !== 'object') return;
+  const p = vec(d.p), v = vec(d.v);
+  if (!p || !v || !Array.isArray(d.q) || d.q.length !== 4 || !d.q.every(x => num(x, 1.01))) return;
+  const P = mpPeer(id), wasIn = P.name !== '…';
+  P.name = String(d.n || 'Pilot').replace(/[^\w\- ]/g, '').slice(0, 16) || 'Pilot';
+  if (!wasIn) toast(P.name + ' joined');
+  P.ac = AC.hasOwnProperty(d.ac) ? d.ac : 'f15';
+  if (d.c && !P.c && P.r && P.obj && P.obj.visible) explode(P.obj.position, 1.2, heightAt(P.obj.position.x, P.obj.position.z) < 0 && P.obj.position.y < 2, true);
+  if (P.p.distanceTo(p) > 300 || !P.r) P.snap = true;
+  P.r = d.r ? 1 : 0; P.c = d.c ? 1 : 0;
+  P.p.copy(p); P.v.copy(v); P.q.set(d.q[0], d.q[1], d.q[2], d.q[3]).normalize();
+  P.g = d.g ? 1 : 0;
+  P.cl = num(d.cl, 1e14) ? d.cl : 0;
+  P.up = num(d.up, 1e10) ? d.up : 0;
+  P.t = performance.now();
+  // two players took the B-52: the earlier claim keeps it
+  if (P.ac === 'b52' && P.cl && A.id === 'b52' && MP.claim && (P.cl < MP.claim || (P.cl === MP.claim && id < MP.self))) {
+    MP.claim = 0;
+    setAircraft('f15');
+    if (running) start(lastMode); else reset('runway');
+    toast(P.name + ' took the B-52 first. Only one player can fly it; you are in the F-15.');
+  }
+  // catch up on the city: ask the first player who has been here longer than us for the log of changes
+  if (!MP.asked && P.up > performance.now() - MP.t0) { MP.asked = true; mpSend('sync', 1, id); }
+  updateB52Buttons();
+}
+function mpUpdate(dt) {
+  if (!MP.peers.size) return;
+  const now = performance.now(), k = 1 - Math.exp(-dt * 12);
+  for (const P of MP.peers.values()) {
+    const show = !!(P.r && !P.c && P.t);
+    if (show && (!P.obj || P.obj.userData.ac !== P.ac || (!P.obj.userData.real && MODELS[P.ac]))) {
+      if (P.obj) scene.remove(P.obj);
+      P.obj = ghostModel(P.ac);
+      scene.add(P.obj);
+      P.snap = true;
+    }
+    if (!P.obj) { P.tag.hidden = true; continue; }
+    P.obj.visible = show;
+    if (!show) { P.tag.hidden = true; continue; }
+    mpTgt.copy(P.p).addScaledVector(P.v, Math.min(0.5, (now - P.t) / 1000)); // carry on from the last report
+    if (P.snap) { P.obj.position.copy(mpTgt); P.obj.quaternion.copy(P.q); P.snap = false; }
+    else { P.obj.position.lerp(mpTgt, k); P.obj.quaternion.slerp(P.q, k); }
+    for (const m of P.obj.userData.gear) m.visible = !!P.g;
+    // a name tag over the aircraft
+    mpTmp.copy(P.obj.position); mpTmp.y += 6 * (AC[P.ac].scale || 1);
+    const dist = camera.position.distanceTo(mpTmp);
+    mpTmp.project(camera);
+    const vis = mpTmp.z < 1 && Math.abs(mpTmp.x) < 1.1 && Math.abs(mpTmp.y) < 1.1 && dist < 40000;
+    P.tag.hidden = !vis;
+    if (!vis) continue;
+    P.tag.style.transform = `translate(${((mpTmp.x + 1) / 2 * innerWidth).toFixed(0)}px, ${((1 - mpTmp.y) / 2 * innerHeight).toFixed(0)}px) translate(-50%, -100%)`;
+    if (now - P.tagT > 250) { P.tagT = now; setText(P.tag, `${P.name} · ${acShort(P.ac)} · ${(dist / 1000).toFixed(1)} km`); }
+  }
+}
+function updateMpBar() {
+  const el = $('#mpBar'), n = MP.peers.size + 1;
+  if (!MP.room) { setText(el, MP.failed ? 'OFFLINE' : 'CONNECTING…'); return; }
+  setText(el, `${MP.name.toUpperCase()} · ${n} ONLINE`);
+  el.title = [MP.name + ' (you)', ...[...MP.peers.values()].map(P => P.name + ' · ' + acShort(P.ac))].join('\n');
+  el.classList.toggle('live', n > 1);
+}
+
+// ---- voting to rebuild the city ----
+function requestRebuild() {
+  if (!MP.peers.size) { rebuildCity(); return; }
+  if (MP.vote) { castVote(true); return; }
+  MP.vote = { id: Date.now() + ':' + MP.self, by: MP.name, yes: new Set([MP.self]), no: new Set(), end: performance.now() + 60000 };
+  toast('Vote started: rebuild the city? 2/3 of the players must say yes');
+  sendVote(); tally();
+}
+function sendVote(target) {
+  const V = MP.vote;
+  if (!V) return;
+  mpSend('vote', { id: V.id, by: V.by, y: V.yes.has(MP.self) ? 1 : V.no.has(MP.self) ? 0 : -1, left: Math.round(V.end - performance.now()) }, target);
+}
+function castVote(yes) {
+  const V = MP.vote;
+  if (!V) return;
+  V.yes.delete(MP.self); V.no.delete(MP.self);
+  (yes ? V.yes : V.no).add(MP.self);
+  sendVote(); tally();
+}
+function onVote(id, d) {
+  if (!d || typeof d.id !== 'string' || d.id.length > 80) return;
+  if (d.done) {
+    if (MP.doneVotes.has(d.id)) return;
+    MP.doneVotes.add(d.id);
+    if (MP.vote && MP.vote.id === d.id) MP.vote = null;
+    rebuildCity();
+    toast('Vote passed: the city is rebuilt for everyone');
+    renderVote();
+    return;
+  }
+  if (MP.doneVotes.has(d.id)) return;
+  // two votes started at once: everyone keeps the older one
+  if (!MP.vote || (MP.vote.id !== d.id && d.id < MP.vote.id)) {
+    MP.vote = { id: d.id, by: String(d.by || 'Pilot').replace(/[^\w\- ]/g, '').slice(0, 16), yes: new Set(), no: new Set(), end: performance.now() + clamp(num(d.left, 1e6) ? d.left : 60000, 1000, 60000) };
+    if (d.y === 1) toast(MP.vote.by + ' wants to rebuild the city. Press Y or click Yes to agree');
+  }
+  if (MP.vote.id !== d.id) return;
+  const V = MP.vote;
+  V.yes.delete(id); V.no.delete(id);
+  if (d.y === 1) V.yes.add(id); else if (d.y === 0) V.no.add(id);
+  tally();
+}
+function tally() {
+  const V = MP.vote;
+  if (V) {
+    const here = new Set([MP.self, ...MP.peers.keys()]), n = here.size;
+    const yes = [...V.yes].filter(i => here.has(i)).length, no = [...V.no].filter(i => here.has(i)).length;
+    if (yes * 3 >= n * 2) {
+      MP.doneVotes.add(V.id);
+      mpSend('vote', { id: V.id, done: 1 });
+      MP.vote = null;
+      rebuildCity();
+      toast('Vote passed: the city is rebuilt for everyone');
+    } else if ((n - no) * 3 < n * 2 || performance.now() > V.end) {
+      MP.vote = null;
+      toast('The vote to rebuild the city failed');
+    }
+  }
+  renderVote();
+}
+function renderVote() {
+  const box = $('#vote'), V = MP.vote;
+  box.hidden = !V;
+  if (!V) return;
+  const here = new Set([MP.self, ...MP.peers.keys()]), n = here.size, need = Math.ceil(n * 2 / 3);
+  const yes = [...V.yes].filter(i => here.has(i)).length;
+  setText($('#voteText'), `${V.by} wants to rebuild the city · ${yes} of ${need} yes votes needed · ${mmss(Math.max(0, (V.end - performance.now()) / 1000))}`);
+  $('#voteYes').setAttribute('aria-pressed', String(V.yes.has(MP.self)));
+  $('#voteNo').setAttribute('aria-pressed', String(V.no.has(MP.self)));
+}
+$('#voteYes').onclick = () => castVote(true);
+$('#voteNo').onclick = () => castVote(false);
+addEventListener('keydown', e => {
+  if (e.repeat || !MP.vote || e.key.toLowerCase() !== 'y' || (A.gunship && gs.cam)) return;
+  castVote(true);
+});
+
+// ---- connecting ----
+function mpTick() {
+  if (MP.hits.length) { const ev = { k: 'h', a: MP.hits }; MP.hits = []; mpFx(ev); }
+  mpSend('st', stateMsg());
+  if (MP.vote) { if (performance.now() > MP.vote.end) tally(); else renderVote(); }
+}
+async function mpConnect() {
+  let mod;
+  try { mod = await import('https://cdn.jsdelivr.net/npm/trystero@0.25.4/+esm'); }
+  catch (e) { console.warn('Multiplayer is unavailable: the peer-to-peer library did not load.', e); MP.failed = true; updateMpBar(); return; }
+  const room = mod.joinRoom({ appId: 'skylark-flight-dahliajunus' }, 'main');
+  MP.room = room; MP.self = mod.selfId;
+  for (const n of ['st', 'fx', 'vote', 'sync', 'log']) MP.act[n] = room.makeAction(n);
+  room.onPeerJoin = id => { mpPeer(id); mpSend('st', stateMsg(), id); sendVote(id); };
+  room.onPeerLeave = id => dropPeer(id);
+  MP.act.st.onMessage = (d, { peerId }) => onState(peerId, d);
+  MP.act.fx.onMessage = (d, { peerId }) => applyFx(d, MP.peers.get(peerId), false);
+  MP.act.vote.onMessage = (d, { peerId }) => onVote(peerId, d);
+  MP.act.sync.onMessage = (d, { peerId }) => {
+    if (MP.hits.length) { const ev = { k: 'h', a: MP.hits }; MP.hits = []; mpFx(ev); }
+    mpSend('log', MP.log, peerId);
+  };
+  MP.act.log.onMessage = d => {
+    if (MP.synced || !Array.isArray(d)) return;
+    MP.synced = true;
+    for (const ev of d) applyFx(ev, null, true);
+    if (d.length) toast('Caught up with the shared city');
+  };
+  setInterval(mpTick, 100);
+  updateMpBar();
+}
+mpConnect();
+
 // ---------------- loop ----------------
 let last = performance.now(), acc = 0;
 function frame(now) {
@@ -4348,6 +4678,7 @@ function frame(now) {
   updateCamera(dt, now);
   const stall = running ? updateHUD() : false;
   updateAudio(stall);
+  mpUpdate(dt);
   renderer.render(scene, camera);
 }
 
