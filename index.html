@@ -83,6 +83,19 @@ body { background: var(--night); color: var(--fg); font-family: var(--font-ui); 
 .chip.rwr.msl { background: var(--red); border-color: var(--red); animation: blink .5s steps(2) infinite; }
 body.touch #radar { right: auto; bottom: auto; left: calc(12px + env(safe-area-inset-left, 0px)); top: calc(48px + env(safe-area-inset-top, 0px)); transform: scale(.8); transform-origin: top left; }
 body.noui #radar { display: none !important; }
+/* chat: the last few lines under the player count, fading out after a while; all of them while typing */
+#chat { position: fixed; top: calc(48px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: min(380px, calc(100vw - 24px)); display: grid; gap: 6px; pointer-events: none; z-index: 5; }
+#chatLog { display: grid; gap: 2px; max-height: 40vh; overflow: hidden; }
+body.chatting #chatLog { overflow-y: auto; pointer-events: auto; }
+.cl { justify-self: start; max-width: 100%; padding: 3px 8px; border-radius: 5px; background: rgba(8,14,20,.55); font: 12px/1.35 var(--font-ui); color: #eef2f5; overflow-wrap: anywhere; transition: opacity .6s; }
+.cl b { margin-right: 6px; font-weight: 700; }
+.cl.sys { color: var(--dim); font-style: italic; }
+.cl.old { opacity: 0; }
+body.chatting .cl.old { opacity: 1; }
+#chatForm { pointer-events: auto; }
+#chatIn { width: 100%; box-sizing: border-box; padding: 8px 10px; font: 13px var(--font-ui); color: #eef2f5; background: rgba(8,14,20,.78); border: 1px solid var(--cyan); border-radius: 6px; outline: none; }
+body.touch #chat { top: auto; bottom: calc(260px + env(safe-area-inset-bottom, 0px)); }
+body.noui:not(.chatting) #chat { display: none; }
 #nameGate { z-index: 20; }
 #nameForm { display: flex; gap: 8px; margin-top: 14px; }
 #nameIn { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 12px; color: inherit; background: rgba(255,255,255,.08); border: 1px solid var(--glass-edge); border-radius: 8px; }
@@ -259,6 +272,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="warn" hidden></div>
 <div id="toast" class="glass" style="opacity:0"></div>
 <div id="mpBar" class="glass" title="Change your callsign">CONNECTING…</div>
+<div id="chat"><div id="chatLog" aria-live="polite"></div><form id="chatForm" hidden><input id="chatIn" maxlength="160" autocomplete="off" spellcheck="false" placeholder="Message everyone · Enter sends · Esc closes" aria-label="Chat message"></form></div>
 <div id="vote" class="glass" hidden><span id="voteText"></span><button class="pickb" id="voteYes" aria-pressed="false">Yes <kbd>Y</kbd></button><button class="pickb" id="voteNo" aria-pressed="false">No</button></div>
 
 <div class="tools" id="tools" hidden>
@@ -268,6 +282,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <button class="tbtn" id="bCam">CAM<kbd>C</kbd></button>
   <button class="tbtn touch-only" id="bBrkTool">BRAKE</button>
   <button class="tbtn touch-only" id="bGear">GEAR</button>
+  <button class="tbtn" id="bChat">CHAT<kbd>↵</kbd></button>
   <button class="tbtn" id="bSnd">SOUND<kbd>M</kbd></button>
   <button class="tbtn" id="bPause">PAUSE<kbd>P</kbd></button>
   <button class="tbtn key-only" id="bHelp">KEYS<kbd>H</kbd></button>
@@ -311,6 +326,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
       <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
+      <dt>Enter</dt><dd>Chat with the other players (Enter sends, Esc closes)</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
       <dt>V (AC-130J)</dt><dd>Gunship sensor camera: 1 / 2 pick the 30 mm or 105 mm, Space or click fires, T reloads the 30 mm, scroll zooms, Y switches TV / IR</dd>
       <dt>U</dt><dd>Hide or show the instruments and buttons</dd>
@@ -372,6 +388,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
       <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
+      <dt>Enter</dt><dd>Chat with the other players (Enter sends, Esc closes)</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
     </dl>
     <div class="actions">
@@ -3778,6 +3795,7 @@ function physics(dt) {
 const keys = {};
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
+  if (k === 'enter' && !(S.crashed && running) && $('#nameGate').hidden) { e.preventDefault(); openChat(); return; }
   if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
   initAudio();
   keys[k] = true;
@@ -5212,7 +5230,7 @@ function dropPeer(id) {
   MP.lockedBy.delete(id);
   P.tag.remove();
   MP.peers.delete(id);
-  if (P.name !== '…') toast(P.name + ' left');
+  if (P.name !== '…') { toast(P.name + ' left'); chatLine('', P.name + ' left', 'sys'); }
   updateMpBar(); updateB52Buttons(); tally();
 }
 function b52Holder() { for (const P of MP.peers.values()) if (P.ac === 'b52' && P.cl) return P; return null; }
@@ -5235,7 +5253,7 @@ function onState(id, d) {
   if (!p || !v || !Array.isArray(d.q) || d.q.length !== 4 || !d.q.every(x => num(x, 1.01))) return;
   const P = mpPeer(id), wasIn = P.name !== '…';
   P.name = String(d.n || 'Pilot').replace(/[^\w\- ]/g, '').slice(0, 16) || 'Pilot';
-  if (!wasIn) toast(P.name + ' joined');
+  if (!wasIn) { toast(P.name + ' joined'); chatLine('', P.name + ' joined', 'sys'); }
   P.ac = AC.hasOwnProperty(d.ac) ? d.ac : 'f15';
   if (d.c && !P.c && P.r && P.obj && P.obj.visible) explode(P.obj.position, 1.2, heightAt(P.obj.position.x, P.obj.position.z) < 0 && P.obj.position.y < 2, true);
   if (P.p.distanceTo(p) > 300 || !P.r) P.snap = true;
@@ -5295,6 +5313,76 @@ function mpUpdate(dt) {
     if (now - P.tagT > 250) { P.tagT = now; setText(P.tag, `${P.name} · ${acShort(P.ac)} · ${(dist / 1000).toFixed(1)} km${P.ps ? ' · paused' : ''}`); }
   }
 }
+// ---- chat ----
+// Text to everyone in the room. Lines are plain text (never markup), at most 160 characters, and both ends limit
+// the rate: we send at most 5 lines in 10 s (and not twice within 0.7 s), and drop a sender's lines beyond 8 in 10 s.
+// Joins, departures and kills show as grey lines too. Nothing is stored: a late joiner starts with an empty chat.
+const CHAT = { open: false, lines: [], sent: [], last: 0, rx: new Map() };
+const chatClean = t => String(t).replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+const chatHue = name => { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+function chatLine(who, text, kind) {
+  const log = $('#chatLog'), el = document.createElement('div');
+  el.className = 'cl' + (kind ? ' ' + kind : '');
+  if (who) { const b = document.createElement('b'); b.textContent = who; b.style.color = `hsl(${chatHue(who)}, 80%, 70%)`; el.appendChild(b); }
+  el.appendChild(document.createTextNode(text));
+  log.appendChild(el);
+  CHAT.lines.push({ el, t: performance.now() });
+  while (CHAT.lines.length > 60) CHAT.lines.shift().el.remove();
+  log.scrollTop = log.scrollHeight;
+}
+function fadeChat() {
+  const now = performance.now();
+  for (const L of CHAT.lines) L.el.classList.toggle('old', now - L.t > 15000);
+}
+function openChat() {
+  if (CHAT.open) return;
+  CHAT.open = true;
+  for (const k in keys) keys[k] = false; // nothing stays held while typing
+  document.body.classList.add('chatting');
+  $('#chatForm').hidden = false;
+  if (locked()) { lockPointer.releasing = true; unlockPointer(); } // the cursor comes back for the text box
+  const log = $('#chatLog'); log.scrollTop = log.scrollHeight;
+  $('#chatIn').focus();
+}
+function closeChat() {
+  if (!CHAT.open) return;
+  CHAT.open = false;
+  document.body.classList.remove('chatting');
+  $('#chatForm').hidden = true;
+  $('#chatIn').value = '';
+  $('#chatIn').blur();
+  if ((mouseAim() || gs.cam) && running && !paused && !S.crashed) lockPointer(); // mouse aim takes the mouse back
+}
+function sendChat(raw) {
+  const text = chatClean(raw);
+  if (!text) return;
+  const now = performance.now();
+  CHAT.sent = CHAT.sent.filter(t => now - t < 10000);
+  if (now - CHAT.last < 700 || CHAT.sent.length >= 5) { chatLine('', 'Slow down: wait a moment before sending more', 'sys'); return; }
+  CHAT.last = now; CHAT.sent.push(now);
+  chatLine(MP.name || 'You', text);
+  if (MP.peers.size) mpSend('chat', { t: text });
+  else chatLine('', 'No other players are online to read it', 'sys');
+}
+function onChat(id, d) {
+  if (!d || typeof d.t !== 'string' || d.t.length > 400) return;
+  const text = chatClean(d.t);
+  if (!text) return;
+  const now = performance.now(), r = (CHAT.rx.get(id) || []).filter(t => now - t < 10000);
+  if (r.length >= 8) return;
+  r.push(now); CHAT.rx.set(id, r);
+  const P = MP.peers.get(id);
+  chatLine(P && P.name !== '…' ? P.name : 'Pilot', text);
+}
+$('#chatIn').addEventListener('keydown', e => {
+  e.stopPropagation(); // typing doesn't fly the aircraft
+  if (e.key === 'Escape') { e.preventDefault(); closeChat(); }
+});
+$('#chatForm').onsubmit = e => { e.preventDefault(); sendChat($('#chatIn').value); closeChat(); };
+$('#chatIn').addEventListener('blur', () => setTimeout(() => { if (CHAT.open && document.activeElement !== $('#chatIn')) closeChat(); }, 0));
+$('#bChat').addEventListener('mousedown', e => e.preventDefault()); // keep the text box focused, so the click toggles
+$('#bChat').onclick = () => { if (CHAT.open) closeChat(); else openChat(); };
+
 function updateMpBar() {
   const el = $('#mpBar'), n = MP.peers.size + 1;
   if (!MP.room) { setText(el, MP.failed ? 'OFFLINE' : 'CONNECTING…'); return; }
@@ -5387,6 +5475,7 @@ function mpTick() {
   MP.out = {};
   if (MP.hits.length) { const ev = { k: 'h', a: MP.hits }; MP.hits = []; mpFx(ev); }
   mpSend('st', stateMsg());
+  fadeChat();
   if (MP.vote) { if (performance.now() > MP.vote.end) tally(); else renderVote(); }
 }
 // Metered's free TURN plan. The key is public like everything on this page; its usage limit is set in Metered.
@@ -5405,7 +5494,8 @@ async function mpConnect() {
   }
   const room = mod.joinRoom(turnConfig ? { appId: 'skylark-flight-dahliajunus', turnConfig } : { appId: 'skylark-flight-dahliajunus' }, 'main');
   MP.room = room; MP.self = mod.selfId;
-  for (const n of ['st', 'fx', 'vote', 'sync', 'log', 'pw', 'ev', 'ms']) MP.act[n] = room.makeAction(n);
+  for (const n of ['st', 'fx', 'vote', 'sync', 'log', 'pw', 'ev', 'ms', 'chat']) MP.act[n] = room.makeAction(n);
+  MP.act.chat.onMessage = (d, { peerId }) => onChat(peerId, d);
   MP.act.ms.onMessage = (d, { peerId }) => onMissileMsg(peerId, d);
   MP.act.pw.onMessage = (d, { peerId }) => onPlaneHits(peerId, d);
   MP.act.ev.onMessage = (d, { peerId }) => {
@@ -5413,6 +5503,7 @@ async function mpConnect() {
     if (P && d && d.k === 'kill' && typeof d.by === 'string') {
       const by = d.by.replace(/[^\w\- ]/g, '').slice(0, 16);
       toast(by === MP.name ? `You shot down ${P.name}` : `${by} shot down ${P.name}`);
+      chatLine('', by === MP.name ? `You shot down ${P.name}` : `${by} shot down ${P.name}`, 'sys');
     }
   };
   room.onPeerJoin = id => { mpPeer(id); mpSend('st', stateMsg(), id); sendVote(id); };
