@@ -369,28 +369,6 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
-    <dl class="keys key-only">
-      <dt>Mouse aim</dt><dd>Pick it below: move the mouse and the nose follows the circle; left click fires the gun. W/S/A/D still override</dd>
-      <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
-      <dt>A / D, ← / →</dt><dd>Roll; steers on the ground</dd>
-      <dt>Q / E</dt><dd>Rudder</dd>
-      <dt>Shift (hold)</dt><dd>F-15C, Typhoon and Su-30SM: high-g mode. Pull for 12-13 g turns, or slow and pull hard for a cobra; speed bleeds off fast</dd>
-      <dt>R / F</dt><dd>Throttle; above 85% lights the afterburners</dd>
-      <dt>G</dt><dd>Landing gear up / down</dd>
-      <dt>B</dt><dd>Wheel brakes and speed brake</dd>
-      <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
-      <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
-      <dt>L</dt><dd>Radar: lock the nearest aircraft ahead, press again to cycle (F-15C, Typhoon; the A-10's targeting pod sees 20 km)</dd>
-      <dt>X with missiles</dt><dd>Fire an air-to-air missile (pick the missile loadout): the heat-seeker inside its reach, the AIM-120 beyond it</dd>
-      <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
-      <dt>K</dt><dd>Countermeasures: one salvo of flares and chaff (not on the airliners)</dd>
-      <dt>1 · 2</dt><dd>Air-to-air weapon: gun (with a radar lock, the orange circle shows the gun lead) or missiles</dd>
-      <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
-      <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
-      <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
-      <dt>Enter</dt><dd>Chat with the other players (Enter sends, Esc closes)</dd>
-      <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
-    </dl>
     <div class="actions">
       <button class="btn primary" id="resume">Resume</button>
       <button class="btn" id="pRunway">Restart on runway</button>
