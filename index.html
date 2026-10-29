@@ -35,7 +35,8 @@ body { background: var(--night); color: var(--fg); font-family: var(--font-ui); 
 .glass { background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 10px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 
 /* ---------- instrument strip ---------- */
-#hud { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; gap: 8px; justify-items: center; pointer-events: none; transform-origin: bottom center; }
+#hud { position: fixed; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: scale(.72); display: grid; gap: 8px; justify-items: start; pointer-events: none; transform-origin: bottom left; }
+@media (max-width: 1100px) { #hud { transform: scale(.6); } }
 .pfd { display: grid; grid-template-columns: 96px 168px 96px; gap: 10px; align-items: center; padding: 10px; }
 .box { display: grid; gap: 2px; justify-items: center; padding: 8px 4px; border-radius: 6px; background: rgba(0,0,0,.35); }
 .lab { font-size: 10px; letter-spacing: .14em; color: var(--dim); }
@@ -176,7 +177,7 @@ body:not(.touch) .touch-only { display: none; }
 #brk { position: fixed; right: calc(92px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); touch-action: none; }
 
 body.touch .key-only { display: none; }
-body.touch #hud { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; transform: translateX(-50%) scale(.74); transform-origin: top center; }
+body.touch #hud { left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; transform: translateX(-50%) scale(.6); transform-origin: top center; justify-items: center; }
 body.touch .tools { top: auto; bottom: calc(210px + env(safe-area-inset-bottom, 0px)); flex-direction: column; }
 body.touch #toast { top: auto; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); }
 @media (max-width: 520px) { .tbtn kbd { display: none; } }
@@ -1245,7 +1246,7 @@ function nukeScale(kt) {
 // B-52 claim in it. Nuclear cooldowns are kept in localStorage, so restarting or reloading doesn't skip them.
 const NUKE_COOLDOWN = { b61: 120, b28: 240, b41: 480 }; // seconds before the same bomb can be dropped again
 const MP = { room: null, self: '', peers: new Map(), act: {}, hits: [], log: [], synced: false, asked: false, failed: false,
-  vote: null, doneVotes: new Set(), claim: 0, t0: performance.now(), name: '', cool: {}, out: {}, rips: [], life: 0, lastHitBy: null, blastBy: '' };
+  logHits: 0, syncFrom: '', vote: null, doneVotes: new Set(), claim: 0, t0: performance.now(), name: '', cool: {}, out: {}, rips: [], life: 0, lastHitBy: null, blastBy: '' };
 try { MP.name = localStorage.getItem('skylark.user') || ''; MP.cool = JSON.parse(localStorage.getItem('skylark.cool') || '{}') || {}; } catch (e) {}
 const NAME_OK = /^[A-Za-z0-9 _-]{2,16}$/;
 if (!NAME_OK.test(MP.name)) MP.name = ''; // asked for on the first visit
@@ -2620,7 +2621,7 @@ function startCollapse(i, quiet = false) {
 }
 function rebuildCity() {
   restoreCity();
-  MP.log.length = 0; MP.hits.length = 0;
+  MP.log.length = 0; MP.hits.length = 0; MP.logHits = 0;
   clearNukes();
   clearParticles(glow); clearParticles(haze);
   toast('City rebuilt');
@@ -4745,9 +4746,36 @@ function mpSend(name, data, target) {
   const a = MP.act[name];
   if (a && MP.peers.size) try { a.send(data, target ? { target } : undefined); } catch (e) { console.warn('multiplayer send failed', e); }
 }
-const trimLog = () => { if (MP.log.length > 40000) MP.log.splice(0, MP.log.length - 40000); };
+// The log of city changes for late joiners. Cannon hits are merged into a few big entries, and the oldest hits go
+// once there are more than 20,000, so the log stays a few hundred kilobytes at most.
+function logPush(ev) {
+  const last = MP.log[MP.log.length - 1];
+  if (ev.k === 'h') {
+    if (last && last.k === 'h' && last.a.length < 3000) last.a.push(...ev.a); else MP.log.push({ k: 'h', a: ev.a.slice() });
+    MP.logHits += ev.a.length;
+    while (MP.logHits > 120000) {
+      const i = MP.log.findIndex(e => e.k === 'h');
+      MP.logHits -= MP.log[i].a.length; MP.log.splice(i, 1);
+    }
+  } else MP.log.push(ev);
+  if (MP.log.length > 3000) MP.log.splice(0, MP.log.length - 3000);
+}
+// Send the log to a late joiner in pieces of about 25 kB, a little apart, so the position updates on the
+// same connection keep flowing instead of waiting behind one huge message.
+function sendLog(peerId) {
+  if (MP.hits.length) { const ev = { k: 'h', a: MP.hits }; MP.hits = []; mpFx(ev); }
+  const parts = [];
+  let cur = [], size = 0;
+  for (const ev of MP.log) {
+    const sz = ev.k === 'h' ? ev.a.length * 7 : 90;
+    if (size + sz > 25000 && cur.length) { parts.push(cur); cur = []; size = 0; }
+    cur.push(ev); size += sz;
+  }
+  parts.push(cur);
+  parts.forEach((ev, i) => setTimeout(() => mpSend('log', { i, n: parts.length, ev }, peerId), i * 150));
+}
 // a change to the city made here: logged for late joiners and sent to everyone
-function mpFx(ev) { if (ev.k !== 'e') { MP.log.push(ev); trimLog(); } mpSend('fx', ev); }
+function mpFx(ev) { if (ev.k !== 'e') logPush(ev); mpSend('fx', ev); }
 // a hit on a building made here; hits go out in batches
 function hitAt(bi, p, r, pw) { damageAt(bi, p, r, pw); MP.hits.push(bi, r1(p.x), r1(p.y), r1(p.z), r, pw); }
 // the building damage of a nuclear blast, without the fireball and cloud (for catching up on the log)
@@ -4784,7 +4812,7 @@ function applyFx(ev, P, replay) {
       if (!replay && r < 1) roundImpact(x, y, z, 'building');
     }
   } else return;
-  MP.log.push(ev); trimLog();
+  logPush(ev);
 }
 
 // ---- other players' aircraft ----
@@ -4944,7 +4972,7 @@ function updateB52Buttons() {
 function stateMsg() {
   const q = S.quat, still = !running || paused || S.crashed;
   return {
-    n: MP.name, ac: A.id, r: running ? 1 : 0, c: S.crashed ? 1 : 0, p: mpV(S.pos), v: still ? [0, 0, 0] : mpV(S.vel),
+    n: MP.name, ac: A.id, r: running ? 1 : 0, c: S.crashed ? 1 : 0, ps: paused ? 1 : 0, p: mpV(S.pos), v: still ? [0, 0, 0] : mpV(S.vel),
     q: [q.x, q.y, q.z, q.w].map(v => Math.round(v * 1e4) / 1e4), g: S.gearT > 0.5 ? 1 : 0,
     cl: A.id === 'b52' ? MP.claim : 0, up: Math.round(performance.now() - MP.t0), lf: MP.life, rp: MP.rips,
     ml: missiles.slice(0, 12).map(m => [...mpV(m.pos), ...mpV(m.vel)])
@@ -4960,7 +4988,7 @@ function onState(id, d) {
   P.ac = AC.hasOwnProperty(d.ac) ? d.ac : 'f15';
   if (d.c && !P.c && P.r && P.obj && P.obj.visible) explode(P.obj.position, 1.2, heightAt(P.obj.position.x, P.obj.position.z) < 0 && P.obj.position.y < 2, true);
   if (P.p.distanceTo(p) > 300 || !P.r) P.snap = true;
-  P.r = d.r ? 1 : 0; P.c = d.c ? 1 : 0;
+  P.r = d.r ? 1 : 0; P.c = d.c ? 1 : 0; P.ps = d.ps ? 1 : 0;
   P.p.copy(p); P.v.copy(v); P.q.set(d.q[0], d.q[1], d.q[2], d.q[3]).normalize();
   P.g = d.g ? 1 : 0;
   P.cl = num(d.cl, 1e14) ? d.cl : 0;
@@ -5013,7 +5041,7 @@ function mpUpdate(dt) {
     P.tag.hidden = !vis;
     if (!vis) continue;
     P.tag.style.transform = `translate(${((mpTmp.x + 1) / 2 * innerWidth).toFixed(0)}px, ${((1 - mpTmp.y) / 2 * innerHeight).toFixed(0)}px) translate(-50%, -100%)`;
-    if (now - P.tagT > 250) { P.tagT = now; setText(P.tag, `${P.name} · ${acShort(P.ac)} · ${(dist / 1000).toFixed(1)} km`); }
+    if (now - P.tagT > 250) { P.tagT = now; setText(P.tag, `${P.name} · ${acShort(P.ac)} · ${(dist / 1000).toFixed(1)} km${P.ps ? ' · paused' : ''}`); }
   }
 }
 function updateMpBar() {
@@ -5132,15 +5160,13 @@ async function mpConnect() {
   MP.act.st.onMessage = (d, { peerId }) => onState(peerId, d);
   MP.act.fx.onMessage = (d, { peerId }) => applyFx(d, MP.peers.get(peerId), false);
   MP.act.vote.onMessage = (d, { peerId }) => onVote(peerId, d);
-  MP.act.sync.onMessage = (d, { peerId }) => {
-    if (MP.hits.length) { const ev = { k: 'h', a: MP.hits }; MP.hits = []; mpFx(ev); }
-    mpSend('log', MP.log, peerId);
-  };
-  MP.act.log.onMessage = d => {
-    if (MP.synced || !Array.isArray(d)) return;
-    MP.synced = true;
-    for (const ev of d) applyFx(ev, null, true);
-    if (d.length) toast('Caught up with the shared city');
+  MP.act.sync.onMessage = (d, { peerId }) => sendLog(peerId);
+  MP.act.log.onMessage = (d, { peerId }) => {
+    if (!d || !Array.isArray(d.ev) || d.ev.length > 2000) return;
+    if (!MP.syncFrom) { if (MP.synced) return; MP.syncFrom = peerId; MP.synced = true; } // one player's log only
+    if (MP.syncFrom !== peerId) return;
+    for (const ev of d.ev) applyFx(ev, null, true);
+    if (d.i === d.n - 1 && (d.n > 1 || d.ev.length)) toast('Caught up with the shared city');
   };
   setInterval(mpTick, 100);
   updateMpBar();
