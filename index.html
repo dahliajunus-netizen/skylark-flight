@@ -220,6 +220,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <span class="small" id="cm" hidden>CM 30</span>
     <span class="chip rwr" id="cRwr" hidden>LOCKED</span>
     <span class="chip" id="cAb">AB</span>
+    <span class="chip" id="cHiG" hidden>HI-G</span>
     <span class="small" id="gload">1.0 G</span>
     <span class="rwy" id="rwy">RWY 36</span>
     <span class="chip cy" id="cGear">GEAR DN</span>
@@ -275,7 +276,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="touch" hidden>
   <div id="stick" class="glass"><div id="knob"></div></div>
   <div id="thrTrack" class="glass"><span>THR</span><div id="thrFill"></div></div>
-  <div id="wpn"><button class="wbtn" id="tLock" hidden>LOCK</button><button class="wbtn" id="tCm" hidden>CM</button><button class="wbtn nuke" id="tNuke">B61</button><button class="wbtn" id="tBomb">BOMB</button><button class="wbtn gun" id="tGun">GUN</button></div>
+  <div id="wpn"><button class="wbtn" id="tLock" hidden>LOCK</button><button class="wbtn" id="tCm" hidden>CM</button><button class="wbtn" id="tHiG" hidden>HI-G</button><button class="wbtn nuke" id="tNuke">B61</button><button class="wbtn" id="tBomb">BOMB</button><button class="wbtn gun" id="tGun">GUN</button></div>
 </div>
 
 <div id="menu" class="overlay">
@@ -296,6 +297,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
       <dt>A / D, ← / →</dt><dd>Roll; steers on the ground</dd>
       <dt>Q / E</dt><dd>Rudder</dd>
+      <dt>Shift (hold)</dt><dd>F-15C and Typhoon: high-g mode. Pull for 12 g turns, or slow and pull hard for a cobra; speed bleeds off fast</dd>
       <dt>R / F</dt><dd>Throttle; above 85% lights the afterburners</dd>
       <dt>G</dt><dd>Landing gear up / down</dd>
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
@@ -356,6 +358,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
       <dt>A / D, ← / →</dt><dd>Roll; steers on the ground</dd>
       <dt>Q / E</dt><dd>Rudder</dd>
+      <dt>Shift (hold)</dt><dd>F-15C and Typhoon: high-g mode. Pull for 12 g turns, or slow and pull hard for a cobra; speed bleeds off fast</dd>
       <dt>R / F</dt><dd>Throttle; above 85% lights the afterburners</dd>
       <dt>G</dt><dd>Landing gear up / down</dd>
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
@@ -1279,6 +1282,7 @@ const AC = {
     id: 'f15', mass: 20000, wing: 56.5, thrust: 130000, thrustAB: 210000,
     CL0: 0.175, CLA: 3.5, stallA: 0.45, cd0: 0.022, k: 0.12, wave: [0.85, 1.05, 0.03],
     gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'fwd', travel: 0.3,
+    hiG: { g: 12, rate: 1.7, aoa: 1.75, cl: 1.15, cd: 3.2, cobraV: 175 }, // held Shift: see physics
     ammo: 940, muzzle: [1.6, 0.8, 3.0], stabSign: 1, model: 'F-15C.gltf.json',
     loadouts: [{ id: 'mk82', name: '6 × MK-82', spec: '6 × MK-82' }, { id: 'b61', name: 'B61', nuke: 'b61', spec: 'B61 NUCLEAR · 0.3 KT' },
       { id: 'aam', name: 'AIM-120 · AIM-9', aam: true, spec: '4 × AIM-120C · 4 × AIM-9X' }],
@@ -1303,6 +1307,7 @@ const AC = {
     id: 'typhoon', mass: 16000, wing: 51.2, thrust: 120000, thrustAB: 180000,
     CL0: 0.15, CLA: 3.2, stallA: 0.5, cd0: 0.02, k: 0.14, wave: [0.9, 1.1, 0.025],
     gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'in', travel: 0.3,
+    hiG: { g: 12, rate: 1.9, aoa: 1.75, cl: 1.2, cd: 3.2, cobraV: 180 }, // the unstable delta-canard pitches up even faster
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
     ammo: 150, roundDmg: 1.6, muzzle: [0.75, -0.25, 2.0], stabSign: -1, model: 'Typhoon.gltf.json',
     rig: { ab: [[-0.5, -0.16, 7.98], [0.5, -0.16, 7.98]], bombs: [[-3.9, -0.98, 2.62], [3.9, -0.98, 2.62], [-2.7, -0.98, 2.62], [2.7, -0.98, 2.62]], nuke: null,
@@ -3475,7 +3480,7 @@ const S = {
   ammo: AMMO_MAX, bombs: BOMBS_MAX, nukes: NUKES_MAX, firing: false
 };
 const inp = { pitch: 0, roll: 0, yaw: 0 };
-const touchIn = { x: 0, y: 0, active: false, brake: false, gun: false };
+const touchIn = { x: 0, y: 0, active: false, brake: false, gun: false, hiG: false };
 let running = false, paused = false, camMode = 'chase', lastMode = 'runway', invertPitch = false, muted = false, camSnap = true;
 // flight controls: 'keys' (WASD / arrows) or 'mouse' (the nose chases a point you steer with the mouse); remembered per browser
 let controlMode = 'keys';
@@ -3621,7 +3626,15 @@ function physics(dt) {
   const mach = V / (340 - 0.004 * alt);
   S.alpha = alpha; S.V = V; S.rho = rho; S.mach = mach;
   const qS = 0.5 * rho * V * V * A.wing;
-  const CL = liftCoef(alpha);
+  // High-g / post-stall mode (F-15C and Typhoon, Shift held in the air): the flight-control limiter lets go. Fast,
+  // the pull goes to A.hiG.g instead of the normal limit, with the nose held at the stall for the tightest turn; slower
+  // than A.hiG.cobraV, the nose can keep coming up past the stall, toward 100° of attack, for a cobra. Past the stall the wing keeps some lift
+  // (flat-plate, cl·sin 2α) and the airframe turns into a barn door (cd·sin²α), so speed falls away very fast;
+  // high-g turns pay through the induced drag of all that lift. Let go and the normal limiter brings the nose back.
+  const hiG = !!A.hiG && !S.onGround && !S.crashed && V > 35 && !!(keys.shift || touchIn.hiG);
+  S.hiG = hiG;
+  const post = hiG && alpha > A.stallA;
+  const CL = post ? Math.max(liftCoef(alpha), A.hiG.cl * Math.sin(2 * alpha)) : liftCoef(alpha);
   const MASS = A.mass + S.bombs * (A.bombKg || 230) + (S.nukes ? parts.nuke.userData.nk.kg : 0); // Mk-82 about 230 kg
 
   const t = S.throttle;
@@ -3636,7 +3649,8 @@ function physics(dt) {
     const ll = liftDir.length();
     if (ll > 1e-4) force.addScaledVector(liftDir, qS * CL / ll * (0.15 + 0.85 * (S.dmg.wingL + S.dmg.wingR) / 2)); // missing wing = missing lift
     const CD = A.cd0 + A.k * CL * CL + (Math.abs(alpha) > A.stallA ? 0.15 : 0) + A.wave[2] * smooth(A.wave[0], A.wave[1], mach) // transonic drag rise
-      + 0.015 * S.gearT + (S.brake ? 0.05 : 0) + (S.bombs * (A.bombCd || 0.0015) + S.nukes * 0.0015) + Math.abs(beta) * 0.2;
+      + 0.015 * S.gearT + (S.brake ? 0.05 : 0) + (S.bombs * (A.bombCd || 0.0015) + S.nukes * 0.0015) + Math.abs(beta) * 0.2
+      + (post ? A.hiG.cd * Math.sin(alpha) ** 2 : 0); // post-stall: the whole airframe meets the air
     force.addScaledVector(vhat, -qS * CD);
     force.addScaledVector(R, -qS * 0.5 * Math.sin(beta));
   }
@@ -3648,16 +3662,24 @@ function physics(dt) {
   // rotation: fly-by-wire style. Centred stick holds 1 g; pitch rate is capped at the aircraft's g limit.
   const eff = Math.min(1.2, V / A.effV), stab = Math.min(1, V / 60);
   const aTrim = S.onGround || qS < 1 ? 0 : clamp((MASS * G / qS - A.CL0) / A.CLA, -0.05, Math.min(0.25, A.stallA - 0.04));
-  const gCap = A.gLimit * G / Math.max(V, 1);
+  const gCap = (hiG ? A.hiG.g : A.gLimit) * G / Math.max(V, 1);
   const Dm = S.dmg;
   let tp = clamp(inp.pitch * A.rates[0] * eff * Dm.stab - (alpha - aTrim) * 1.6 * stab * (0.35 + 0.65 * Dm.stab), -gCap * 0.4, gCap);
+  if (hiG) {
+    // the nose may come up as fast as the controls allow while the load stays under the high-g limit; past the
+    // stall the lift (and so the g) collapses, which is what lets it pitch on up into a cobra
+    const room = clamp((A.hiG.g - S.g) / 1.5, 0, 1), cobra = V < A.hiG.cobraV;
+    tp = clamp(inp.pitch * A.hiG.rate * eff * Dm.stab - (alpha - aTrim) * 0.25 * stab, -gCap * 0.4, cobra ? Math.max(gCap, A.hiG.rate * room) : gCap);
+    if (!cobra && alpha > A.stallA * 0.97) tp = Math.min(tp, gCap * clamp((A.stallA - alpha) * 20 + 1, 0, 1)); // fast: hold the nose at the stall
+    if (alpha > A.hiG.aoa) tp = Math.min(tp, 0);
+  }
   let ty = inp.yaw * A.rates[1] * eff * Dm.fin + beta * 2.0 * stab * (0.15 + 0.85 * Dm.fin);
   let tr = inp.roll * A.rates[2] * eff * (Dm.wingL + Dm.wingR) / 2;
   if (S.onGround) {
     ty += (inp.yaw * 0.5 + inp.roll * 0.3) * Math.min(1, V / 6);
     tr = 0;
-  } else if (alpha > A.stallA) {
-    tr += S.wingDrop * clamp((alpha - A.stallA) * 8, 0, 1.2); // a wing drops in the stall
+  } else if (alpha > A.stallA && !hiG) {
+    tr += S.wingDrop * clamp((alpha - A.stallA) * 8, 0, 1.2); // a wing drops in the stall (held level in the high-g mode)
   } else if (Math.random() < 0.002) S.wingDrop = Math.random() < 0.5 ? -1 : 1;
   if (!S.onGround) {
     tr += (Dm.wingL - Dm.wingR) * 2.8 * Math.min(1.2, V / 90);           // the intact wing lifts alone and rolls toward the stump
@@ -3931,6 +3953,8 @@ $('#tBomb').addEventListener('pointerdown', () => dropBomb());
 $('#tNuke').addEventListener('pointerdown', () => dropNuke());
 $('#tLock').addEventListener('pointerdown', () => cycleLock());
 $('#tCm').addEventListener('pointerdown', () => releaseCM());
+$('#tHiG').addEventListener('pointerdown', () => { touchIn.hiG = true; });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('#tHiG').addEventListener(ev, () => { touchIn.hiG = false; });
 const bBombCam = $('#bBombCam');
 bBombCam.addEventListener('pointerdown', e => { bombCam.btn = true; if (!bombCamTarget()) toast('Nothing to watch yet: drop a bomb first'); try { bBombCam.setPointerCapture(e.pointerId); } catch (err) {} });
 for (const ev of ['pointerup', 'pointercancel']) bBombCam.addEventListener(ev, () => { bombCam.btn = false; });
@@ -4216,7 +4240,7 @@ function updateHUD() {
   setText(el.spd, String(Math.round(kt)));
   setText(el.mach, 'M ' + S.mach.toFixed(2));
   setText(el.gl, S.g.toFixed(1) + ' G');
-  el.gl.style.color = S.g > 7 || S.g < -1.5 ? 'var(--amber)' : '';
+  el.gl.style.color = S.g > A.gLimit ? 'var(--red)' : S.g > 7 || S.g < -1.5 ? 'var(--amber)' : ''; // red past the normal limit (high-g mode)
   setText(el.gun, 'GUN ' + S.ammo);
   el.gun.style.color = S.firing && S.ammo > 0 ? 'var(--amber)' : S.ammo ? '' : 'var(--dim)';
   setText(el.bombs, (A.bombName || 'MK-82') + ' ×' + S.bombs);
@@ -4258,6 +4282,9 @@ function updateHUD() {
   setText(dmEl, 'DMG ' + dm.join(' · '));
   el.ab.classList.toggle('on', !!A.thrustAB && S.throttle > AB_AT);
   el.ab.hidden = !A.thrustAB;
+  const hg = $('#cHiG');
+  hg.hidden = !A.hiG; $('#tHiG').hidden = !A.hiG;
+  hg.classList.toggle('on', !!S.hiG);
   el.gun.hidden = !A.weapons || !A.ammo;
   el.bombs.hidden = !A.weapons || !!parts.nuke || parts.missiles.length > 0;
   const mEl = $('#msl');
