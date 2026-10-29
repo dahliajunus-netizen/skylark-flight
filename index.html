@@ -5138,12 +5138,21 @@ function mpTick() {
   mpSend('st', stateMsg());
   if (MP.vote) { if (performance.now() > MP.vote.end) tally(); else renderVote(); }
 }
+// Metered's free TURN plan. The key is public like everything on this page; its usage limit is set in Metered.
+const TURN_CREDENTIALS_URL = 'https://YOUR_APP.metered.live/api/v1/turn/credentials?apiKey=707514ac080586ae65aabad5944de82d1b86';
 async function mpConnect() {
   MP.connecting = true;
   let mod;
   try { mod = await import('https://cdn.jsdelivr.net/npm/trystero@0.25.4/+esm'); }
   catch (e) { console.warn('Multiplayer is unavailable: the peer-to-peer library did not load.', e); MP.failed = true; updateMpBar(); return; }
-  const room = mod.joinRoom({ appId: 'skylark-flight-dahliajunus' }, 'main');
+  // TURN relays carry the game for players whose networks block direct connections (mobile data, school or
+  // office Wi-Fi). The credentials come from the provider's endpoint; without them only direct links are tried.
+  let turnConfig;
+  if (TURN_CREDENTIALS_URL) {
+    try { const list = await (await fetch(TURN_CREDENTIALS_URL)).json(); if (Array.isArray(list) && list.length) turnConfig = list; }
+    catch (e) { console.warn('TURN relay credentials did not load; trying direct connections only.', e); }
+  }
+  const room = mod.joinRoom(turnConfig ? { appId: 'skylark-flight-dahliajunus', turnConfig } : { appId: 'skylark-flight-dahliajunus' }, 'main');
   MP.room = room; MP.self = mod.selfId;
   for (const n of ['st', 'fx', 'vote', 'sync', 'log', 'pw', 'ev', 'ms']) MP.act[n] = room.makeAction(n);
   MP.act.ms.onMessage = (d, { peerId }) => onMissileMsg(peerId, d);
