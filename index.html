@@ -63,6 +63,17 @@ body { background: var(--night); color: var(--fg); font-family: var(--font-ui); 
 #toast { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; pointer-events: none; transition: opacity .3s; white-space: nowrap; }
 
 /* ---------- buttons ---------- */
+#radar { position: fixed; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); padding: 6px 6px 5px; display: grid; gap: 3px; pointer-events: none; }
+#rdr { width: 180px; height: 132px; display: block; }
+#rdrInfo { font: 700 9px var(--font-num); letter-spacing: .1em; color: #7ee2a8; text-align: center; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#rdrInfo.shoot { color: var(--night); background: #7ee2a8; border-radius: 3px; }
+.ret.tgt { width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 2px; border-color: var(--amber); }
+.ret.tgt::after { display: none; }
+.ret.tgt span { position: absolute; top: 38px; left: 50%; transform: translateX(-50%); font: 700 10px var(--font-num); letter-spacing: .08em; color: var(--amber); white-space: nowrap; }
+.chip.rwr { color: var(--night); background: var(--amber); border-color: var(--amber); }
+.chip.rwr.msl { background: var(--red); border-color: var(--red); animation: blink .5s steps(2) infinite; }
+body.touch #radar { right: auto; bottom: auto; left: calc(12px + env(safe-area-inset-left, 0px)); top: calc(48px + env(safe-area-inset-top, 0px)); transform: scale(.8); transform-origin: top left; }
+body.noui #radar { display: none !important; }
 #nameGate { z-index: 20; }
 #nameForm { display: flex; gap: 8px; margin-top: 14px; }
 #nameIn { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 12px; color: inherit; background: rgba(255,255,255,.08); border: 1px solid var(--glass-edge); border-radius: 8px; }
@@ -196,6 +207,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <span class="small" id="gun">GUN 940</span>
     <span class="small" id="bombs">MK-82 ×4</span>
     <span class="small" id="nukes">B61 ×1</span>
+    <span class="small" id="msl" hidden>AAM</span>
+    <span class="chip rwr" id="cRwr" hidden>LOCKED</span>
     <span class="chip" id="cAb">AB</span>
     <span class="small" id="gload">1.0 G</span>
     <span class="rwy" id="rwy">RWY 36</span>
@@ -207,6 +220,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   </div>
 </div>
 
+<div id="radar" class="glass" hidden><canvas id="rdr"></canvas><div id="rdrInfo"></div></div>
+<div id="tgtBox" class="ret tgt" hidden><span></span></div>
 <div id="flash"></div>
 <div id="gunRet" class="ret" hidden></div>
 <div id="gsHud" hidden>
@@ -249,7 +264,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="touch" hidden>
   <div id="stick" class="glass"><div id="knob"></div></div>
   <div id="thrTrack" class="glass"><span>THR</span><div id="thrFill"></div></div>
-  <div id="wpn"><button class="wbtn nuke" id="tNuke">B61</button><button class="wbtn" id="tBomb">BOMB</button><button class="wbtn gun" id="tGun">GUN</button></div>
+  <div id="wpn"><button class="wbtn" id="tLock" hidden>LOCK</button><button class="wbtn nuke" id="tNuke">B61</button><button class="wbtn" id="tBomb">BOMB</button><button class="wbtn gun" id="tGun">GUN</button></div>
 </div>
 
 <div id="menu" class="overlay">
@@ -275,6 +290,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
       <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
+      <dt>L</dt><dd>Radar: lock the nearest aircraft ahead, press again to cycle (F-15C, Typhoon; the A-10's targeting pod sees 20 km)</dd>
+      <dt>X with missiles</dt><dd>Fire an air-to-air missile (pick the missile loadout): the heat-seeker inside its reach, the AIM-120 beyond it</dd>
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
@@ -331,6 +348,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
       <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
+      <dt>L</dt><dd>Radar: lock the nearest aircraft ahead, press again to cycle (F-15C, Typhoon; the A-10's targeting pod sees 20 km)</dd>
+      <dt>X with missiles</dt><dd>Fire an air-to-air missile (pick the missile loadout): the heat-seeker inside its reach, the AIM-120 beyond it</dd>
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
@@ -1246,9 +1265,14 @@ const AC = {
     CL0: 0.175, CLA: 3.5, stallA: 0.45, cd0: 0.022, k: 0.12, wave: [0.85, 1.05, 0.03],
     gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'fwd', travel: 0.3,
     ammo: 940, muzzle: [1.6, 0.8, 3.0], stabSign: 1, model: 'F-15C.gltf.json',
-    loadouts: [{ id: 'mk82', name: '6 × MK-82', spec: '6 × MK-82' }, { id: 'b61', name: 'B61', nuke: 'b61', spec: 'B61 NUCLEAR · 0.3 KT' }],
+    loadouts: [{ id: 'mk82', name: '6 × MK-82', spec: '6 × MK-82' }, { id: 'b61', name: 'B61', nuke: 'b61', spec: 'B61 NUCLEAR · 0.3 KT' },
+      { id: 'aam', name: 'AIM-120 · AIM-9', aam: true, spec: '4 × AIM-120C · 4 × AIM-9X' }],
+    radar: { name: 'APG-63', range: 120000, cone: 1.05 },
     // four under the wings, then two in tandem on the centerline
-    rig: { ab: [[-0.74, 0.02, 9.5], [0.74, 0.02, 9.5]], bombs: [[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2], [0, -1.10, -2.3], [0, -1.10, 0.5]], nuke: [0, -1.10, -0.885] },
+    rig: { ab: [[-0.74, 0.02, 9.5], [0.74, 0.02, 9.5]], bombs: [[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2], [0, -1.10, -2.3], [0, -1.10, 0.5]], nuke: [0, -1.10, -0.885],
+      // AIM-9s on the wing pylon rails, AIM-120s on the fuselage corners
+      aam: [[-4.25, -0.5, 1.6, 'aim9'], [4.25, -0.5, 1.6, 'aim9'], [-2.95, -0.5, 1.6, 'aim9'], [2.95, -0.5, 1.6, 'aim9'],
+        [-1.75, -0.95, -1.4, 'aim120'], [1.75, -0.95, -1.4, 'aim120'], [-1.75, -0.95, 2.8, 'aim120'], [1.75, -0.95, 2.8, 'aim120']] },
     box: new THREE.Box3(new THREE.Vector3(-6.6, -0.75, -10.1), new THREE.Vector3(6.6, 3.8, 9.8)), slideI: 60,
     // nose, wingtips, tail, fin, belly (forward, right, up): touching a building with any of these is a crash
     hitPts: [[9.8, 0, 0], [0, 6.5, 0], [0, -6.5, 0], [-9.5, 0, 0], [-8, 0, 3.6], [0, 0, -0.8]],
@@ -1266,14 +1290,18 @@ const AC = {
     gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'in', travel: 0.3,
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
     ammo: 150, roundDmg: 1.6, muzzle: [0.75, -0.25, 2.0], stabSign: -1, model: 'Typhoon.gltf.json',
-    rig: { ab: [[-0.5, -0.16, 7.98], [0.5, -0.16, 7.98]], bombs: [[-3.9, -0.98, 2.62], [3.9, -0.98, 2.62], [-2.7, -0.98, 2.62], [2.7, -0.98, 2.62]], nuke: null },
+    rig: { ab: [[-0.5, -0.16, 7.98], [0.5, -0.16, 7.98]], bombs: [[-3.9, -0.98, 2.62], [3.9, -0.98, 2.62], [-2.7, -0.98, 2.62], [2.7, -0.98, 2.62]], nuke: null,
+      // AIM-120s semi-recessed under the fuselage, IRIS-Ts on the outer wing
+      aam: [[-4.6, -0.85, 3.4, 'iris'], [4.6, -0.85, 3.4, 'iris'], [-0.85, -1.15, -0.8, 'aim120'], [0.85, -1.15, -0.8, 'aim120'], [-0.85, -1.15, 2.6, 'aim120'], [0.85, -1.15, 2.6, 'aim120']] },
+    loadouts: [{ id: 'mk82', name: '4 × MK-82', spec: '4 × MK-82' }, { id: 'aam', name: 'AIM-120 · IRIS-T', aam: true, spec: '4 × AIM-120C · 2 × IRIS-T' }],
+    radar: { name: 'CAPTOR', range: 120000, cone: 1.05 },
     box: new THREE.Box3(new THREE.Vector3(-5.5, -1.25, -8.0), new THREE.Vector3(5.5, 3.35, 8.0)), slideI: 45,
     hitPts: [[7.98, 0, -0.1], [-7.98, 0, -0.16], [-5.4, 5.47, -0.46], [-5.4, -5.47, -0.46], [-6.2, 0, 3.33], [1.2, 2.15, -0.12], [1.2, -2.15, -0.12], [0, 0, -1.1]],
     chase: [5, 30, 28], eye: [0.8, 3.05], scale: 0.9, shadow: 14, airStart: [165, 0.5], fireball: 0.95, crashBlast: [28, 450],
     sound: { whine: [700, 1500, 1], roar: [170, 480, 1] },
     eyebrow: 'EUROFIGHTER TYPHOON · DELTA-CANARD FIGHTER',
     desc: 'Fly a Eurofighter Typhoon from a huge military airbase on the south coast, just outside the city, with its downtown towers, river, suburbs and hills. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
-    specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', '4 × MK-82', 'RWY 36 · 16,400 FT'],
+    specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', 'STORES', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle, pull back at about 155 kt, then raise the gear. Watch the canards: they tilt nose-up to pitch up. Lower the gear and land at about 145 kt.'
   },
   a10: {
@@ -1285,14 +1313,17 @@ const AC = {
     ammo: 1150, gunRate: 65, roundDmg: 2.5, recoil: 40000, brrt: true, muzzle: [0, -0.2, 8.6], stabSign: 1, model: 'A10.gltf.json', podEngines: true,
     // three under each outer wing, then one inboard of each gear pod (outboard first, alternating sides)
     rig: { ab: [], nuke: null, bombs: [[-6.6, -0.594, 0.218], [6.6, -0.594, 0.218], [-5.5, -0.751, 0.172], [5.5, -0.751, 0.172],
-      [-4.4, -0.91, 0.126], [4.4, -0.91, 0.126], [-1.55, -1.07, 0.08], [1.55, -1.07, 0.08]] },
+      [-4.4, -0.91, 0.126], [4.4, -0.91, 0.126], [-1.55, -1.07, 0.08], [1.55, -1.07, 0.08]],
+      aam: [[-6.6, -0.66, 0.2, 'aim9'], [6.6, -0.66, 0.2, 'aim9']] }, // a pair of AIM-9s for self-defence
+    loadouts: [{ id: 'mk82', name: '8 × MK-82', spec: '8 × MK-82' }, { id: 'aam', name: '2 × AIM-9', aam: true, spec: '2 × AIM-9X' }],
+    radar: { name: 'TGP', range: 20000, cone: 0.7 }, // no radar: the targeting pod finds aircraft close in
     box: new THREE.Box3(new THREE.Vector3(-8.8, -1.0, -8.65), new THREE.Vector3(8.8, 2.45, 8.15)), slideI: 55,
     hitPts: [[8.6, 0, -0.2], [0.3, 8.75, 0.15], [0.3, -8.75, 0.15], [-8.1, 0, 0.4], [-7.0, 2.92, 2.4], [-7.0, -2.92, 2.4], [-4.0, 1.6, 1.4], [-4.0, -1.6, 1.4], [0, 0, -0.95]],
     chase: [5, 32, 28], eye: [1.25, 4.9], scale: 1, shadow: 16, airStart: [140, 0.75], fireball: 1, crashBlast: [30, 500],
     sound: { whine: [900, 1700, 1.5], roar: [120, 320, 0.8] },
     eyebrow: 'A-10C THUNDERBOLT II · CLOSE AIR SUPPORT',
     desc: 'Fly an A-10 Warthog from the military airbase on the south coast, just outside the city. It is slow, tough and turns tight, with eight Mk-82s under its straight wings and the GAU-8 Avenger in the nose: 1,150 rounds of 30 mm that chew through buildings. Short bursts: the recoil slows the jet down.',
-    specs: ['ROTATE 135 KT', 'APPROACH 140 KT', '7.3 G LIMIT', 'MAX 400 KT', 'GAU-8/A 30 MM · 1,150 RDS', '8 × MK-82', 'RWY 36 · 16,400 FT'],
+    specs: ['ROTATE 135 KT', 'APPROACH 140 KT', '7.3 G LIMIT', 'MAX 400 KT', 'GAU-8/A 30 MM · 1,150 RDS', 'STORES', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle, pull back gently at about 135 kt, then raise the gear. There are no afterburners, so keep your speed up in turns. Fire the gun in short bursts. Lower the gear and land at about 140 kt.'
   },
   b52: {
@@ -1447,7 +1478,9 @@ function addNuke(x, y, z) {
 }
 // the picked loadout: the bombs, or the one nuclear bomb
 function addStores(bombs, scale, internalFrom) {
-  if (nukeKind()) addNuke(...A.rig.nuke);
+  const lo = curLoadout();
+  if (lo && lo.aam) addMissiles();
+  else if (nukeKind()) addNuke(...A.rig.nuke);
   else addBombs(bombs, scale, internalFrom);
 }
 // positions are listed in release order, alternating sides to keep the jet balanced
@@ -1588,7 +1621,7 @@ function buildTyphoon() {
   add(profile([[2.2, 0.45], [5.6, 3.33], [6.9, 3.33], [7.1, 0.45]], 0.12), greyD, 0, 0, 0);
   const r = A.rig;
   r.ab.forEach(([x, y, z], i) => addAfterburner(i ? 'abR' : 'abL', x, y, z));
-  addBombs(r.bombs);
+  addStores(r.bombs);
   const gear = new THREE.Group(); plane.add(gear);
   const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.24, 14); g.rotateZ(Math.PI / 2); return g; };
   for (const [x, z, rad] of [[0, -1.6, 0.28], [-1.3, 2.1, 0.38], [1.3, 2.1, 0.38]]) {
@@ -1723,7 +1756,7 @@ function setAircraft(id) {
   GEAR = A.gear;
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false; parts.bayDoors = []; parts.props = [];
+  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.hasCore = false; parts.bayDoors = []; parts.props = [];
   ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130 })[A.id]();
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
@@ -3182,6 +3215,7 @@ function releaseStore(src, kind) {
   bombsFlying.push({ obj, kind, nk: src.userData.nk, t: 0, v: S.vel.clone().addScaledVector(U, -4) }); // ejector rack kicks it clear
 }
 function dropBomb() {
+  if (parts.missiles.length) { fireMissile(); return; } // with the missile loadout, X fires a missile
   if (!running || paused || S.crashed || S.bombs <= 0) return;
   if (S.onGround) { toast('Bombs release only in the air'); return; }
   const src = parts.bombs.find(b => b.visible);
@@ -3255,6 +3289,7 @@ function clearWeapons() {
   bombsFlying.length = 0;
   parts.bombs.forEach(b => { b.visible = true; });
   if (parts.nuke) parts.nuke.visible = true;
+  clearMissiles();
   lastImpact = null;
 }
 function updateWeapons(dt) {
@@ -3265,6 +3300,7 @@ function updateWeapons(dt) {
   } else bul.acc = 0;
   updateBullets(dt);
   updateBombs(dt);
+  updateMissiles(dt);
 }
 
 // ---------------- nuclear detonation ----------------
@@ -3687,6 +3723,7 @@ addEventListener('keydown', e => {
   else if (k === 'i') { invertPitch = !invertPitch; toast(invertPitch ? 'Pitch inverted: W pulls the nose up' : 'Pitch normal: S pulls the nose up'); }
   else if (k === 'g') toggleGear();
   else if (k === 'x') dropBomb();
+  else if (k === 'l') cycleLock();
   else if (k === 'n') dropNuke();
   else if (k === 'z' && running && !bombCamTarget()) toast('Nothing to watch yet: drop a bomb first');
   else if (k === 'u') toggleUI();
@@ -3845,6 +3882,7 @@ tGun.addEventListener('pointerdown', () => { initAudio(); touchIn.gun = true; })
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) tGun.addEventListener(ev, () => { touchIn.gun = false; });
 $('#tBomb').addEventListener('pointerdown', () => dropBomb());
 $('#tNuke').addEventListener('pointerdown', () => dropNuke());
+$('#tLock').addEventListener('pointerdown', () => cycleLock());
 const bBombCam = $('#bBombCam');
 bBombCam.addEventListener('pointerdown', e => { bombCam.btn = true; if (!bombCamTarget()) toast('Nothing to watch yet: drop a bomb first'); try { bBombCam.setPointerCapture(e.pointerId); } catch (err) {} });
 for (const ev of ['pointerup', 'pointercancel']) bBombCam.addEventListener(ev, () => { bombCam.btn = false; });
@@ -3912,7 +3950,9 @@ function updateAircraftUI() {
   });
   $('#wpn').hidden = !A.weapons;
   buildGunshipHUD();
-  $('#tBomb').hidden = !parts.bombs.length;
+  $('#tBomb').hidden = !parts.bombs.length && !parts.missiles.length;
+  $('#tBomb').textContent = parts.missiles.length ? 'AAM' : 'BOMB';
+  $('#tLock').hidden = !A.radar;
   $('#tNuke').hidden = !parts.nuke;
   if (parts.nuke) $('#tNuke').textContent = $('#ccipN').firstChild.textContent = parts.nuke.userData.nk.name;
 }
@@ -4171,7 +4211,15 @@ function updateHUD() {
   el.ab.classList.toggle('on', !!A.thrustAB && S.throttle > AB_AT);
   el.ab.hidden = !A.thrustAB;
   el.gun.hidden = !A.weapons || !A.ammo;
-  el.bombs.hidden = !A.weapons || !!parts.nuke;
+  el.bombs.hidden = !A.weapons || !!parts.nuke || parts.missiles.length > 0;
+  const mEl = $('#msl');
+  mEl.hidden = !parts.missiles.length;
+  if (parts.missiles.length) {
+    const cnt = {};
+    for (const m of parts.missiles) cnt[m.userData.mkind] = (cnt[m.userData.mkind] || 0) + (m.visible ? 1 : 0);
+    setText(mEl, Object.keys(cnt).map(k => MSL_KINDS[k].name + ' ×' + cnt[k]).join(' · '));
+    mEl.style.color = Object.values(cnt).some(v => v) ? '' : 'var(--dim)';
+  }
   el.nukes.hidden = !parts.nuke;
   setText(el.alt, Math.round(ft / 10) * 10 + '');
   setText(el.vs, (fpm >= 0 ? '+' : '−') + String(Math.round(Math.abs(fpm) / 10) * 10).padStart(4, '0'));
@@ -4411,6 +4459,271 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
 });
 
+// ---------------- air-to-air missiles and radar ----------------
+// Missiles are a loadout of their own on the F-15C, Typhoon and A-10 (no bombs while carrying them), and the
+// targets are the other players. The radar (on the A-10, its targeting pod) sees aircraft in a cone ahead of the
+// nose. L locks the nearest and then cycles through the rest; X fires. With a lock, the missile is picked by
+// range: the short-range heat-seeker inside its reach, the AIM-120 beyond it. Without a lock, a heat-seeker
+// looks for a target near the nose and an AIM-120 flies straight. Missiles steer by proportional navigation,
+// pull limited g and burn out, so a hard turn at the right moment can beat them. The proximity fuse sends the
+// burst to the target's page, where it tears off whatever it reaches, like any other blast.
+const MSL_KINDS = {
+  aim120: { name: 'AIM-120C', len: 3.65, r: 0.089, range: 50000, acc: 230, burn: 6, g: 40, life: 70, R: 16, cd: 6e-5, ir: false, col: '#e8e8e2' },
+  aim9: { name: 'AIM-9X', len: 3.0, r: 0.064, range: 15000, acc: 400, burn: 2.4, g: 60, life: 28, R: 11, cd: 9e-5, ir: true, col: '#d9dbd6' },
+  iris: { name: 'IRIS-T', len: 2.94, r: 0.064, range: 15000, acc: 400, burn: 2.4, g: 60, life: 28, R: 11, cd: 9e-5, ir: true, col: '#d4d6d0' }
+};
+const mslTemplates = {};
+function makeMissile(kind) {
+  const K = MSL_KINDS[kind], body = M(K.col, 0.45, 0.2), dark = M('#6d7175', 0.5, 0.3), g = new THREE.Group(), L = K.len, r = K.r;
+  const part = (geo, mat, z) => { const m = new THREE.Mesh(geo, mat); m.position.z = z; m.castShadow = true; g.add(m); return m; };
+  part(tube(r, r, L * 0.84), body, 0.06 * L);
+  part(tube(r, r * 0.12, L * 0.13), K.ir ? M('#3b4652', 0.2, 0.6) : body, -0.425 * L); // seeker dome or radome
+  // cruciform fins: tail fins, and mid-body wings (AIM-120) or nose canards (heat-seekers)
+  const cross = (span, chord, z) => { for (const a of [Math.PI / 4, -Math.PI / 4]) part(new THREE.BoxGeometry(span, 0.012, chord), dark, z).rotation.z = a; };
+  cross(r * 6, L * 0.1, 0.43 * L);
+  cross(r * (K.ir ? 3.6 : 4.6), L * (K.ir ? 0.05 : 0.12), K.ir ? -0.3 * L : -0.02 * L);
+  return g;
+}
+function addMissiles() {
+  for (const [x, y, z, kind] of A.rig.aam || []) {
+    if (!mslTemplates[kind]) mslTemplates[kind] = makeMissile(kind);
+    const m = mslTemplates[kind].clone();
+    m.position.set(x, y, z); m.userData.mkind = kind;
+    plane.add(m); parts.missiles.push(m);
+  }
+}
+
+// ---- radar ----
+const RADAR = { lock: null, scale: 40000, sweep: 0, sweepDir: 1, drawT: 0 };
+function contacts(slack = 1) {
+  const rs = A.radar;
+  if (!rs || !running || S.crashed) return [];
+  axes(S.quat);
+  const out = [];
+  for (const P of MP.peers.values()) {
+    const o = P.obj;
+    if (!o || !o.visible) continue;
+    tA.subVectors(o.position, S.pos);
+    const d = tA.length();
+    if (d < 1 || d > rs.range * slack) continue;
+    const off = Math.acos(clamp(tA.dot(F) / d, -1, 1));
+    if (off > rs.cone * slack) continue;
+    out.push({ P, d, az: Math.atan2(tA.dot(R), tA.dot(F)) });
+  }
+  return out.sort((a, b) => a.d - b.d);
+}
+function setLock(P, quiet) {
+  if (RADAR.lock === P) return;
+  if (RADAR.lock) mpSend('ms', { k: 'lock', on: 0 }, RADAR.lock.id);
+  RADAR.lock = P;
+  if (P) { mpSend('ms', { k: 'lock', on: 1 }, P.id); if (!quiet) toast('Locked ' + P.name); }
+}
+function cycleLock() {
+  if (!running || paused || S.crashed) return;
+  if (!A.radar) { toast('This aircraft has no radar'); return; }
+  const cs = contacts();
+  if (!cs.length) { setLock(null); toast(MP.peers.size ? 'No aircraft in the radar cone' : 'Radar: no other players online to lock'); return; }
+  const i = RADAR.lock ? cs.findIndex(c => c.P === RADAR.lock) : -1;
+  setLock(cs[(i + 1) % cs.length].P);
+}
+const rdrCtx = prep($('#rdr'), 180, 132), RDR_STEPS = [10000, 20000, 40000, 80000, 160000];
+function updateRadar(dt) {
+  const box = $('#radar'), tgt = $('#tgtBox');
+  box.hidden = !(running && A.radar);
+  if (box.hidden) { tgt.hidden = true; if (RADAR.lock) setLock(null, true); return; }
+  const cs = contacts(), held = RADAR.lock && contacts(1.15).find(c => c.P === RADAR.lock);
+  if (RADAR.lock && !held) { setLock(null); toast('Lock lost'); }
+  const L = RADAR.lock && held;
+  // the target box over the locked aircraft, with its range and closing speed
+  if (L) {
+    placeReticle(tgt, L.P.obj.position);
+    const close = -tA.subVectors(L.P.obj.position, S.pos).normalize().dot(tV.subVectors(L.P.v, S.vel));
+    setText(tgt.firstChild, `${L.P.name} · ${(L.d / 1000).toFixed(1)} KM · ${Math.round(close * 1.94384)} KT`);
+  } else tgt.hidden = true;
+  RADAR.sweep += RADAR.sweepDir * dt * 1.6;
+  if (Math.abs(RADAR.sweep) > A.radar.cone) { RADAR.sweep = Math.sign(RADAR.sweep) * A.radar.cone; RADAR.sweepDir *= -1; }
+  RADAR.drawT += dt;
+  if (RADAR.drawT < 1 / 20) return;
+  RADAR.drawT = 0;
+  // range scale: fits the lock, else the nearest contact, else 40 km
+  const want = L ? L.d * 1.15 : cs.length ? cs[0].d * 1.15 : 40000;
+  RADAR.scale = Math.min(A.radar.range, RDR_STEPS.find(s => s >= want) || 160000);
+  const x = rdrCtx, W = 180, H = 132, ox = W / 2, oy = H - 8, Rp = H - 20, cone = A.radar.cone, G = '#7ee2a8';
+  x.clearRect(0, 0, W, H);
+  x.strokeStyle = 'rgba(126,226,168,.35)'; x.lineWidth = 1;
+  for (const f of [0.5, 1]) { x.beginPath(); x.arc(ox, oy, Rp * f, -Math.PI / 2 - cone, -Math.PI / 2 + cone); x.stroke(); }
+  for (const a of [-cone, 0, cone]) { x.beginPath(); x.moveTo(ox, oy); x.lineTo(ox + Math.sin(a) * Rp, oy - Math.cos(a) * Rp); x.stroke(); }
+  x.strokeStyle = 'rgba(126,226,168,.8)';
+  x.beginPath(); x.moveTo(ox, oy); x.lineTo(ox + Math.sin(RADAR.sweep) * Rp, oy - Math.cos(RADAR.sweep) * Rp); x.stroke();
+  x.font = '700 9px ' + getComputedStyle(document.body).getPropertyValue('--font-num'); x.fillStyle = G;
+  x.textAlign = 'left'; x.fillText((A.radar.name || 'RDR') + ' ' + RADAR.scale / 1000, 4, 10);
+  x.textAlign = 'right'; x.fillText(cs.length + ' TGT', W - 4, 10);
+  x.textAlign = 'center';
+  for (const c of cs) {
+    if (c.d > RADAR.scale) continue;
+    const r = c.d / RADAR.scale * Rp, px = ox + Math.sin(c.az) * r, py = oy - Math.cos(c.az) * r, locked = c.P === RADAR.lock;
+    x.fillStyle = locked ? '#ffb547' : G; x.strokeStyle = x.fillStyle;
+    if (locked) { x.fillRect(px - 4, py - 4, 8, 8); x.beginPath(); x.arc(px, py, 8, 0, Math.PI * 2); x.stroke(); }
+    else x.strokeRect(px - 3.5, py - 3.5, 7, 7);
+    x.fillText(String(Math.round(c.P.obj.position.y * 3.28084 / 1000)), px, py - 9); // altitude in thousands of feet
+  }
+  // the lock, and whether a missile can reach it
+  const info = $('#rdrInfo');
+  if (L) {
+    const k = mslFor(L.d), inRange = k && L.d <= MSL_KINDS[k].range;
+    setText(info, `LOCK ${L.P.name.toUpperCase()} ${(L.d / 1000).toFixed(1)} KM${k ? (inRange ? ' · SHOOT ' + MSL_KINDS[k].name : ' · OUT OF RANGE') : ''}`);
+    info.className = inRange ? 'shoot' : '';
+  } else { setText(info, MP.peers.size ? 'L: LOCK TARGET' : 'NO OTHER PLAYERS'); info.className = ''; }
+}
+
+// ---- missiles in flight ----
+const missiles = [];
+let mslSeq = 0;
+// the missile to fire at a target d metres away: the heat-seeker inside its reach, else the AIM-120
+function mslFor(d) {
+  const left = parts.missiles.filter(m => m.visible).map(m => m.userData.mkind);
+  const srm = left.find(k => MSL_KINDS[k].ir), mrm = left.find(k => !MSL_KINDS[k].ir);
+  return srm && (d <= MSL_KINDS[srm].range || !mrm) ? srm : mrm || srm || null;
+}
+function fireMissile() {
+  if (!running || paused || S.crashed) return;
+  if (S.onGround) { toast('Missiles fire only in the air'); return; }
+  let tgt = RADAR.lock;
+  const kind = mslFor(tgt ? tgt.obj.position.distanceTo(S.pos) : 0);
+  if (!kind) { toast('No missiles left'); return; }
+  const K = MSL_KINDS[kind], src = parts.missiles.find(m => m.visible && m.userData.mkind === kind);
+  axes(S.quat);
+  if (!tgt && K.ir) { // the heat-seeker looks for a target within 20° of the nose
+    let best = Infinity;
+    for (const P of MP.peers.values()) {
+      if (!P.obj || !P.obj.visible) continue;
+      tA.subVectors(P.obj.position, S.pos);
+      const d = tA.length();
+      if (d < K.range && tA.dot(F) / d > Math.cos(0.35) && d < best) { best = d; tgt = P; }
+    }
+  }
+  plane.position.copy(S.pos); plane.quaternion.copy(S.quat); // launch from where the jet is this instant
+  plane.updateMatrixWorld(true);
+  const obj = src.clone();
+  src.getWorldPosition(obj.position); src.getWorldQuaternion(obj.quaternion);
+  src.visible = false;
+  scene.add(obj);
+  const m = { obj, kind, pos: obj.position, vel: S.vel.clone().addScaledVector(U, K.ir ? 0 : -4).addScaledVector(F, 15), t: 0, target: tgt, lastD: Infinity, id: MP.self + ':' + (++mslSeq) };
+  missiles.push(m);
+  if (tgt) mpSend('ms', { k: 'launch', id: m.id, n: K.name }, tgt.id);
+  const d = tgt ? tgt.obj.position.distanceTo(S.pos) : 0;
+  toast(`${K.name} away${tgt ? ' at ' + tgt.name + (d > K.range ? ', beyond its reach' : '') : ', no target: flying straight'}`);
+}
+const _mr = new THREE.Vector3(), _mv = new THREE.Vector3(), _mo = new THREE.Vector3(), _ma = new THREE.Vector3(), _mc = new THREE.Vector3(), _mq = new THREE.Quaternion();
+function endMissile(i) {
+  const m = missiles[i];
+  scene.remove(m.obj);
+  if (m.target) mpSend('ms', { k: 'gone', id: m.id }, m.target.id);
+  missiles.splice(i, 1);
+}
+function updateMissiles(dt) {
+  for (let i = missiles.length - 1; i >= 0; i--) {
+    const m = missiles[i], K = MSL_KINDS[m.kind];
+    m.t += dt;
+    let P = m.target;
+    if (P && (!MP.peers.has(P.id) || !P.obj || !P.obj.visible)) { mpSend('ms', { k: 'gone', id: m.id }, P.id); P = m.target = null; }
+    const v = m.vel.length();
+    _ma.set(0, -9.81, 0);
+    if (P) {
+      _mr.subVectors(P.obj.position, m.pos);
+      const dist = _mr.length();
+      _mv.subVectors(m.vel, P.v);
+      // proximity fuse: inside the burst radius, or the closest approach has just gone by
+      if (dist < K.R * 0.5 || (dist < 150 && dist > m.lastD)) {
+        const tc = dist > m.lastD ? clamp(_mr.dot(_mv) / Math.max(1, _mv.lengthSq()), -dt, 0) : 0; // back to the closest point
+        _mc.copy(_mr).negate().addScaledVector(_mv, tc); // missile relative to target, at the burst
+        const local = _mo.copy(_mc).applyQuaternion(_mq.copy(P.obj.quaternion).invert());
+        mpSend('ms', { k: 'hit', id: m.id, o: mpV(local), R: K.R, n: K.name }, P.id);
+        explode(_mc.add(P.obj.position), 0.7, false);
+        m.target = null; endMissile(i); continue;
+      }
+      m.lastD = dist;
+      if (_mr.dot(m.vel) / (dist * v) < Math.cos(1.2)) { mpSend('ms', { k: 'gone', id: m.id }, P.id); m.target = null; } // beyond the seeker's view
+      else {
+        // proportional navigation: turn at four times the rate the line of sight turns, up to the missile's g
+        _mo.crossVectors(_mr, _mv.negate()).divideScalar(dist * dist);
+        _mc.crossVectors(_mo, m.vel).multiplyScalar(4);
+        _mc.y += 9.81;
+        const lim = K.g * 9.81 * clamp(v / 400, 0.2, 1); // slow missiles can't pull much
+        if (_mc.length() > lim) _mc.setLength(lim);
+        _ma.add(_mc);
+      }
+    }
+    if (m.t < K.burn) _ma.addScaledVector(m.vel, K.acc / v);
+    _ma.addScaledVector(m.vel, -K.cd * Math.exp(-Math.max(0, m.pos.y) / 8500) * v);
+    m.vel.addScaledVector(_ma, dt);
+    m.pos.addScaledVector(m.vel, dt);
+    m.obj.quaternion.setFromUnitVectors(NOSE, _mc.copy(m.vel).normalize());
+    if (m.t < K.burn + 0.5) { emit('smoke', m.pos, 0, 0.5, 0, 0.45); if (m.t < K.burn) emit('fire', m.pos, -m.vel.x * 0.05, 0, -m.vel.z * 0.05, 0.25); }
+    // the ground, the sea or a building
+    const h = heightAt(m.pos.x, m.pos.z), bi = buildingAt(m.pos.x, m.pos.z);
+    if (m.pos.y <= Math.max(h, 0) || (bi >= 0 && solidAt(bi, m.pos.x, m.pos.y, m.pos.z))) {
+      explode(m.pos, 0.6, h < 0); blast(m.pos, 8, 300);
+      endMissile(i); continue;
+    }
+    if (m.t > K.life) { explode(m.pos, 0.4, false); endMissile(i); }
+  }
+}
+function clearMissiles() {
+  for (let i = missiles.length - 1; i >= 0; i--) endMissile(i);
+  parts.missiles.forEach(m => { m.visible = true; });
+  setLock(null, true);
+}
+
+// ---- being targeted: lock and launch warnings, and bursts from other players' missiles ----
+MP.lockedBy = new Set(); MP.incoming = new Map();
+function onMissileMsg(id, d) {
+  if (!d || typeof d !== 'object') return;
+  const P = MP.peers.get(id), who = P ? P.name : 'Another player';
+  if (d.k === 'lock') {
+    if (d.on) { if (!MP.lockedBy.has(id) && running) toast(who + ' has a radar lock on you'); MP.lockedBy.add(id); } else MP.lockedBy.delete(id);
+  } else if (d.k === 'launch' && typeof d.id === 'string' && d.id.length < 80) {
+    MP.incoming.set(d.id, performance.now());
+    if (running && !S.crashed) toast(`MISSILE LAUNCH: ${who} fired ${String(d.n || 'a missile').replace(/[^\w\- ]/g, '').slice(0, 12)} at you. Turn hard!`);
+  } else if (d.k === 'gone') MP.incoming.delete(d.id);
+  else if (d.k === 'hit') {
+    MP.incoming.delete(d.id);
+    const o = vec(d.o);
+    if (!running || S.crashed || !o || o.length() > 60 || !num(d.R, 30)) return;
+    const w = o.applyQuaternion(S.quat).add(S.pos);
+    explode(w, 0.7, false, true);
+    MP.blastBy = who;
+    blastPlane(w, d.R, 'remote');
+    if (!S.crashed) toast(`Hit by ${who}'s ${String(d.n || 'missile').replace(/[^\w\- ]/g, '').slice(0, 12)}`);
+  }
+}
+function updateRwr() {
+  const now = performance.now();
+  for (const [k, t] of MP.incoming) if (now - t > 75000) MP.incoming.delete(k);
+  for (const id of MP.lockedBy) if (!MP.peers.has(id)) MP.lockedBy.delete(id);
+  const c = $('#cRwr'), msl = MP.incoming.size > 0;
+  c.hidden = !running || (!msl && !MP.lockedBy.size);
+  setText(c, msl ? 'MISSILE' : 'LOCKED');
+  c.classList.toggle('msl', msl);
+}
+// other players' missiles in flight: drawn from what they report, carried on between reports
+function drawPeerMissiles(P, now) {
+  const list = P.ml || [];
+  P.mObjs = P.mObjs || [];
+  if (!mslTemplates.aim120) mslTemplates.aim120 = makeMissile('aim120');
+  while (P.mObjs.length < list.length) { const o = mslTemplates.aim120.clone(); scene.add(o); P.mObjs.push(o); }
+  const lag = Math.min(0.5, (now - P.t) / 1000);
+  P.mObjs.forEach((o, i) => {
+    const e = list[i];
+    o.visible = !!e;
+    if (!e) return;
+    o.position.set(e[0] + e[3] * lag, e[1] + e[4] * lag, e[2] + e[5] * lag);
+    _mc.set(e[3], e[4], e[5]);
+    if (_mc.lengthSq() > 1) o.quaternion.setFromUnitVectors(NOSE, _mc.normalize());
+    emit('smoke', o.position, 0, 0.5, 0, 0.4);
+  });
+}
+
 // ---------------- multiplayer ----------------
 // Peer to peer, with no server. Every open page joins one public room through Trystero (WebRTC; the peers find
 // each other through public Nostr relays). Each player sends their flight ten times a second and draws everyone
@@ -4615,6 +4928,9 @@ function dropPeer(id) {
   const P = MP.peers.get(id);
   if (!P) return;
   if (P.obj) scene.remove(P.obj);
+  for (const o of P.mObjs || []) scene.remove(o);
+  if (RADAR.lock === P) setLock(null);
+  MP.lockedBy.delete(id);
   P.tag.remove();
   MP.peers.delete(id);
   if (P.name !== '…') toast(P.name + ' left');
@@ -4630,7 +4946,8 @@ function stateMsg() {
   return {
     n: MP.name, ac: A.id, r: running ? 1 : 0, c: S.crashed ? 1 : 0, p: mpV(S.pos), v: still ? [0, 0, 0] : mpV(S.vel),
     q: [q.x, q.y, q.z, q.w].map(v => Math.round(v * 1e4) / 1e4), g: S.gearT > 0.5 ? 1 : 0,
-    cl: A.id === 'b52' ? MP.claim : 0, up: Math.round(performance.now() - MP.t0), lf: MP.life, rp: MP.rips
+    cl: A.id === 'b52' ? MP.claim : 0, up: Math.round(performance.now() - MP.t0), lf: MP.life, rp: MP.rips,
+    ml: missiles.slice(0, 12).map(m => [...mpV(m.pos), ...mpV(m.vel)])
   };
 }
 function onState(id, d) {
@@ -4650,6 +4967,7 @@ function onState(id, d) {
   P.up = num(d.up, 1e10) ? d.up : 0;
   // parts torn off: a new flight starts whole; new tears are copied onto our model of the aircraft
   if (d.lf !== P.lf) { P.lf = d.lf; P.rp = []; P.applied = 0; P.rebuild = true; }
+  P.ml = Array.isArray(d.ml) && d.ml.length <= 12 ? d.ml.filter(e => Array.isArray(e) && e.length === 6 && e.every(v => num(v, 2e5))) : [];
   if (Array.isArray(d.rp) && d.rp.length <= 40) P.rp = d.rp.filter(r => Array.isArray(r) && r.length === 4 && typeof r[0] === 'string' && typeof r[1] === 'string' && (r[2] === null || num(r[2], 100)) && num(r[3], 100));
   P.t = performance.now();
   // two players took the B-52: the earlier claim keeps it
@@ -4667,6 +4985,7 @@ function mpUpdate(dt) {
   if (!MP.peers.size) return;
   const now = performance.now(), k = 1 - Math.exp(-dt * 12);
   for (const P of MP.peers.values()) {
+    drawPeerMissiles(P, now);
     const show = !!(P.r && !P.c && P.t);
     if (show && (!P.obj || P.rebuild || P.obj.userData.ac !== P.ac || (!P.obj.userData.real && MODELS[P.ac]))) {
       if (P.obj) scene.remove(P.obj);
@@ -4798,7 +5117,8 @@ async function mpConnect() {
   catch (e) { console.warn('Multiplayer is unavailable: the peer-to-peer library did not load.', e); MP.failed = true; updateMpBar(); return; }
   const room = mod.joinRoom({ appId: 'skylark-flight-dahliajunus' }, 'main');
   MP.room = room; MP.self = mod.selfId;
-  for (const n of ['st', 'fx', 'vote', 'sync', 'log', 'pw', 'ev']) MP.act[n] = room.makeAction(n);
+  for (const n of ['st', 'fx', 'vote', 'sync', 'log', 'pw', 'ev', 'ms']) MP.act[n] = room.makeAction(n);
+  MP.act.ms.onMessage = (d, { peerId }) => onMissileMsg(peerId, d);
   MP.act.pw.onMessage = (d, { peerId }) => onPlaneHits(peerId, d);
   MP.act.ev.onMessage = (d, { peerId }) => {
     const P = MP.peers.get(peerId);
@@ -4867,6 +5187,8 @@ function frame(now) {
   const stall = running ? updateHUD() : false;
   updateAudio(stall);
   mpUpdate(dt);
+  updateRadar(dt);
+  updateRwr();
   renderer.render(scene, camera);
 }
 
