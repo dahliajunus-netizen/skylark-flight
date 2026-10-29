@@ -68,9 +68,17 @@ body { background: var(--night); color: var(--fg); font-family: var(--font-ui); 
 #rdr { width: 180px; height: 132px; display: block; }
 #rdrInfo { font: 700 9px var(--font-num); letter-spacing: .1em; color: #7ee2a8; text-align: center; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #rdrInfo.shoot { color: var(--night); background: #7ee2a8; border-radius: 3px; }
-.ret.tgt { width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 2px; border-color: var(--amber); }
+/* radar lock: an orange box sized to the target, its identity and range beside it */
+.ret.tgt { width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 1.5px solid #ff8c2e; border-radius: 0; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
 .ret.tgt::after { display: none; }
-.ret.tgt span { position: absolute; top: 38px; left: 50%; transform: translateX(-50%); font: 700 10px var(--font-num); letter-spacing: .08em; color: var(--amber); white-space: nowrap; }
+.ret.tgt span { position: absolute; top: -2px; left: calc(100% + 8px); font: 700 10px/1.45 var(--font-num); letter-spacing: .08em; color: #ff8c2e; white-space: pre; text-shadow: 0 0 2px #000, 0 1px 2px rgba(0,0,0,.8); }
+/* gun lead: where the gun cross must be for the rounds to meet the locked target */
+.ret.tgt.left span { left: auto; right: calc(100% + 8px); text-align: right; }
+.ret.lead { width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid #ff8c2e; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+.ret.lead::after { background: #ff8c2e; }
+.ret.lead.hot { background: rgba(255,140,46,.35); }
+#gun.sel, #msl.sel { color: var(--cyan) !important; }
+#cm.out { color: var(--red) !important; }
 .chip.rwr { color: var(--night); background: var(--amber); border-color: var(--amber); }
 .chip.rwr.msl { background: var(--red); border-color: var(--red); animation: blink .5s steps(2) infinite; }
 body.touch #radar { right: auto; bottom: auto; left: calc(12px + env(safe-area-inset-left, 0px)); top: calc(48px + env(safe-area-inset-top, 0px)); transform: scale(.8); transform-origin: top left; }
@@ -209,6 +217,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <span class="small" id="bombs">MK-82 ×4</span>
     <span class="small" id="nukes">B61 ×1</span>
     <span class="small" id="msl" hidden>AAM</span>
+    <span class="small" id="cm" hidden>CM 30</span>
     <span class="chip rwr" id="cRwr" hidden>LOCKED</span>
     <span class="chip" id="cAb">AB</span>
     <span class="small" id="gload">1.0 G</span>
@@ -223,6 +232,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 
 <div id="radar" class="glass" hidden><canvas id="rdr"></canvas><div id="rdrInfo"></div></div>
 <div id="tgtBox" class="ret tgt" hidden><span></span></div>
+<div id="leadRet" class="ret lead" hidden></div>
 <div id="flash"></div>
 <div id="gunRet" class="ret" hidden></div>
 <div id="gsHud" hidden>
@@ -265,7 +275,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="touch" hidden>
   <div id="stick" class="glass"><div id="knob"></div></div>
   <div id="thrTrack" class="glass"><span>THR</span><div id="thrFill"></div></div>
-  <div id="wpn"><button class="wbtn" id="tLock" hidden>LOCK</button><button class="wbtn nuke" id="tNuke">B61</button><button class="wbtn" id="tBomb">BOMB</button><button class="wbtn gun" id="tGun">GUN</button></div>
+  <div id="wpn"><button class="wbtn" id="tLock" hidden>LOCK</button><button class="wbtn" id="tCm" hidden>CM</button><button class="wbtn nuke" id="tNuke">B61</button><button class="wbtn" id="tBomb">BOMB</button><button class="wbtn gun" id="tGun">GUN</button></div>
 </div>
 
 <div id="menu" class="overlay">
@@ -294,6 +304,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>L</dt><dd>Radar: lock the nearest aircraft ahead, press again to cycle (F-15C, Typhoon; the A-10's targeting pod sees 20 km)</dd>
       <dt>X with missiles</dt><dd>Fire an air-to-air missile (pick the missile loadout): the heat-seeker inside its reach, the AIM-120 beyond it</dd>
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
+      <dt>K</dt><dd>Countermeasures: one salvo of flares and chaff (not on the airliners)</dd>
+      <dt>1 · 2</dt><dd>Air-to-air weapon: gun (with a radar lock, the orange circle shows the gun lead) or missiles</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
       <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
@@ -352,6 +364,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>L</dt><dd>Radar: lock the nearest aircraft ahead, press again to cycle (F-15C, Typhoon; the A-10's targeting pod sees 20 km)</dd>
       <dt>X with missiles</dt><dd>Fire an air-to-air missile (pick the missile loadout): the heat-seeker inside its reach, the AIM-120 beyond it</dd>
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
+      <dt>K</dt><dd>Countermeasures: one salvo of flares and chaff (not on the airliners)</dd>
+      <dt>1 · 2</dt><dd>Air-to-air weapon: gun (with a radar lock, the orange circle shows the gun lead) or missiles</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
       <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
@@ -3499,6 +3513,8 @@ function reset(mode) {
   updateDamage();
   Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false });
   initGunship(); // a fresh flight: full ammunition
+  CM.left = CM_LOAD[A.id] || 0; CM.cool = 0;
+  aaSel = A.ammo ? 'gun' : 'msl';
   Object.assign(S, { crashed: false, time: 0, maxAlt: 0, maxSpd: 0, brake: false, hitBuilding: -1,
     ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: parts.nuke ? 1 : 0, firing: false });
   clearWeapons();
@@ -3513,9 +3529,9 @@ function reset(mode) {
     S.onGround = true;
     S.gearDown = true; S.gearT = 1; S.doorT = 1;
   } else {
-    const x = 0, z = 9000; // over the sea south of the base, heading north up runway 36
-    S.pos.set(x, Math.max(A.airStart[2] || 900, heightAt(x, z) + 600), z); // optional per-aircraft start altitude (m)
-    S.quat.setFromEuler(eul.set(0, 0.02, 0, 'YXZ'));
+    const sp = airSpawn(); // somewhere new over the main island each time
+    S.pos.set(sp.x, sp.y, sp.z);
+    S.quat.setFromEuler(eul.set(0, sp.yaw, 0, 'YXZ'));
     axes(S.quat);
     S.vel.copy(F).multiplyScalar(A.airStart[0]);
     S.throttle = A.airStart[1];
@@ -3530,6 +3546,34 @@ function reset(mode) {
   clearWreck();
   camSnap = true;
   setThrottleUI();
+}
+
+// A random airborne start over the main island (or just off its coast): out of the airbase's traffic, well away
+// from other players, high enough above the terrain and the towers around it, and on a heading with clear air ahead.
+// The altitude is the aircraft's own start altitude, raised where the ground or the buildings need it.
+function airSpawn() {
+  const base = A.airStart[2] || 900, sp = new THREE.Vector3(), dir = new THREE.Vector3();
+  const top = (x, z, r) => { let h = 0; for (let k = 0; k < 9; k++) { const a = k * 0.785; h = Math.max(h, floorAt(x + Math.cos(a) * r * (k % 2 ? 1 : 0.5), z + Math.sin(a) * r * (k % 2 ? 1 : 0.5))); } return Math.max(h, floorAt(x, z)); };
+  for (let n = 0; n < 80; n++) {
+    const a = Math.random() * Math.PI * 2, r = MAP_R * 0.85 * Math.sqrt(Math.random());
+    const x = Math.cos(a) * r, z = MAP_CZ + Math.sin(a) * r;
+    if (heightAt(x, z) < -60) continue;                                          // over open sea, not the island
+    if (RUNWAYS.some(R => Math.hypot(x - R.x, z - R.z) < R.len / 2 + 3000)) continue; // the airbase's circuit
+    const y = Math.max(base, top(x, z, 1500) + 450);
+    sp.set(x, y, z);
+    let near = false;
+    for (const P of MP.peers.values()) if (P.r && !P.c && P.p.distanceTo(sp) < 5000) near = true;
+    if (near) continue;
+    // a heading with nothing in the way for the next 6 km
+    for (let h = 0; h < 8; h++) {
+      const yaw = Math.random() * Math.PI * 2;
+      dir.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+      let clear = true;
+      for (let d = 500; d <= 6000 && clear; d += 500) if (top(x + dir.x * d, z + dir.z * d, 300) > y - 200) clear = false;
+      if (clear) return { x, y, z, yaw };
+    }
+  }
+  return { x: 0, y: Math.max(base, heightAt(0, 9000) + 600), z: 9000, yaw: 0.02 }; // nothing suitable: the old start off the south coast
 }
 
 function crash(msg) {
@@ -3725,6 +3769,8 @@ addEventListener('keydown', e => {
   else if (k === 'g') toggleGear();
   else if (k === 'x') dropBomb();
   else if (k === 'l') cycleLock();
+  else if (k === 'k') releaseCM();
+  else if ((k === '1' || k === '2') && !A.gunship) selectAA(k === '1' ? 'gun' : 'msl');
   else if (k === 'n') dropNuke();
   else if (k === 'z' && running && !bombCamTarget()) toast('Nothing to watch yet: drop a bomb first');
   else if (k === 'u') toggleUI();
@@ -3884,6 +3930,7 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) tGun.addEventLi
 $('#tBomb').addEventListener('pointerdown', () => dropBomb());
 $('#tNuke').addEventListener('pointerdown', () => dropNuke());
 $('#tLock').addEventListener('pointerdown', () => cycleLock());
+$('#tCm').addEventListener('pointerdown', () => releaseCM());
 const bBombCam = $('#bBombCam');
 bBombCam.addEventListener('pointerdown', e => { bombCam.btn = true; if (!bombCamTarget()) toast('Nothing to watch yet: drop a bomb first'); try { bBombCam.setPointerCapture(e.pointerId); } catch (err) {} });
 for (const ev of ['pointerup', 'pointercancel']) bBombCam.addEventListener(ev, () => { bombCam.btn = false; });
@@ -4222,6 +4269,13 @@ function updateHUD() {
     mEl.style.color = Object.values(cnt).some(v => v) ? '' : 'var(--dim)';
   }
   el.nukes.hidden = !parts.nuke;
+  // the selected air-to-air weapon, and the countermeasures left
+  el.gun.classList.toggle('sel', !!A.radar && aaSel === 'gun');
+  mEl.classList.toggle('sel', !!A.radar && aaSel === 'msl');
+  const cmEl = $('#cm'), cmN = CM_LOAD[A.id] || 0;
+  cmEl.hidden = !cmN;
+  $('#tCm').hidden = !cmN;
+  if (cmN) { setText(cmEl, CM.left ? 'CM ' + CM.left : 'CM OUT'); cmEl.classList.toggle('out', !CM.left); }
   setText(el.alt, Math.round(ft / 10) * 10 + '');
   setText(el.vs, (fpm >= 0 ? '+' : '−') + String(Math.round(Math.abs(fpm) / 10) * 10).padStart(4, '0'));
   setText(el.aoa, (S.alpha * 180 / Math.PI).toFixed(1) + '°');
@@ -4531,16 +4585,37 @@ const rdrCtx = prep($('#rdr'), 180, 132), RDR_STEPS = [10000, 20000, 40000, 8000
 function updateRadar(dt) {
   const box = $('#radar'), tgt = $('#tgtBox');
   box.hidden = !(running && A.radar);
-  if (box.hidden) { tgt.hidden = true; if (RADAR.lock) setLock(null, true); return; }
+  if (box.hidden) { tgt.hidden = true; $('#leadRet').hidden = true; if (RADAR.lock) setLock(null, true); return; }
   const cs = contacts(), held = RADAR.lock && contacts(1.15).find(c => c.P === RADAR.lock);
   if (RADAR.lock && !held) { setLock(null); toast('Lock lost'); }
   const L = RADAR.lock && held;
-  // the target box over the locked aircraft, with its range and closing speed
+  // the orange box over the locked aircraft, sized to it, with who and what it is, how far and how it's moving
+  const lead = $('#leadRet');
   if (L) {
-    placeReticle(tgt, L.P.obj.position);
-    const close = -tA.subVectors(L.P.obj.position, S.pos).normalize().dot(tV.subVectors(L.P.v, S.vel));
-    setText(tgt.firstChild, `${L.P.name} · ${(L.d / 1000).toFixed(1)} KM · ${Math.round(close * 1.94384)} KT`);
-  } else tgt.hidden = true;
+    const o = L.P.obj, b = AC[L.P.ac].box, span = b ? Math.max(b.max.x - b.min.x, b.max.z - b.min.z) : 15;
+    const px = span / Math.max(1, camera.position.distanceTo(o.position)) / (2 * Math.tan(camera.fov * Math.PI / 360)) * innerHeight;
+    const size = Math.round(clamp(px * 1.15, 30, 180)) + 'px';
+    if (tgt.style.width !== size) { tgt.style.width = tgt.style.height = size; tgt.style.margin = `calc(${size} / -2) 0 0 calc(${size} / -2)`; }
+    placeReticle(tgt, o.position);
+    const los = tA.subVectors(o.position, S.pos).normalize();
+    const close = -los.dot(tV.subVectors(L.P.v, S.vel)), vt = L.P.v.length();
+    const aspect = vt > 5 ? ASPECT(Math.acos(clamp(-los.dot(tR.copy(L.P.v).divideScalar(vt)), -1, 1))) : '----';
+    // the gun lead, when the gun is the selected weapon
+    let gunLine = '';
+    if (aaSel === 'gun' && A.weapons && A.ammo) {
+      const sol = S.ammo > 0 && !S.onGround ? gunLead(L.P, tC) : null;
+      if (sol) {
+        placeReticle(lead, tC);
+        axes(S.quat);
+        lead.classList.toggle('hot', sol.dir.dot(F) > Math.cos(0.008));
+        // keep the target details on the side away from the lead circle
+        prj.copy(tC).project(camera); const lx = prj.x; prj.copy(o.position).project(camera);
+        tgt.classList.toggle('left', lx > prj.x);
+        gunLine = `\nGUN ${sol.t.toFixed(1)} S`;
+      } else { lead.hidden = true; gunLine = S.ammo > 0 ? '\nGUN OUT OF RANGE' : '\nGUN EMPTY'; }
+    } else lead.hidden = true;
+    setText(tgt.firstChild, `${L.P.name.toUpperCase()}\n${acShort(L.P.ac)}\n${(L.d / 1000).toFixed(1)} KM · ${Math.round(close * 1.94384)} KT\n${Math.round(o.position.y * 3.28084).toLocaleString('en-US')} FT · ${aspect}${gunLine}`);
+  } else { tgt.hidden = true; lead.hidden = true; }
   RADAR.sweep += RADAR.sweepDir * dt * 1.6;
   if (Math.abs(RADAR.sweep) > A.radar.cone) { RADAR.sweep = Math.sign(RADAR.sweep) * A.radar.cone; RADAR.sweepDir *= -1; }
   RADAR.drawT += dt;
@@ -4572,7 +4647,8 @@ function updateRadar(dt) {
   const info = $('#rdrInfo');
   if (L) {
     const k = mslFor(L.d), inRange = k && L.d <= MSL_KINDS[k].range;
-    setText(info, `LOCK ${L.P.name.toUpperCase()} ${(L.d / 1000).toFixed(1)} KM${k ? (inRange ? ' · SHOOT ' + MSL_KINDS[k].name : ' · OUT OF RANGE') : ''}`);
+    const pk = k ? Math.round(missilePk(MSL_KINDS[k], L.d, L.P) * 100) : 0;
+    setText(info, `${L.P.name.toUpperCase()} ${(L.d / 1000).toFixed(1)} KM${k ? (inRange ? ` · ${MSL_KINDS[k].name} ${pk}%` : ' · OUT OF RANGE') : ''}`);
     info.className = inRange ? 'shoot' : '';
   } else { setText(info, MP.peers.size ? 'L: LOCK TARGET' : 'NO OTHER PLAYERS'); info.className = ''; }
 }
@@ -4609,7 +4685,14 @@ function fireMissile() {
   src.getWorldPosition(obj.position); src.getWorldQuaternion(obj.quaternion);
   src.visible = false;
   scene.add(obj);
-  const m = { obj, kind, pos: obj.position, vel: S.vel.clone().addScaledVector(U, K.ir ? 0 : -4).addScaledVector(F, 15), t: 0, target: tgt, lastD: Infinity, id: MP.self + ':' + (++mslSeq) };
+  const m = { obj, kind, pos: obj.position, vel: S.vel.clone().addScaledVector(U, K.ir ? 0 : -4).addScaledVector(F, 15), t: 0, target: tgt, lastD: Infinity, id: MP.self + ':' + (++mslSeq), seen: new Set(), decoy: null, miss: null };
+  // the chance of a hit falls off with launch range; a missile that is going to miss is steered at a point just
+  // wide of the target, so it bursts close by (and the target sees the flash) without catching it
+  if (tgt && Math.random() > missilePk(K, tgt.obj.position.distanceTo(S.pos), tgt)) {
+    const los = tA.subVectors(tgt.obj.position, S.pos).normalize();
+    const side = tV.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).cross(los).normalize();
+    m.miss = side.multiplyScalar(K.R * 1.25 + (tgt.obj.userData.rad || 10) + 5 + Math.random() * 25);
+  }
   missiles.push(m);
   if (tgt) mpSend('ms', { k: 'launch', id: m.id, n: K.name }, tgt.id);
   const d = tgt ? tgt.obj.position.distanceTo(S.pos) : 0;
@@ -4622,7 +4705,112 @@ function endMissile(i) {
   if (m.target) mpSend('ms', { k: 'gone', id: m.id }, m.target.id);
   missiles.splice(i, 1);
 }
+// ---- countermeasures: flares and chaff ----
+// Every aircraft but the airliners carries countermeasure salvos (CM_LOAD; these counts are simulation settings).
+// K releases one salvo: two flares (heat decoys) and two chaff bundles (radar decoys) together, at most one salvo
+// every CM_GAP seconds; the stock refills with a new flight. Each release goes to every other player, whose pages
+// draw the decoys and, if one of their own missiles is chasing this aircraft, decide whether it takes the bait:
+// heat-seekers can only be fooled by flares, the radar-guided AIM-120 only by chaff, a decoy only works while it is
+// fresh, and the odds depend on decoyChance below. A missile chasing someone else ignores these decoys.
+const CM_LOAD = { f15: 30, typhoon: 30, a10: 30, b52: 45, ac130: 60 };
+const CM_GAP = 0.6, FLARE_LIFE = 4.5, CHAFF_LIFE = 6;
+const CM = { left: 0, cool: 0 };
+const decoys = []; // { id, owner ('' for our own), kind 'flare' | 'chaff', p, v, t, life }
+let decoySeq = 0;
+function addDecoy(owner, kind, p, v) {
+  if (decoys.length > 120) decoys.shift();
+  decoys.push({ id: owner + ':' + (++decoySeq), owner, kind, p: p.clone(), v: v.clone(), t: 0, life: kind === 'flare' ? FLARE_LIFE : CHAFF_LIFE });
+}
+function releaseCM() {
+  if (!running || paused || S.crashed) return;
+  if (!CM_LOAD[A.id]) { toast('Airliners carry no countermeasures'); return; }
+  if (CM.cool > 0) return;
+  if (CM.left <= 0) { toast('Countermeasures depleted'); return; }
+  CM.left--; CM.cool = CM_GAP;
+  axes(S.quat);
+  const out = [], p = new THREE.Vector3().copy(S.pos).addScaledVector(F, -6 * A.scale).addScaledVector(U, -1);
+  for (const side of [-1, 1]) {
+    // flares kick out sideways and down and fall away burning; chaff bursts into a cloud that drops behind
+    const vf = tV.copy(S.vel).multiplyScalar(0.85).addScaledVector(R, side * 18).addScaledVector(U, -12);
+    addDecoy('', 'flare', p, vf); out.push(['f', ...mpV(p), ...mpV(vf)]);
+    const vc = tV.copy(S.vel).multiplyScalar(0.5).addScaledVector(R, side * 6).addScaledVector(U, -4);
+    addDecoy('', 'chaff', p, vc); out.push(['c', ...mpV(p), ...mpV(vc)]);
+  }
+  mpSend('ms', { k: 'cm', d: out });
+}
+// The chance that a fresh decoy lures missile m away from target P. Zero if the decoy isn't beside the target in
+// the seeker's narrow view or is behind the missile. Decoys work best released while the missile is a few km out,
+// less when it is still far off (time to sort them out) or already on top of the target. Heat-seekers here have
+// modern counter-countermeasures, so a flare is far from certain; chaff mostly works when the target flies across
+// the missile's line of sight (its radar has the least speed difference to tell aircraft from chaff).
+function decoyChance(m, K, P, D) {
+  const toT = _mr.subVectors(P.obj.position, m.pos), dT = toT.length();
+  const toD = _mo.subVectors(D.p, m.pos), dD = toD.length();
+  if (dT < 1 || dD < 1) return 0;
+  if (toD.dot(m.vel) / (dD * Math.max(1, m.vel.length())) < Math.cos(0.6)) return 0; // outside the seeker
+  if (toD.dot(toT) / (dD * dT) < Math.cos(0.12)) return 0;                          // not beside the target
+  const when = dT < 600 ? 0.35 : dT < 4000 ? 1 : Math.max(0.35, 1 - (dT - 4000) / 10000);
+  if (K.ir) return 0.3 * when;
+  const vt = P.v.length(), across = vt > 1 ? 1 - Math.abs(P.v.dot(toT) / (dT * vt)) : 0;
+  return (0.08 + 0.35 * across * across) * when;
+}
+function updateDecoys(dt) {
+  CM.cool = Math.max(0, CM.cool - dt);
+  for (let i = decoys.length - 1; i >= 0; i--) {
+    const D = decoys[i];
+    D.t += dt;
+    if (D.t >= D.life) { decoys.splice(i, 1); continue; }
+    if (D.kind === 'flare') {
+      D.v.multiplyScalar(Math.exp(-0.9 * dt)); D.v.y -= 6 * dt;
+      emit('fire', D.p, D.v.x * 0.2, D.v.y * 0.2, D.v.z * 0.2, 0.55 * (1 - D.t / D.life) + 0.15);
+      if (Math.random() < dt * 20) emit('smoke', D.p, 0, 0.5, 0, 0.35);
+    } else {
+      D.v.multiplyScalar(Math.exp(-2.5 * dt)); D.v.y -= 1.2 * dt;
+      if (D.t < 3.5) for (let k = burst(18, dt); k > 0; k--) emit('spark', D.p, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 10);
+    }
+    D.p.addScaledVector(D.v, dt);
+  }
+}
+// Odds that a missile launched from d metres reaches the target, before any decoys: close shots are reliable, and
+// the odds fall off smoothly toward the missile's full range without ever reaching zero. Radar missiles also lose a
+// little against a target flying across them at launch.
+function missilePk(K, d, P) {
+  const rf = d / K.range;
+  let pk = Math.max(0.15, 0.93 / (1 + Math.exp((rf - 0.6) / 0.15)));
+  if (!K.ir && P && P.v.lengthSq() > 1) {
+    tC.subVectors(P.obj.position, S.pos).normalize();
+    pk *= 1 - 0.2 * (1 - Math.abs(tC.dot(tR.copy(P.v).normalize())));
+  }
+  return pk;
+}
+// ---- air-to-air weapon selection and the gun lead ----
+let aaSel = 'gun';
+function selectAA(w) {
+  if (!running) return;
+  if (w === 'gun' && !(A.weapons && A.ammo)) { toast('This aircraft has no gun'); return; }
+  if (w === 'msl' && !parts.missiles.length) { toast('No missiles loaded: pick the missile loadout'); return; }
+  if (aaSel !== w) { aaSel = w; toast(w === 'gun' ? 'Gun selected' : 'Missiles selected'); }
+}
+// Where the gun cross must be for rounds fired now to meet the locked target: solved with the cannon's own numbers
+// (muzzle speed MUZZLE_V on top of our velocity, gravity, the round's life), against the target moving at its
+// current velocity. The answer is drawn the same way the gun cross is (where the rounds would be 0.6 s out), so
+// putting the gun cross on the circle fires along the solution. Null when the target is beyond the rounds' reach.
+const _gl = new THREE.Vector3(), _gd = new THREE.Vector3(), _gm = new THREE.Vector3();
+function gunLead(P, out) {
+  muzzlePos(_gm);
+  let t = _gm.distanceTo(P.obj.position) / MUZZLE_V;
+  for (let k = 0; k < 5; k++) {
+    _gl.copy(P.obj.position).addScaledVector(P.v, t).addScaledVector(S.vel, -t); _gl.y += 0.5 * G * t * t;
+    _gd.subVectors(_gl, _gm); t = _gd.length() / MUZZLE_V;
+  }
+  if (t > 2.3) return null; // the rounds burn out first
+  _gd.normalize();
+  out.copy(S.pos).addScaledVector(S.vel, 0.6).addScaledVector(_gd, MUZZLE_V * 0.6); out.y -= 0.5 * G * 0.36;
+  return { t, dir: _gd };
+}
+const ASPECT = d => d < 0.38 ? 'HOT' : d < 1.2 ? 'FLANK' : d < 1.95 ? 'BEAM' : 'COLD';
 function updateMissiles(dt) {
+  updateDecoys(dt);
   for (let i = missiles.length - 1; i >= 0; i--) {
     const m = missiles[i], K = MSL_KINDS[m.kind];
     m.t += dt;
@@ -4630,14 +4818,41 @@ function updateMissiles(dt) {
     if (P && (!MP.peers.has(P.id) || !P.obj || !P.obj.visible)) { mpSend('ms', { k: 'gone', id: m.id }, P.id); P = m.target = null; }
     const v = m.vel.length();
     _ma.set(0, -9.81, 0);
-    if (P) {
+    // fresh decoys from this missile's own target can pull it away (each decoy gets one chance per missile)
+    if (P && !m.decoy) for (const D of decoys) {
+      if (D.owner !== P.id || D.t > 1.2 || m.seen.has(D.id)) continue;
+      m.seen.add(D.id);
+      if ((K.ir ? D.kind === 'flare' : D.kind === 'chaff') && Math.random() < decoyChance(m, K, P, D)) {
+        mpSend('ms', { k: 'gone', id: m.id }, P.id);
+        m.decoy = D; P = m.target = null;
+        toast(`Your ${K.name} went for ${D.kind === 'flare' ? 'a flare' : 'the chaff'}`);
+        break;
+      }
+    }
+    if (m.decoy && m.decoy.t >= m.decoy.life) m.decoy = null; // the decoy burnt out: the missile flies on blind
+    const D = m.decoy;
+    if (D) {
+      // chasing a decoy: same guidance, and it bursts harmlessly when it reaches it
+      _mr.subVectors(D.p, m.pos);
+      const dist = _mr.length();
+      if (dist < K.R * 0.5) { explode(m.pos, 0.5, false); endMissile(i); continue; }
+      _mv.subVectors(m.vel, D.v);
+      _mo.crossVectors(_mr, _mv.negate()).divideScalar(dist * dist);
+      _mc.crossVectors(_mo, m.vel).multiplyScalar(4);
+      _mc.y += 9.81;
+      const lim = K.g * 9.81 * clamp(v / 400, 0.2, 1);
+      if (_mc.length() > lim) _mc.setLength(lim);
+      _ma.add(_mc);
+    } else if (P) {
+      // aim at the target, or at the point beside it this missile was always going to pass through
       _mr.subVectors(P.obj.position, m.pos);
+      if (m.miss) _mr.add(m.miss);
       const dist = _mr.length();
       _mv.subVectors(m.vel, P.v);
       // proximity fuse: inside the burst radius, or the closest approach has just gone by
       if (dist < K.R * 0.5 || (dist < 150 && dist > m.lastD)) {
         const tc = dist > m.lastD ? clamp(_mr.dot(_mv) / Math.max(1, _mv.lengthSq()), -dt, 0) : 0; // back to the closest point
-        _mc.copy(_mr).negate().addScaledVector(_mv, tc); // missile relative to target, at the burst
+        _mc.subVectors(m.pos, P.obj.position).addScaledVector(_mv, tc); // missile relative to target, at the burst
         const local = _mo.copy(_mc).applyQuaternion(_mq.copy(P.obj.quaternion).invert());
         mpSend('ms', { k: 'hit', id: m.id, o: mpV(local), R: K.R, n: K.name }, P.id);
         explode(_mc.add(P.obj.position), 0.7, false);
@@ -4672,6 +4887,7 @@ function updateMissiles(dt) {
 }
 function clearMissiles() {
   for (let i = missiles.length - 1; i >= 0; i--) endMissile(i);
+  for (let i = decoys.length - 1; i >= 0; i--) if (!decoys[i].owner) decoys.splice(i, 1); // our own decoys go with the old flight
   parts.missiles.forEach(m => { m.visible = true; });
   setLock(null, true);
 }
@@ -4687,6 +4903,14 @@ function onMissileMsg(id, d) {
     MP.incoming.set(d.id, performance.now());
     if (running && !S.crashed) toast(`MISSILE LAUNCH: ${who} fired ${String(d.n || 'a missile').replace(/[^\w\- ]/g, '').slice(0, 12)} at you. Turn hard!`);
   } else if (d.k === 'gone') MP.incoming.delete(d.id);
+  else if (d.k === 'cm' && Array.isArray(d.d) && d.d.length <= 8) {
+    // another player's countermeasures: drawn here, and a lure for any of our missiles chasing them
+    for (const e of d.d) {
+      if (!Array.isArray(e) || e.length !== 7 || (e[0] !== 'f' && e[0] !== 'c')) continue;
+      const p = vec(e.slice(1, 4)), v = vec(e.slice(4, 7));
+      if (p && v && v.length() < 1500) addDecoy(id, e[0] === 'f' ? 'flare' : 'chaff', p, v);
+    }
+  }
   else if (d.k === 'hit') {
     MP.incoming.delete(d.id);
     const o = vec(d.o);
@@ -5037,7 +5261,7 @@ function mpUpdate(dt) {
     mpTmp.copy(P.obj.position); mpTmp.y += 6 * (AC[P.ac].scale || 1);
     const dist = camera.position.distanceTo(mpTmp);
     mpTmp.project(camera);
-    const vis = mpTmp.z < 1 && Math.abs(mpTmp.x) < 1.1 && Math.abs(mpTmp.y) < 1.1 && dist < 40000;
+    const vis = mpTmp.z < 1 && Math.abs(mpTmp.x) < 1.1 && Math.abs(mpTmp.y) < 1.1 && dist < 40000 && P !== RADAR.lock; // the lock box carries the name instead
     P.tag.hidden = !vis;
     if (!vis) continue;
     P.tag.style.transform = `translate(${((mpTmp.x + 1) / 2 * innerWidth).toFixed(0)}px, ${((1 - mpTmp.y) / 2 * innerHeight).toFixed(0)}px) translate(-50%, -100%)`;
