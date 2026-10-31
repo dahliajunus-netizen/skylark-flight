@@ -4377,7 +4377,11 @@ function physics(dt) {
     // Rolling resistance stays small; tires brake from available grip, while the belly
     // uses the much stronger scrape friction above.
     const rollingDv = (g.paved ? 0.018 : 0.045) * G * dt;
-    const brakeDv = S.brake && !S.belly ? mu * normalG * G * dt : 0;
+    // Wheel brakes are deliberately weaker than tire grip. Heavy aircraft also have
+    // less effective braking in this simplified model, so transports and bombers need
+    // a much longer rollout than fighters.
+    const brakeMassFactor = clamp(Math.sqrt(20000 / MASS), 0.5, 1);
+    const brakeDv = S.brake && !S.belly ? mu * normalG * G * 0.65 * brakeMassFactor * dt : 0;
     const dv = rollingDv + brakeDv;
     along = Math.abs(along) <= dv ? 0 : along - Math.sign(along) * dv;
     v.x = fx * along + lx; v.z = fz * along + lz;
