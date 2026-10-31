@@ -1165,7 +1165,7 @@ const BASE_BOXES = [];
   dm.castShadow = dm.receiveShadow = true;
   scene.add(dm);
   // High-mast fixtures illuminate the two flight-line aprons without adding dozens of per-frame point lights.
-  const mastMetal = M('#555b5e', 0.68, 0.38);
+  const mastMetal = new THREE.MeshStandardMaterial({ color: '#555b5e', roughness: 0.68, metalness: 0.38 });
   const mastMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.2, 0.34, 1, 8), mastMetal, floodMasts.length);
   const mastArm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.22, 0.3), mastMetal, floodMasts.length);
   const mastLamp = new THREE.InstancedMesh(new THREE.BoxGeometry(1.4, 0.32, 0.9), new THREE.MeshBasicMaterial({ color: '#ffe5ad', toneMapped: false }), floodMasts.length * 2);
