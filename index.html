@@ -627,13 +627,14 @@ function updatePapi() {
     }
   }
 }
-const HORIZON = new THREE.Color('#eccca4');
-scene.fog = new THREE.Fog(HORIZON, 1800, 16000);
+const HORIZON = new THREE.Color('#bdcfd5');
+scene.fog = new THREE.Fog(HORIZON, 2600, 23000);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 120000); // far enough to see a 44 km mushroom cloud
 
-const SUN_DIR = new THREE.Vector3(0.62, 0.34, 0.71).normalize();
-scene.add(new THREE.HemisphereLight('#bcd2ff', '#6b5a3e', 0.6));
-const sun = new THREE.DirectionalLight('#ffe1bb', 1.1);
+// A low afternoon sun gives the ground long, warm light while the sky keeps its cool zenith.
+const SUN_DIR = new THREE.Vector3(0.62, 0.38, 0.71).normalize();
+scene.add(new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.78));
+const sun = new THREE.DirectionalLight('#ffe6c4', 1.25);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 3200 });
@@ -641,22 +642,32 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.04;
 scene.add(sun, sun.target);
 
-// sky dome
+// Layered sky colors and a broad solar halo suggest atmospheric scattering.
 const sky = new THREE.Mesh(
-  new THREE.SphereGeometry(20000, 32, 16),
+  new THREE.SphereGeometry(20000, 48, 24),
   new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
     uniforms: {
-      top: { value: new THREE.Color('#3b6db0') }, horizon: { value: HORIZON }, bottom: { value: new THREE.Color('#cdb894') },
-      sunDir: { value: SUN_DIR }, sunColor: { value: new THREE.Color('#fff1d6') }
+      top: { value: new THREE.Color('#3474b4') }, horizon: { value: new THREE.Color('#d9e3e2') },
+      bottom: { value: new THREE.Color('#aebcba') }, sunDir: { value: SUN_DIR },
+      sunColor: { value: new THREE.Color('#fff0d3') }
     },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `uniform vec3 top, horizon, bottom, sunDir, sunColor; varying vec3 vDir;
-      void main(){ vec3 d = normalize(vDir); float h = d.y;
-        vec3 c = h > 0.0 ? mix(horizon, top, pow(h, 0.5)) : mix(horizon, bottom, pow(-h, 0.4));
-        float s = max(dot(d, sunDir), 0.0);
-        c += sunColor * (pow(s, 900.0) * 1.6 + pow(s, 10.0) * 0.28);
-        gl_FragColor = vec4(c, 1.0); }`
+      void main(){
+        vec3 d = normalize(vDir);
+        float h = d.y;
+        float elevation = max(h, 0.0);
+        float horizonBand = 1.0 - smoothstep(0.0, 0.42, abs(h));
+        vec3 upper = mix(horizon, top, pow(smoothstep(0.0, 1.0, elevation), 0.58));
+        vec3 lower = mix(horizon, bottom, pow(max(-h, 0.0), 0.38));
+        vec3 c = h >= 0.0 ? upper : lower;
+        c = mix(c, horizon * vec3(1.04, 1.02, 0.98), horizonBand * 0.22);
+        float sunAmount = max(dot(d, sunDir), 0.0);
+        float halo = pow(sunAmount, 8.0) * 0.13 + pow(sunAmount, 32.0) * 0.28 + pow(sunAmount, 420.0) * 1.8;
+        c += sunColor * halo;
+        gl_FragColor = vec4(c, 1.0);
+      }`
   })
 );
 sky.renderOrder = -1;
@@ -751,18 +762,28 @@ scene.add(sky);
   scene.add(mesh);
 })();
 
-// clouds
+// Scattered cumulus: rounded lobes at varied heights and sizes, shaded by the sun.
 (function buildClouds() {
   const rnd = mulberry(99), PUFFS = [];
-  for (let i = 0; i < 520; i++) {
-    const cx = (rnd() - 0.5) * 18000 * MAP_K, cz = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ, cy = 700 + rnd() * 420;
-    const k = 4 + Math.floor(rnd() * 5);
-    for (let j = 0; j < k; j++) PUFFS.push([cx + (rnd() - 0.5) * 260, cy + (rnd() - 0.3) * 50, cz + (rnd() - 0.5) * 160, 45 + rnd() * 55]);
+  for (let i = 0; i < 560; i++) {
+    const cx = (rnd() - 0.5) * 18000 * MAP_K, cz = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ;
+    const base = 760 + rnd() * 680, k = 5 + Math.floor(rnd() * 6);
+    const spanX = 150 + rnd() * 180, spanZ = 100 + rnd() * 150;
+    for (let j = 0; j < k; j++) {
+      const size = 42 + rnd() * 56;
+      PUFFS.push([cx + (rnd() - 0.5) * spanX, base + (rnd() - 0.25) * 70, cz + (rnd() - 0.5) * spanZ, size]);
+    }
   }
-  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1),
-    new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#6f6a66', flatShading: true, roughness: 1, transparent: true, opacity: 0.93 }), PUFFS.length);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
-  PUFFS.forEach((pf, i) => { p.set(pf[0], pf[1], pf[2]); s.set(pf[3], pf[3] * 0.62, pf[3]); m.compose(p, q, s); mesh.setMatrixAt(i, m); });
+  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 7),
+    new THREE.MeshStandardMaterial({ color: '#f6f7f4', roughness: 1, transparent: true, opacity: 0.84, depthWrite: false }), PUFFS.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), tint = new THREE.Color();
+  PUFFS.forEach((pf, i) => {
+    p.set(pf[0], pf[1], pf[2]);
+    const size = pf[3], broadness = 0.85 + rnd() * 0.55;
+    s.set(size * broadness, size * (0.48 + rnd() * 0.28), size * (0.82 + rnd() * 0.4));
+    m.compose(p, q, s); mesh.setMatrixAt(i, m);
+    mesh.setColorAt(i, tint.setHSL(0.58, 0.07, 0.76 + rnd() * 0.18));
+  });
   scene.add(mesh);
 })();
 
