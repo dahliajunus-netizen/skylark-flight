@@ -3921,13 +3921,19 @@ function waterContact(point) {
   const impactDown = Math.max(0, -S.vel.y);
   const horizontalSpeed = Math.hypot(S.vel.x, S.vel.z);
   const att = attitude(), gearDown = S.gearT > 0.5;
-  const speedLimit = gearDown ? 65 : 112;
-  const controlled = impactDown <= 4.5 && horizontalSpeed <= speedLimit &&
-    Math.abs(att.roll) <= 0.42 && att.pitch >= -0.16 && att.pitch <= 0.36;
+  const ditchMass = A.mass + bombMass() + (S.nukes && parts.nuke ? parts.nuke.userData.nk.kg : 0);
+  const clMax = Math.max(0.4, A.CL0 + A.CLA * A.stallA);
+  const stallSpeed = Math.sqrt(2 * ditchMass * G / (RHO * A.wing * clMax));
+  const speedLimit = Math.min(220, stallSpeed * (gearDown ? 2.0 : 3.2));
+  const sinkLimit = Math.min(14, Math.max(5.5, horizontalSpeed * Math.sin(6 * Math.PI / 180)));
+  const controlled = impactDown <= sinkLimit && horizontalSpeed <= speedLimit &&
+    Math.abs(att.roll) <= 0.65 && att.pitch >= -0.25 && att.pitch <= 0.5;
   if (!controlled) {
+    const reason = impactDown > sinkLimit ? 'sink rate too high' : horizontalSpeed > speedLimit ? 'too fast' :
+      Math.abs(att.roll) > 0.65 ? 'wings too steeply banked' : 'nose attitude too steep';
     S.hitBuilding = -1;
     S.hitPoint.copy(point);
-    crash('The aircraft broke up on water impact.');
+    crash(`Water impact: ${reason}; the aircraft broke up.`);
     return;
   }
 
