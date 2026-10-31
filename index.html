@@ -1584,7 +1584,8 @@ const plane = new THREE.Group();
 const parts = { bombs: [], spoilers: [] };
 let bombTemplate = null;
 const M = (c, r = 0.6, m = 0.2) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
-const LANDING_GEAR_MAT = M('#111111', 0.72, 0.18);
+const LANDING_GEAR_LEG_MAT = M('#777d83', 0.68, 0.42);
+const LANDING_GEAR_TIRE_MAT = M('#111111', 0.9, 0.02);
 const add = (geo, mat, x, y, z, parent = plane) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
 const extrude = (pts, t) => { const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach(p => s.lineTo(p[0], p[1])); return new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false }); };
 // planform: points are (x, z) seen from above; slab of thickness t centred on y = 0
@@ -1999,7 +2000,13 @@ function setAircraft(id) {
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
-  if (parts.gear) parts.gear.traverse(o => { if (o.isMesh) o.material = LANDING_GEAR_MAT; });
+  if (parts.gear) parts.gear.traverse(o => {
+    if (!o.isMesh) return;
+    const nm = (o.name || '').toLowerCase();
+    const namedTire = /tire|tyre|rubber/.test(nm) || (/wheel/.test(nm) && !/rim|hub|brake|axle|strut|bogie/.test(nm));
+    const proceduralTire = !nm && o.geometry.type === 'CylinderGeometry';
+    o.material = namedTire || proceduralTire ? LANDING_GEAR_TIRE_MAT : LANDING_GEAR_LEG_MAT;
+  });
   rigGear();
   const core = parts.zones.find(z => z.kind === 'core');
   parts.bellyR = core ? -Math.min(...core.pts.map(p => p.y)) : GEAR * 0.45; // origin to the belly skin
