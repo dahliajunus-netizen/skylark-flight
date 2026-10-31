@@ -3945,10 +3945,19 @@ function physics(dt) {
     F.set(0, 0, -1).applyQuaternion(q);
     const fl = Math.hypot(F.x, F.z) || 1, fx = F.x / fl, fz = F.z / fl;
     let along = v.x * fx + v.z * fz;
-    const decay = Math.exp(-dt * 8);
-    const lx = (v.x - fx * along) * decay, lz = (v.z - fz * along) * decay;
-    // rolling: a little rolling drag, the brakes and rough ground; sliding on the belly: about half a g of scraping
-    const dv = (S.belly ? 4.5 + (g.paved ? 0 : 1.5) : 0.3 + (S.brake ? 6 : 0) + (g.paved ? 0 : 0.9)) * dt;
+    const sideX = v.x - fx * along, sideZ = v.z - fz * along;
+    const sideSpeed = Math.hypot(sideX, sideZ);
+    // Tire grip follows the load on the ground: aerodynamic lift unloads the wheels, while
+    // strut compression adds normal force. This keeps braking and crosswind recovery speed-dependent.
+    const normalG = clamp(1 - Math.max(0, S.g) + Math.max(0, k * comp - damp * v.y) / (MASS * G), 0, 4);
+    const mu = S.belly ? (g.paved ? 0.34 : 0.24) : (g.paved ? 0.78 : 0.48);
+    const gripDv = mu * normalG * G * dt;
+    const sideScale = sideSpeed > 1e-4 ? Math.max(0, sideSpeed - gripDv) / sideSpeed : 0;
+    const lx = sideX * sideScale, lz = sideZ * sideScale;
+    // Rolling resistance stays small; brakes and belly scraping use the available ground grip.
+    const rollingDv = (S.belly ? 0.035 * G : (g.paved ? 0.018 : 0.045) * G) * dt;
+    const brakeDv = S.brake && !S.belly ? mu * normalG * G * dt : 0;
+    const dv = rollingDv + brakeDv;
     along = Math.abs(along) <= dv ? 0 : along - Math.sign(along) * dv;
     v.x = fx * along + lx; v.z = fz * along + lz;
     if (S.belly && !S.bellyStopped && V < 1) { S.bellyStopped = true; toast('Stopped. You walked away from that one. Restart from the pause screen'); }
