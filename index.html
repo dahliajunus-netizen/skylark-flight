@@ -3831,7 +3831,7 @@ function physics(dt) {
     const ll = liftDir.length();
     if (ll > 1e-4) force.addScaledVector(liftDir, qS * CL / ll * (0.15 + 0.85 * (S.dmg.wingL + S.dmg.wingR) / 2)); // missing wing = missing lift
     const CD = A.cd0 + A.k * CL * CL + (Math.abs(alpha) > A.stallA ? 0.15 : 0) + A.wave[2] * smooth(A.wave[0], A.wave[1], mach) // transonic drag rise
-      + 0.015 * S.gearT + (S.brake ? 0.05 : 0) + (S.bombs * (A.bombCd || 0.0015) + S.nukes * 0.0015) + Math.abs(beta) * 0.2
+      + 0.015 * S.gearT + (S.brake ? 0.10 + 0.025 * smooth(0.75, 1.2, mach) : 0) + (S.bombs * (A.bombCd || 0.0015) + S.nukes * 0.0015) + Math.abs(beta) * 0.2
       + (post ? A.hiG.cd * Math.sin(alpha) ** 2 : 0); // post-stall: the whole airframe meets the air
     force.addScaledVector(vhat, -qS * CD);
     force.addScaledVector(R, -qS * 0.5 * Math.sin(beta));
