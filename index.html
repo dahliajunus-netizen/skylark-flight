@@ -3954,9 +3954,6 @@ function waterPhysics(dt) {
       S.vel.x * 0.12 + (Math.random() - 0.5) * 4, rr([1, 5]),
       S.vel.z * 0.12 + (Math.random() - 0.5) * 4, 0.45);
   }
-  for (let n = burst(5 + S.ditchFlood * 10, dt); n > 0; n--) {
-    emit('smoke', tA.set(S.pos.x, S.pos.y + A.scale, S.pos.z), S.vel.x * 0.05, 0.5, S.vel.z * 0.05, 0.25);
-  }
   if (S.ditchFlood >= 1 || S.pos.y < 0.3) {
     S.hitBuilding = -1; S.hitPoint.copy(S.pos);
     crash('The fuselage flooded and sank after ditching.');
