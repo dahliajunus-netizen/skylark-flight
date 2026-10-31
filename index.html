@@ -1644,14 +1644,24 @@ function addStores(bombs, scale, internalFrom) {
   else if (nukeKind()) addNuke(...A.rig.nuke);
   else addBombs(bombs, scale, internalFrom);
 }
-// The bomb kinds: mass, the name on the HUD, size against the Mk-82 model, and the blast (explosion size, radius, power).
-// An aircraft's bombs are A.bombKind unless a rig position names its own kind (the Su-30's mixed FAB load).
+// Explosive fill in TNT-equivalent kg, with gameplay building-damage power kept as a separate tuning value.
+// The Mk-82 anchor is 89 kg HE: published data gives 34 kPa (about 5 psi) at 31 m.
+// Other conventional bomb blast radii use cube-root yield scaling from that reference.
 const BOMB_KINDS = {
-  mk82: { kg: 230, name: 'MK-82', scale: 1, fx: [1.3, 45, 1300] },
-  heavy: { kg: 925, name: 'MK-84', scale: 1.6, fx: [2.2, 75, 2800] },
-  fab250: { kg: 250, name: 'FAB-250', scale: 1.1, fx: [1.35, 47, 1400] },
-  fab500: { kg: 500, name: 'FAB-500', scale: 1.35, fx: [1.8, 60, 2100] }
+  mk82: { kg: 230, name: 'MK-82', scale: 1, tntKg: 89, power: 1300 },
+  heavy: { kg: 925, name: 'MK-84', scale: 1.6, tntKg: 429, power: 2800 },
+  fab250: { kg: 250, name: 'FAB-250', scale: 1.1, tntKg: 100, power: 1400 },
+  fab500: { kg: 500, name: 'FAB-500', scale: 1.35, tntKg: 209, power: 2100 }
 };
+function bombBlastProfile(kind) {
+  const b = BOMB_KINDS[kind] || BOMB_KINDS.mk82;
+  const relativeYield = b.tntKg / BOMB_KINDS.mk82.tntKg;
+  return {
+    visual: 0.55 * Math.pow(relativeYield, 0.4),
+    radius: 31 * Math.cbrt(relativeYield),
+    power: b.power
+  };
+}
 const bombMass = () => parts.bombs.reduce((t, b) => t + (b.visible ? BOMB_KINDS[b.userData.kind].kg : 0), 0);
 // positions are listed in release order, alternating sides to keep the jet balanced
 function addBombs(positions, scale = 1, internalFrom = Infinity) {
@@ -3564,8 +3574,8 @@ function updateBombs(dt) {
       if (B.kind === 'nuke') { detonateNuke(p, hit === 'water', B.nk); continue; }
       if (B.kind === 'shell') { explode(p, 0.55, hit === 'water'); blast(p, hit === 'water' ? 8 : 14, 520); continue; } // 105 mm HE, ~2 kg of Comp B
       // Mk-82, Mk-84, FAB-250 or FAB-500 (BOMB_KINDS)
-      const [e, r, pw] = (BOMB_KINDS[B.kind] || BOMB_KINDS.mk82).fx;
-      explode(p, e, hit === 'water'); blast(p, hit === 'water' ? r * 0.55 : r, pw);
+      const fx = bombBlastProfile(B.kind);
+      explode(p, fx.visual, hit === 'water'); blast(p, hit === 'water' ? fx.radius * 0.55 : fx.radius, fx.power);
       lastImpact = { p, t: clockNow(), nuke: false };
       continue;
     }
