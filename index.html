@@ -546,6 +546,62 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
+
+// Four directional PAPI units at each runway end. Their individual beam cutoffs create
+// the standard 4-white / 3-white-1-red / 2-and-2 / 1-white-3-red / 4-red indications.
+const papiSystems = [];
+const papiWhite = new THREE.MeshBasicMaterial({ color: 0xfff8e8, toneMapped: false });
+const papiRed = new THREE.MeshBasicMaterial({ color: 0xff241f, toneMapped: false });
+const papiCase = new THREE.MeshStandardMaterial({ color: 0x292d31, roughness: 0.85 });
+const papiCutoffs = [2.65, 2.85, 3.15, 3.35];
+for (const rw of RUNWAYS) {
+  for (const end of [0, 1]) {
+    const hdg = (rw.hdg + end * 180) * Math.PI / 180;
+    const ux = Math.sin(hdg), uz = -Math.cos(hdg);
+    const rightX = Math.cos(hdg), rightZ = Math.sin(hdg);
+    const half = rw.len / 2;
+    const tx = rw.x - ux * half, tz = rw.z - uz * half;
+    const stationX = tx + ux * 250, stationZ = tz + uz * 250;
+    const side = rw.w / 2 + 15;
+    const centerX = stationX - rightX * side, centerZ = stationZ - rightZ * side;
+    const bar = new THREE.Group();
+    bar.position.set(centerX, ground(centerX, centerZ).h, centerZ);
+    bar.rotation.y = -hdg; // lens faces the approach side
+    scene.add(bar);
+    const lights = [];
+    for (let i = 0; i < 4; i++) {
+      const unit = new THREE.Group();
+      unit.position.set(-i * 9, 0, 0); // PAPI wing bar extends away from the runway
+      bar.add(unit);
+      const housing = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.0, 1.0), papiCase);
+      housing.position.y = 0.55;
+      unit.add(housing);
+      const lens = new THREE.Mesh(new THREE.PlaneGeometry(1.55, 0.62), papiWhite);
+      lens.position.set(0, 0.55, 0.506);
+      unit.add(lens);
+      lens.updateWorldMatrix(true, false);
+      lights.push({ mesh: lens, pos: lens.getWorldPosition(new THREE.Vector3()), cutoff: papiCutoffs[i] });
+    }
+    papiSystems.push({ ux, uz, rightX, rightZ, lights });
+  }
+}
+function updatePapi() {
+  const active = running && !S.crashed;
+  for (const sys of papiSystems) {
+    const dx = S.pos.x - sys.lights[0].pos.x, dz = S.pos.z - sys.lights[0].pos.z;
+    const along = dx * sys.ux + dz * sys.uz;
+    const lateral = dx * sys.rightX + dz * sys.rightZ;
+    const range = Math.hypot(dx, dz);
+    const inBeam = active && along < 0 && range < 15000 && Math.abs(lateral) <= range * 0.1763;
+    for (const light of sys.lights) {
+      light.mesh.visible = inBeam;
+      if (!inBeam) continue;
+      const horizontal = Math.hypot(S.pos.x - light.pos.x, S.pos.z - light.pos.z);
+      const elevation = Math.atan2(S.pos.y - light.pos.y, horizontal) * 180 / Math.PI;
+      light.mesh.material = elevation >= light.cutoff ? papiWhite : papiRed;
+    }
+  }
+}
 const HORIZON = new THREE.Color('#eccca4');
 scene.fog = new THREE.Fog(HORIZON, 1800, 16000);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 120000); // far enough to see a 44 km mushroom cloud
@@ -5785,6 +5841,7 @@ function frame(now) {
   glow.mat.uniforms.uScale.value = haze.mat.uniforms.uScale.value = pScale;
   updateVisuals(dt);
   updateCamera(dt, now);
+  updatePapi();
   const stall = running ? updateHUD() : false;
   updateAudio(stall);
   mpUpdate(dt);
