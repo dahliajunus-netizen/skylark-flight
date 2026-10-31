@@ -2048,13 +2048,18 @@ function rigGear() {
     }
     // Tilt the multi-wheel truck about its own center, independently of the leg strut.
     const truck = new THREE.Group(), truckBounds = new THREE.Box3().setFromObject(lower);
-    truck.position.copy(truckBounds.getCenter(new THREE.Vector3()));
+    const truckHome = truckBounds.getCenter(new THREE.Vector3()), truckCorners = [];
+    for (let mask = 0; mask < 8; mask++) truckCorners.push(new THREE.Vector3(
+      mask & 1 ? truckBounds.max.x : truckBounds.min.x,
+      mask & 2 ? truckBounds.max.y : truckBounds.min.y,
+      mask & 4 ? truckBounds.max.z : truckBounds.min.z));
+    truck.position.copy(truckHome);
     lower.position.sub(truck.position);
     truck.add(lower);
     pivot.add(upper, truck);
     // nose legs (and the F-15's mains, and a 747's body gear) fold forward; the others fold inward toward the centreline
     const fwd = key[0] === 'c' || A.mainRetract === 'fwd' || (A.bodyFwd && Math.abs((bb.min.x + bb.max.x) / 2) < A.bodyFwd);
-    const leg = { pivot, upper, lower, truck, nose: key === centre[0], len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key[0] === 'R' ? -1 : 1 };
+    const leg = { pivot, upper, lower, truck, truckHome, truckCorners, truckFootY: pivot.position.y + truckBounds.min.y, nose: key === centre[0], len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key[0] === 'R' ? -1 : 1 };
     parts.gearLegs.push(leg);
     const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
     const mains = Object.keys(legs).filter(k => k[0] === key[0] && k[1] !== 'o').sort();
@@ -2495,6 +2500,7 @@ const boomLight = new THREE.PointLight('#ff8a3c', 0, 900, 2);
 scene.add(boomLight);
 const W = { pieces: [], main: null, mode: '', site: new THREE.Vector3(), siteFire: 0, siteSmoke: 0, focus: new THREE.Vector3(), camOff: new THREE.Vector3(), camAng: 0, shake: 0 };
 const tA = new THREE.Vector3(), tC = new THREE.Vector3(), tR = new THREE.Vector3(), tV = new THREE.Vector3(), tQ = new THREE.Quaternion();
+const gearGroundPoint = new THREE.Vector3();
 const wallPt = new THREE.Vector3(), wallN = new THREE.Vector3();
 let crashTimer = 0;
 
@@ -4070,6 +4076,15 @@ function physics(dt) {
     if (!cobra && alpha > A.stallA * 0.97) tp = Math.min(tp, gCap * clamp((A.stallA - alpha) * 20 + 1, 0, 1)); // fast: hold the nose at the stall
     if (alpha > A.hiG.aoa) tp = Math.min(tp, 0);
   }
+  let groundPitchLimit = 0.045;
+  if (S.onGround) {
+    // Hold the nose on the runway until near a weight-based rotation speed, then limit rotation to a transport-like rate.
+    const clMax = Math.max(0.5, A.CL0 + A.CLA * A.stallA);
+    const rotateSpeed = 1.08 * Math.sqrt(2 * MASS * G / (rho * A.wing * clMax));
+    const rotateAuthority = smooth(rotateSpeed * 0.9, rotateSpeed * 1.02, V);
+    groundPitchLimit = 0.045 * rotateAuthority;
+    tp = clamp(tp, -0.05, groundPitchLimit);
+  }
   let ty = inp.yaw * A.rates[1] * eff * Dm.fin + beta * 2.0 * stab * (0.15 + 0.85 * Dm.fin);
   let tr = inp.roll * A.rates[2] * eff0 * (Dm.wingL + Dm.wingR) / 2; // roll comes from the wings, not the nozzles
   if (S.onGround) {
@@ -4084,6 +4099,7 @@ function physics(dt) {
   }
   const k = 1 - Math.exp(-dt * 6);
   S.ang.x += (tp - S.ang.x) * k; S.ang.y += (ty - S.ang.y) * k; S.ang.z += (tr - S.ang.z) * k;
+  if (S.onGround) S.ang.x = clamp(S.ang.x, -0.05, groundPitchLimit);
   q.multiply(dq.setFromAxisAngle(AX, S.ang.x * dt));
   q.multiply(dq.setFromAxisAngle(AY, -S.ang.y * dt));
   q.multiply(dq.setFromAxisAngle(AZ, -S.ang.z * dt));
@@ -4111,7 +4127,27 @@ function physics(dt) {
   S.hitCool = Math.max(0, (S.hitCool || 0) - dt);
   const gearOK = S.gearT >= 0.98 && !S.belly;
   // with the gear down the wheels touch first; gear in transit touches at the wheels and folds; gear up (or gone), the belly
-  const reach = gearOK ? GEAR + 0.4 * A.travel : !S.belly && S.gearT > 0.3 ? GEAR : parts.bellyR || GEAR * 0.45;
+  let reach = gearOK ? GEAR + 0.4 * A.travel : !S.belly && S.gearT > 0.3 ? GEAR : parts.bellyR || GEAR * 0.45;
+  if (!S.belly && S.gearT > 0.3 && parts.gearLegs.length) {
+    // Keep the actual lowest wheel on the surface as pitch and the truck-tilt animation move the gear below the fuselage.
+    const gearK = S.gearT * S.gearT * (3 - 2 * S.gearT), gearA = (1 - gearK) * Math.PI / 2;
+    const stroke = -0.4 * A.travel + (gearOK ? S.gearComp : 0);
+    let lowest = Infinity, reference = Infinity;
+    for (const L of parts.gearLegs) {
+      reference = Math.min(reference, L.truckFootY - 0.4 * A.travel);
+      const legAngle = L.axis === 'x' ? gearA : gearA * L.sign;
+      const legAxis = L.axis === 'x' ? AX : AZ;
+      const truckTilt = L.truck.rotation.x;
+      for (const corner of L.truckCorners) {
+        gearGroundPoint.subVectors(corner, L.truckHome);
+        gearGroundPoint.y += stroke;
+        gearGroundPoint.applyAxisAngle(AX, truckTilt).add(L.truckHome);
+        gearGroundPoint.applyAxisAngle(legAxis, legAngle).add(L.pivot.position).applyQuaternion(q);
+        lowest = Math.min(lowest, gearGroundPoint.y);
+      }
+    }
+    if (Number.isFinite(lowest) && Number.isFinite(reference)) reach += reference - lowest;
+  }
   const travel = gearOK || !S.belly ? A.travel : 0.12; // the belly barely gives
   const comp = g.h + reach - S.pos.y; // how far the struts are pushed in
   const springK = MASS * G / (0.4 * travel), damperC = 2 * 0.55 * Math.sqrt(springK * MASS);
@@ -4952,7 +4988,8 @@ function updateVisuals(dt) {
     L.pivot.rotation.set(L.axis === 'x' ? ga : 0, 0, L.axis === 'z' ? ga * L.sign : 0);
     const truckStow = A.gearTruckStowTilt || 0;
     const truckTilt = truckStow + ((A.gearTruckTilt || 0) - truckStow) * gk;
-    L.truck.rotation.x = !L.nose && !S.onGround ? truckTilt : 0;
+    const truckTarget = !L.nose && !S.onGround ? truckTilt : 0;
+    L.truck.rotation.x += (truckTarget - L.truck.rotation.x) * Math.min(1, dt * 8);
     L.pivot.visible = S.gearT > 0.01;
   }
   const abOn = running && !S.crashed && !!A.thrustAB && S.throttle > AB_AT;
