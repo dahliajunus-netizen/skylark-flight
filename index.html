@@ -1999,7 +1999,6 @@ function setAircraft(id) {
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
   rigGear();
-  buildGearDoors();
   const core = parts.zones.find(z => z.kind === 'core');
   parts.bellyR = core ? -Math.min(...core.pts.map(p => p.y)) : GEAR * 0.45; // origin to the belly skin
   updateAircraftUI();
@@ -2193,72 +2192,6 @@ function launchDebris(p) {
 // before the gear moves, stay open while it is down, and close once it has folded away.
 // The well is the footprint of the leg folded up, sized from the wheel; the doors sit on the underside skin
 // (found by casting a ray up into the airframe), or just under the stowed wheel if the skin is higher.
-const DOOR_OPEN = 1.45; // ~83° from flush
-function buildGearDoors() {
-  parts.gearDoors = [];
-  if (!parts.gearLegs.length) return;
-  const skins = [], skip = new Set([parts.gear, ...parts.bombs, parts.nuke].filter(Boolean));
-  plane.traverse(o => {
-    if (!o.isMesh) return;
-    for (let p = o; p && p !== plane; p = p.parent) if (skip.has(p)) return;
-    skins.push(o);
-  });
-  const named = skins.find(m => /fuselage/.test(nameOf(m))) || skins.find(m => !m.material.transparent) || skins[0];
-  const mat = named ? named.material : M('#8f99a4');
-  const group = new THREE.Group(); plane.add(group); parts.doorGroup = group;
-  plane.updateMatrixWorld(true);
-  const ray = new THREE.Raycaster(), o = new THREE.Vector3(), up = new THREE.Vector3(), hitL = new THREE.Vector3();
-  const skinAt = (x, z) => {
-    plane.localToWorld(o.set(x, -60, z));
-    plane.localToWorld(up.set(x, 0, z)).sub(o).normalize();
-    ray.set(o, up); ray.far = 80;
-    const h = ray.intersectObjects(skins, false)[0];
-    return h ? plane.worldToLocal(hitL.copy(h.point)).y : null;
-  };
-  const t = 0.035 * A.scale;
-  for (const L of parts.gearLegs) {
-    // the wheels (lower) in the airframe's frame, with the leg hanging down; wheels side by side across a
-    // forward-folding leg (the F-15's mains are rigged as one) each get their own well
-    L.pivot.updateMatrixWorld(true);
-    const wheels = [];
-    L.lower.traverse(m => {
-      if (!m.isMesh) return;
-      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
-      wheels.push(m.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(L.pivot.matrix, new THREE.Matrix4().multiplyMatrices(L.lower.matrix, m.matrix))));
-    });
-    const wells = [];
-    for (const b of wheels.sort((a, c) => a.min.x - c.min.x)) {
-      const last = wells[wells.length - 1];
-      if (last && (L.axis !== 'x' || b.min.x < last.max.x + 0.5 * A.scale)) last.union(b); else wells.push(b.clone());
-    }
-    for (const lb of wells) {
-      const p = L.pivot.position, r = (lb.max.y - lb.min.y) / 2, len = p.y - lb.min.y + 0.1 * A.scale, pad = 0.08 * A.scale;
-      // the stowed footprint: along the fold, from the hinge out past the folded wheel; across it, the wheel's width or length
-      let x0, x1, z0, z1;
-      if (L.axis === 'x') { x0 = lb.min.x - pad; x1 = lb.max.x + pad; z0 = p.z - len; z1 = p.z + pad; }
-      else { z0 = lb.min.z - pad; z1 = lb.max.z + pad; if (L.sign > 0) { x0 = p.x - pad; x1 = p.x + len; } else { x0 = p.x - len; x1 = p.x + pad; } }
-      const skin = skinAt((x0 + x1) / 2, (z0 + z1) / 2);
-      const y = Math.min(skin === null ? Infinity : skin, p.y - r) - t / 2 - 0.01;
-      const leg = { L, doors: [] };
-      // fold forward: the well runs fore-aft and the doors hinge on its left and right edges (about z);
-      // fold inward: the well runs across and the doors hinge on its front and back edges (about x)
-      const along = L.axis === 'x';
-      const w = along ? x1 - x0 : z1 - z0, lenW = along ? z1 - z0 : x1 - x0;
-      for (const side of [-1, 1]) {
-        const hinge = new THREE.Group();
-        const geo = along ? new THREE.BoxGeometry(w / 2, t, lenW) : new THREE.BoxGeometry(lenW, t, w / 2);
-        // geometry runs from the hinge toward the middle of the well
-        if (along) { geo.translate(-side * w / 4, 0, 0); hinge.position.set(side < 0 ? x0 : x1, y, (z0 + z1) / 2); }
-        else { geo.translate(0, 0, -side * w / 4); hinge.position.set((x0 + x1) / 2, y, side < 0 ? z0 : z1); }
-        const door = new THREE.Mesh(geo, mat); door.castShadow = true;
-        hinge.add(door); group.add(hinge);
-        leg.doors.push({ hinge, axis: along ? 'z' : 'x', sign: along ? side : -side });
-      }
-      parts.gearDoors.push(leg);
-    }
-  }
-}
-
 function ripZone(z, pl, pw) {
   pw = pw.clone();
   S.damaged = true;
@@ -2268,7 +2201,6 @@ function ripZone(z, pl, pw) {
   if (z.kind === 'gear') {
     spawnGroupDebris(z.leg.pivot, new THREE.Box3(new THREE.Vector3(-0.5, -z.leg.len - 0.8, -0.8), new THREE.Vector3(0.5, 0, 0.8)));
     parts.gearLegs = parts.gearLegs.filter(L => L !== z.leg);
-    for (const d of parts.gearDoors.filter(d => d.L === z.leg)) for (const { hinge } of d.doors) hinge.visible = false;
     z.alive = false;
     updateDamage();
     toast(z.label + ' torn off');
@@ -3843,7 +3775,7 @@ function bombCamTarget() {
 const S = {
   pos: new THREE.Vector3(), vel: new THREE.Vector3(), quat: new THREE.Quaternion(), ang: new THREE.Vector3(),
   throttle: 0, onGround: true, crashed: false, brake: false, alpha: 0, V: 0, time: 0, maxAlt: 0, maxSpd: 0, wingDrop: 1,
-  gearDown: true, gearT: 1, doorT: 1, gearComp: 0, noseDip: 0, damaged: false, stumps: [], dmg: { wingL: 1, wingR: 1, stab: 1, fin: 1, engL: 1, engR: 1, legsLost: 0 }, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
+  gearDown: true, gearT: 1, gearComp: 0, noseDip: 0, damaged: false, stumps: [], dmg: { wingL: 1, wingR: 1, stab: 1, fin: 1, engL: 1, engR: 1, legsLost: 0 }, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
   ammo: AMMO_MAX, bombs: BOMBS_MAX, nukes: NUKES_MAX, firing: false
 };
 const inp = { pitch: 0, roll: 0, yaw: 0 };
@@ -3899,7 +3831,7 @@ function reset(mode) {
     S.quat.identity();
     S.throttle = 0;
     S.onGround = true;
-    S.gearDown = true; S.gearT = 1; S.doorT = 1;
+    S.gearDown = true; S.gearT = 1;
   } else if (mode === 'approach') {
     const R = RUNWAYS[0], hdg = R.hdg * Math.PI / 180;
     const ux = Math.sin(hdg), uz = -Math.cos(hdg), half = R.len / 2;
@@ -3920,7 +3852,7 @@ function reset(mode) {
     S.vel.set(F.x * Math.cos(glide) * speed, -Math.sin(glide) * speed, F.z * Math.cos(glide) * speed);
     S.throttle = clamp(thrustNeeded / A.thrust * (A.thrustAB ? AB_AT : 1), 0.05, A.thrustAB ? AB_AT : 0.95);
     S.onGround = false;
-    S.gearDown = true; S.gearT = 1; S.doorT = 1;
+    S.gearDown = true; S.gearT = 1;
   } else {
     const sp = airSpawn(); // somewhere new over the main island each time
     S.pos.set(sp.x, sp.y, sp.z);
@@ -3929,7 +3861,7 @@ function reset(mode) {
     S.vel.copy(F).multiplyScalar(A.airStart[0]);
     S.throttle = A.airStart[1];
     S.onGround = false;
-    S.gearDown = false; S.gearT = 0; S.doorT = 0;
+    S.gearDown = false; S.gearT = 0;
   }
   plane.visible = true;
   clearTimeout(crashTimer);
@@ -4029,7 +3961,7 @@ function waterContact(point) {
     0.025 * clamp((impactDown - 1) / 4, 0, 1) + (gearDown ? 0.018 : 0);
   S.hitBuilding = -1; S.hull = Math.max(0.25, S.hull - 0.12);
   S.onGround = false; S.throttle = 0; S.firing = false; S.brake = false;
-  S.gearDown = false; S.gearT = 0; S.doorT = 1;
+  S.gearDown = false; S.gearT = 0;
   S.pos.y = Math.max(1.2, A.gear * 0.68);
   S.vel.y = Math.min(0, S.vel.y * 0.18);
   const splashCount = Math.min(180, 50 + Math.round(horizontalSpeed * 1.1));
@@ -4760,7 +4692,7 @@ function updateHUD() {
   if (ccip) placeReticle(el.ccip, ccip); else el.ccip.hidden = true;
   const ccipN = live && S.nukes > 0 && !S.onGround ? ccipPoint(tmp) : null;
   if (ccipN) placeReticle(el.ccipN, ccipN); else el.ccipN.hidden = true;
-  const moving = S.gearDown ? S.gearT < 1 : S.gearT > 0 || S.doorT > 0; // doors count as part of the cycle
+  const moving = S.gearDown ? S.gearT < 1 : S.gearT > 0;
   setText(el.gear, moving ? (S.gearDown ? 'GEAR ▼' : 'GEAR ▲') : S.gearT >= 1 ? 'GEAR DN' : 'GEAR UP');
   el.gear.classList.toggle('cy', S.gearT >= 1);
   el.gear.classList.toggle('on', moving);
@@ -5004,14 +4936,8 @@ function updateVisuals(dt) {
   }
   for (const sp of parts.spoilers) sp.rotation.x += ((S.brake && running ? -0.75 : 0) - sp.rotation.x) * Math.min(1, dt * 4);
   if (running && !S.crashed && !paused) {
-    // the doors open first; the gear only moves once they are fully open, and they close after it is up
-    const doorTime = clamp(A.gearTime * 0.2, 0.8, 2);
-    const moving = S.gearDown ? S.gearT < 1 : S.gearT > 0;
-    S.doorT = clamp(S.doorT + (moving || S.gearDown ? 1 : -1) * dt / doorTime, 0, 1);
-    if (S.doorT >= 1 || !parts.gearDoors.length) S.gearT = clamp(S.gearT + (S.gearDown ? 1 : -1) * dt / A.gearTime, 0, 1);
+    S.gearT = clamp(S.gearT + (S.gearDown ? 1 : -1) * dt / A.gearTime, 0, 1);
   }
-  const dk = S.doorT * S.doorT * (3 - 2 * S.doorT);
-  for (const d of parts.gearDoors) for (const D of d.doors) D.hinge.rotation[D.axis] = D.sign * dk * DOOR_OPEN;
   const gk = S.gearT * S.gearT * (3 - 2 * S.gearT), ga = (1 - gk) * Math.PI / 2;
   S.noseDip += ((S.onGround && S.brake && S.V > 1 ? 0.35 * A.travel : 0) - S.noseDip) * Math.min(1, dt * 4);
   for (const L of parts.gearLegs) {
@@ -6099,7 +6025,7 @@ function boot(data) {
     if (sim.ac) setAircraft(sim.ac);
     start(sim.lastMode || 'runway');
     S.pos.fromArray(sim.pos); S.vel.fromArray(sim.vel); S.quat.fromArray(sim.quat);
-    S.throttle = sim.throttle; S.onGround = sim.onGround; S.time = sim.time || 0; S.gearDown = sim.gearDown !== false; S.gearT = S.doorT = S.gearDown ? 1 : 0;
+    S.throttle = sim.throttle; S.onGround = sim.onGround; S.time = sim.time || 0; S.gearDown = sim.gearDown !== false; S.gearT = S.gearDown ? 1 : 0;
     if (sim.nukes === 0 && parts.nuke) { S.nukes = 0; parts.nuke.visible = false; }
     camMode = sim.camMode || 'chase'; camSnap = true; setThrottleUI();
   }
