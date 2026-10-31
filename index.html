@@ -865,6 +865,9 @@ const BASE_BOXES = [];
     const c = -6200 + 200 * k;
     box(c - 48, -645, c + 48, -569, 20, HANGAR);
     deco.push([c, Y + 8, -645.4, 84, 16, 0.6, DOOR]);
+    for (let rib = -36; rib <= 36; rib += 12) deco.push([c + rib, Y + 8, -645.78, 0.22, 15, 0.18, '#737a7e']);
+    deco.push([c, Y + 17.4, -645.78, 82, 0.8, 0.18, '#b8bec1']);
+    for (const dx of [-25, 25]) deco.push([c + dx, Y + 20.8, -607, 10, 1.2, 8, '#747b7e']); // roof HVAC units
   }
   for (let k = 0; k < 9; k++) {
     const c = -6200 + 400 * k;
@@ -876,6 +879,9 @@ const BASE_BOXES = [];
   for (const c of [-6150, -5500, -4850, -4200, -3550, -2900]) {
     box(c - 75, 285, c + 75, 390, 34, HEAVY);              // heavy maintenance hangars, doors on the heavy apron
     deco.push([c, Y + 14, 390.4, 132, 28, 0.6, DOOR]);
+    for (let rib = -58; rib <= 58; rib += 14) deco.push([c + rib, Y + 14, 390.78, 0.24, 26, 0.18, '#72797c']);
+    deco.push([c, Y + 29.4, 390.78, 128, 0.9, 0.18, '#b8bec1']);
+    for (const dx of [-42, 42]) deco.push([c + dx, Y + 35.5, 337, 14, 1.4, 10, '#747b7e']); // roof ventilation plant
   }
   box(-2650, -420, -2350, -260, 16, HQ);                   // wing headquarters
   box(-2250, -440, -1980, -300, 12, OPS);                  // operations group
@@ -913,6 +919,12 @@ const BASE_BOXES = [];
   for (const x of [1150, 1270, 1390]) for (const z of [-560, -440]) tanks.push([x, z, 22, 16]);
   pave('pad', 1110, -500, 1430, -500, 200);
 
+  // High-mast apron floodlights at the main, heavy and east aprons.
+  const floodMasts = [
+    [-6000, -920, 28], [-4800, -920, 28], [-3600, -920, 28],
+    [-5900, 720, 34], [-4500, 720, 34], [-3100, 720, 34],
+    [1750, -510, 24], [2600, -510, 24], [3450, -510, 24]
+  ];
   // ---- roads, parking and the perimeter ----
   const road = (x1, z1, x2, z2, w = 12) => pave('road', x1, z1, x2, z2, w);
   road(-10000, -120, -900, -120, 14);                         // the main road through the base
@@ -999,6 +1011,28 @@ const BASE_BOXES = [];
   line(paint, -6400, 980, -2600, 980, 0.6, ay, YELLOW);
   for (let x = -6200; x <= -2800; x += 300) { line(paint, x, 980, x, 480, 0.4, ay, YELLOW); line(paint, x - 6, 480, x + 6, 480, 0.8, ay, YELLOW); }
 
+  // Painted stand envelopes, lead-in/stop positions and concrete expansion joints.
+  const standWhite = '#c9ccca', joint = '#777a7c';
+  for (let x = -6300; x <= -2700; x += 280) {
+    line(paint, x - 48, -1090, x - 48, -820, 0.7, ay, standWhite);
+    line(paint, x + 48, -1090, x + 48, -820, 0.7, ay, standWhite);
+    line(paint, x - 48, -1090, x + 48, -1090, 0.7, ay, standWhite);
+    line(paint, x - 48, -820, x + 48, -820, 0.7, ay, standWhite);
+    line(paint, x - 30, -815, x + 30, -815, 1.0, ay + 0.01, YELLOW);
+  }
+  for (let x = -6200; x <= -2800; x += 300) {
+    line(paint, x - 78, 520, x - 78, 920, 0.8, ay, standWhite);
+    line(paint, x + 78, 520, x + 78, 920, 0.8, ay, standWhite);
+    line(paint, x - 78, 520, x + 78, 520, 0.8, ay, standWhite);
+    line(paint, x - 78, 920, x + 78, 920, 0.8, ay, standWhite);
+    line(paint, x - 48, 470, x + 48, 470, 1.1, ay + 0.01, YELLOW);
+  }
+  // Large concrete panels and asphalt repair seams break up the apron surfaces.
+  for (let x = -6380; x <= -2620; x += 40) line(paint, x, -1220, x, -665, 0.12, ay - 0.006, joint);
+  for (let z = -1210; z <= -670; z += 40) line(paint, -6380, z, -2620, z, 0.12, ay - 0.006, joint);
+  for (let x = -6380; x <= -2620; x += 50) line(paint, x, 410, x, 1025, 0.12, ay - 0.006, joint);
+  for (let z = 420; z <= 1020; z += 50) line(paint, -6380, z, -2620, z, 0.12, ay - 0.006, joint);
+
   // runways: shoulders, edge and centre lines, threshold bars, aiming points, touchdown zones, the numbers
   const NAMES = RUNWAYS.flatMap(R => R.names), cv = document.createElement('canvas');
   cv.width = 1280; cv.height = 512;
@@ -1045,13 +1079,43 @@ const BASE_BOXES = [];
         }
       }
     }
-    for (let t = -hl; t <= hl + 0.1; t += 60) for (const sd of [-1, 1]) { const [x, z] = at(R, t, sd * (w / 2 + 2)); lights.push([x, z, '#ffe7a8']); }
+    // Edge lights are white, changing to amber for the final 600 m at either end.
+    for (let t = -hl + 20; t <= hl - 20; t += 60) for (const sd of [-1, 1]) {
+      const [x, z] = at(R, t, sd * (w / 2 + 2));
+      lights.push([x, z, hl - Math.abs(t) < 600 ? '#ffbd55' : '#ffe7c2']);
+    }
+    // Inset centreline lights: white, alternating red/white in the caution zone and red at each end.
+    for (let t = -hl + 15; t <= hl - 15; t += 30) {
+      const [x, z] = at(R, t, 0), toEnd = hl - Math.abs(t);
+      const col = toEnd < 300 ? '#ff3030' : toEnd < 900 && Math.floor(toEnd / 30) % 2 ? '#ff3030' : '#fff0d7';
+      lights.push([x, z, col]);
+    }
+    // Yellow chevrons mark the non-load-bearing blast pads beyond each threshold.
+    for (const e of [-1, 1]) for (const d of [12, 29, 46]) {
+      const [x1, z1] = at(R, e * (hl + d), -w * 0.36);
+      const [xm, zm] = at(R, e * (hl + d + 12), 0);
+      const [x2, z2] = at(R, e * (hl + d), w * 0.36);
+      line(paint, x1, z1, xm, zm, 1.2, y, YELLOW);
+      line(paint, xm, zm, x2, z2, 1.2, y, YELLOW);
+    }
+    // Red runway-end lights sit just inboard of the green threshold lights.
+    for (const e of [-1, 1]) for (let sd = -w / 2; sd <= w / 2 + 0.1; sd += 9) {
+      const [x, z] = at(R, e * (hl - 2), sd);
+      lights.push([x, z, '#ff3434']);
+    }
   });
   // blue taxiway edge lights, kept off the runways and their shoulders
   const offRunway = (x, z) => RUNWAYS.every(R => { const r = R.rect, dx = x - r.cx, dz = z - r.cz; return Math.abs(dx * r.ux + dz * r.uz) > r.hl + 60 || Math.abs(dz * r.ux - dx * r.uz) > r.hw + 12; });
   for (const r of PAVE) if (r.kind === 'taxi' && r.hl > 60) for (let t = -r.hl + 20; t <= r.hl - 20; t += 60) for (const sd of [-1, 1]) {
     const x = r.cx + r.ux * t - r.uz * sd * (r.hw + 1), z = r.cz + r.uz * t + r.ux * sd * (r.hw + 1);
     if (offRunway(x, z)) lights.push([x, z, '#3a78ff']);
+  }
+  // Green inset taxiway centreline lights guide aircraft through the taxi network.
+  for (const r of PAVE) if (r.kind === 'taxi' && r.hl > 45) {
+    for (let t = -r.hl + 18; t <= r.hl - 18; t += 60) {
+      const x = r.cx + r.ux * t, z = r.cz + r.uz * t;
+      if (offRunway(x, z)) lights.push([x, z, '#43dc72']);
+    }
   }
 
   const toGeo = g => {
@@ -1075,8 +1139,8 @@ const BASE_BOXES = [];
 
   // ---- instanced pieces: lights, decorations, fuel tanks, fence ----
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
-  const lm = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 0.5, 0.6), new THREE.MeshBasicMaterial({ color: '#ffffff' }), lights.length);
-  lights.forEach(([x, z, col], i) => { lm.setMatrixAt(i, m.makeTranslation(x, Y + 0.3, z)); lm.setColorAt(i, c.set(col)); });
+  const lm = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.14, 0.3), new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), lights.length);
+  lights.forEach(([x, z, col], i) => { lm.setMatrixAt(i, m.makeTranslation(x, Y + 0.08, z)); lm.setColorAt(i, c.set(col)); });
   scene.add(lm);
   // Yellow tapered supports rise toward the outer approach and carry bright white lamp heads.
   const yellow = new THREE.MeshStandardMaterial({ color: '#d9ad2b', roughness: 0.72, metalness: 0.12 });
@@ -1100,6 +1164,17 @@ const BASE_BOXES = [];
   deco.forEach(([x, y, z, sx, sy, sz, col], i) => { dm.setMatrixAt(i, m.compose(p.set(x, y, z), q.identity(), sc.set(sx, sy, sz))); dm.setColorAt(i, c.set(col)); });
   dm.castShadow = dm.receiveShadow = true;
   scene.add(dm);
+  // High-mast fixtures illuminate the two flight-line aprons without adding dozens of per-frame point lights.
+  const mastMetal = M('#555b5e', 0.68, 0.38);
+  const mastMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.2, 0.34, 1, 8), mastMetal, floodMasts.length);
+  const mastArm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.22, 0.3), mastMetal, floodMasts.length);
+  const mastLamp = new THREE.InstancedMesh(new THREE.BoxGeometry(1.4, 0.32, 0.9), new THREE.MeshBasicMaterial({ color: '#ffe5ad', toneMapped: false }), floodMasts.length * 2);
+  floodMasts.forEach(([x, z, h], i) => {
+    mastMesh.setMatrixAt(i, m.compose(p.set(x, Y + h / 2, z), q.identity(), sc.set(1, h, 1)));
+    mastArm.setMatrixAt(i, m.compose(p.set(x, Y + h, z), q.identity(), sc.set(16, 1, 1)));
+    for (const side of [-1, 1]) mastLamp.setMatrixAt(i * 2 + (side > 0 ? 1 : 0), m.makeScale(1, 1, 1).setPosition(x + side * 5.5, Y + h - 0.45, z));
+  });
+  scene.add(mastMesh, mastArm, mastLamp);
   const tg = new THREE.CylinderGeometry(1, 1, 1, 24);
   tg.translate(0, 0.5, 0);
   const tm = new THREE.InstancedMesh(tg, new THREE.MeshStandardMaterial({ color: '#d7d6cf', roughness: 0.5, metalness: 0.2 }), tanks.length);
