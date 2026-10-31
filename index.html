@@ -5546,7 +5546,7 @@ function endMissile(i) {
 }
 // ---- countermeasures: flares and chaff ----
 // Every aircraft but the airliners carries countermeasure salvos (CM_LOAD; these counts are simulation settings).
-// K releases one salvo: two flares (heat decoys) and two chaff bundles (radar decoys) together, at most one salvo
+// K releases a combined salvo (usually two flares and two chaff bundles; the AC-130 uses its five-decoy Angle of Death pattern), at most one salvo
 // every CM_GAP seconds; the stock refills with a new flight. Each release goes to every other player, whose pages
 // draw the decoys and, if one of their own missiles is chasing this aircraft, decide whether it takes the bait:
 // heat-seekers can only be fooled by flares, the radar-guided AIM-120 only by chaff, a decoy only works while it is
@@ -5570,12 +5570,13 @@ function releaseCM() {
   axes(S.quat);
   const out = [], p = new THREE.Vector3().copy(S.pos).addScaledVector(F, -6 * A.scale).addScaledVector(U, -1);
   if (A.id === 'ac130') {
-    // Angle of Death: one flare fans out on each side, with two chaff bundles dropping below.
+    // Angle of Death: one flare on each side, two more below, and one chaff bundle underneath.
     const pattern = [
       ['f', -4, -0.5, -8, -20, -8],
       ['f', 4, -0.5, -8, 20, -8],
-      ['c', -1.2, -2.5, -4, -4, -14],
-      ['c', 1.2, -2.5, -4, 4, -14]
+      ['f', -1.2, -2.5, -4, -4, -14],
+      ['f', 1.2, -2.5, -4, 4, -14],
+      ['c', 0, -4, -4, 0, -10]
     ];
     for (const [kind, lateralPos, verticalPos, forward, lateralVel, verticalVel] of pattern) {
       const origin = p.clone().addScaledVector(R, lateralPos).addScaledVector(U, verticalPos);
