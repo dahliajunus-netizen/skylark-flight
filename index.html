@@ -3671,14 +3671,14 @@ function updateWeapons(dt) {
 const NUKE = { list: [], SHOCK_V: 420, PUFFS: 170 };
 const nukeLight = new THREE.PointLight('#ffd9a0', 0, 40000, 1);
 scene.add(nukeLight);
-const PUFF_GEO = new THREE.IcosahedronGeometry(1, 1);
+const PUFF_GEO = new THREE.SphereGeometry(1, 10, 8);
 const flashEl = document.getElementById('flash');
 const cT = new THREE.Color(), nM = new THREE.Matrix4(), nQ = new THREE.Quaternion(), nP = new THREE.Vector3(), nS = new THREE.Vector3();
 
 function detonateNuke(p, wet, nk = NUKE_KINDS.b61, remote = false) {
   if (!remote) mpFx({ k: 'n', p: mpV(p), w: wet ? 1 : 0, id: nukeId(nk) });
   const gy = Math.max(0, heightAt(p.x, p.z)), sz = nukeScale(nk.kt);
-  const fx = { p: p.clone(), gy, ...sz, life: Math.max(110, 5 * sz.rise), t: 0, idx: 0, near: [], hitPlane: false, camHit: false };
+  const fx = { p: p.clone(), gy, ...sz, cloudDelay: Math.max(1.2, 0.8 + 1.1 * sz.tf), life: Math.max(110, 5 * sz.rise), t: 0, idx: 0, near: [], hitPlane: false, camHit: false };
   // buildings in reach, nearest first, so the blast wave can knock them down in order
   for (let i = 0; i < NB; i++) {
     if (bState[i] !== 0) continue;
@@ -3689,13 +3689,13 @@ function detonateNuke(p, wet, nk = NUKE_KINDS.b61, remote = false) {
   fx.ball = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), new THREE.MeshBasicMaterial({ color: '#fff7dc', transparent: true, fog: false }));
   fx.ball.position.copy(p);
   scene.add(fx.ball);
-  fx.cloud = new THREE.InstancedMesh(PUFF_GEO, new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ff7a2a', emissiveIntensity: 1.6, roughness: 1, flatShading: true, transparent: true, fog: false }), NUKE.PUFFS);
+  fx.cloud = new THREE.InstancedMesh(PUFF_GEO, new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#8f5738', emissiveIntensity: 0.5, roughness: 1, transparent: true, fog: false }), NUKE.PUFFS);
   fx.cloud.frustumCulled = false;
   fx.seed = [];
   const col = new THREE.Color();
   for (let i = 0; i < NUKE.PUFFS; i++) {
     fx.seed.push([Math.random(), Math.random(), Math.random()]);
-    fx.cloud.setColorAt(i, col.set(i < 90 ? '#eee5da' : i < 130 ? '#d8cdc1' : wet ? '#e8eef0' : '#c4b6a0'));
+    fx.cloud.setColorAt(i, col.set(i < 104 ? (wet ? '#e3ebed' : '#ddd6ce') : i < 146 ? (wet ? '#cbd6d9' : '#96897b') : (wet ? '#e8eef0' : '#b9a58f')));
   }
   scene.add(fx.cloud);
   fx.ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 128), new THREE.MeshBasicMaterial({ color: '#fffaf0', transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
@@ -3707,7 +3707,7 @@ function detonateNuke(p, wet, nk = NUKE_KINDS.b61, remote = false) {
   nukeLight.intensity = 20 + 10 * Math.log10(1 + nk.kt);
   const dist = camera.position.distanceTo(p);
   flashEl.style.transition = 'none';
-  flashEl.style.opacity = String(clamp(1.2 - dist / (11 * fx.killR), 0.25, 1));
+  flashEl.style.opacity = String(Math.pow(clamp(1.15 - dist / (6 * fx.killR), 0, 1), 1.35));
   void flashEl.offsetWidth;
   flashEl.style.transition = 'opacity 2.6s ease-out';
   flashEl.style.opacity = '0';
@@ -3720,31 +3720,55 @@ function updateNukes(dt) {
   const m = nM, q = nQ, pos = nP, scl = nS;
   for (let n = NUKE.list.length - 1; n >= 0; n--) {
     const fx = NUKE.list[n], p = fx.p, t = (fx.t += dt), gy = fx.gy, tf = fx.tf;
-    // fireball: swells, rises, cools from white through orange to dull red, then fades into the cloud
-    const capY = gy + fx.fireR + (fx.H - fx.fireR) * (1 - Math.exp(-t / fx.rise));
-    const r = fx.fireR * (1 - Math.exp(-t * 1.4 / tf));
-    fx.ball.scale.setScalar(r);
-    fx.ball.position.set(p.x, Math.max(gy + r * 0.7, Math.min(capY - r * 0.3, gy + fx.fireR * 4)), p.z);
-    const c = fx.ball.material.color;
-    if (t < 1.5 * tf) c.set('#fff7dc').lerp(cT.setRGB(1, 0.55, 0.15), t / (1.5 * tf)); else c.setRGB(1, 0.55, 0.15).lerp(cT.setRGB(0.45, 0.08, 0.03), Math.min(1, (t - 1.5 * tf) / (5 * tf)));
-    fx.ball.material.opacity = clamp(1 - (t - 5 * tf) / (7 * tf), 0, 1);
-    fx.ball.visible = t < 12 * tf;
-    // mushroom cloud: cap ring, crown, stem and the dust skirt at the base
-    const Rc = fx.fireR + (fx.capR - fx.fireR) * (1 - Math.exp(-t / (1.3 * fx.rise)));
+    // The fireball flashes, expands, lifts, then cools into the rising debris cloud.
+    const expansion = 1 - Math.exp(-2.1 * t / tf);
+    const cooling = clamp((t - 1.8 * tf) / (2.6 * tf), 0, 1);
+    const r = fx.fireR * expansion * (1 - 0.2 * cooling);
+    fx.ball.scale.set(r, r * 0.78, r);
+    const fireLift = fx.fireR * 3.2 * (1 - Math.exp(-t / (2.2 * tf)));
+    fx.ball.position.set(p.x, gy + Math.max(r * 0.65, Math.min(fx.fireR * 3.2, fireLift)), p.z);
+    const hot = clamp(1 - t / (2.5 * tf), 0, 1);
+    fx.ball.material.color.setRGB(1, 0.24 + 0.68 * hot, 0.04 + 0.74 * hot);
+    fx.ball.material.opacity = clamp(1 - t / (5 * tf), 0, 1);
+    fx.ball.visible = t < 5 * tf;
+    // The cloud forms after the fireball, with a rolling cap, narrow stem and surface dust skirt.
+    const cloudAge = Math.max(0, t - fx.cloudDelay);
+    const cloudProgress = 1 - Math.exp(-cloudAge / fx.rise);
+    const capY = gy + fx.fireR + (fx.H - fx.fireR) * cloudProgress;
+    const Rc = fx.fireR * 0.2 + (fx.capR - fx.fireR * 0.2) * cloudProgress;
+    const skirt = 0.8 * fx.killR * (1 - Math.exp(-cloudAge / (0.8 * fx.rise)));
     const mat = fx.cloud.material;
-    mat.emissiveIntensity = Math.max(0, 1.6 - t * 0.09 / tf);
-    mat.opacity = t > fx.life - 30 ? clamp(1 - (t - fx.life + 30) / 25, 0, 1) : Math.min(1, t / 1.2);
-    const grow = Math.min(1, t / (0.75 * fx.rise)), skirt = 0.8 * fx.killR * (1 - Math.exp(-t / (0.8 * fx.rise)));
+    const fade = t > fx.life - 30 ? clamp((fx.life - t) / 30, 0, 1) : 1;
+    mat.opacity = clamp(cloudAge / 1.2, 0, 1) * fade;
+    mat.emissiveIntensity = 0.08 + 0.48 * (1 - cloudProgress) * (1 - cooling);
     for (let i = 0; i < NUKE.PUFFS; i++) {
       const [a, b, s] = fx.seed[i];
       let ang, rad, y, size;
-      if (i < 60) { ang = Math.PI * 2 * i / 60 + a * 0.2; rad = Rc * (0.5 + b * 0.25); y = capY + (s - 0.5) * Rc * 0.35; size = Rc * (0.3 + s * 0.18); }
-      else if (i < 90) { ang = a * Math.PI * 2; rad = Rc * 0.45 * Math.sqrt(b); y = capY + Rc * (0.22 + s * 0.15); size = Rc * (0.28 + s * 0.15); }
-      else if (i < 130) { const f = (i - 90) / 40; ang = a * Math.PI * 2; rad = Rc * 0.1 * b; y = gy + f * (capY - gy); size = Rc * (0.13 + 0.07 * s + 0.12 * (1 - f)) * grow; }
-      else { ang = Math.PI * 2 * (i - 130) / 40 + a * 0.15; rad = skirt * (0.85 + b * 0.15); y = gy + fx.fireR * (0.4 + s); size = (fx.fireR * (0.8 + s * 0.6) + skirt * 0.08) * clamp(1.4 - t / (fx.life * 0.55), 0.2, 1); }
+      if (i < 72) {
+        ang = Math.PI * 2 * i / 72 + (a - 0.5) * 0.35 + t * (0.14 + b * 0.12);
+        rad = Rc * (0.72 + 0.16 * (b - 0.5));
+        y = capY + (s - 0.5) * Rc * 0.28;
+        size = Rc * (0.11 + s * 0.075);
+      } else if (i < 104) {
+        ang = a * Math.PI * 2 + t * 0.08;
+        rad = Rc * 0.42 * Math.sqrt(b);
+        y = capY + Rc * (0.02 + s * 0.18);
+        size = Rc * (0.14 + s * 0.1);
+      } else if (i < 146) {
+        const f = (i - 104) / 42;
+        ang = a * Math.PI * 2 + t * 0.1 + Math.sin(t * 0.18 + f * 3) * 0.16;
+        rad = Rc * (0.08 + 0.11 * f) * Math.sqrt(b);
+        y = gy + f * (capY - gy);
+        size = Rc * (0.07 + 0.045 * s) * (0.45 + 0.55 * f);
+      } else {
+        ang = Math.PI * 2 * (i - 146) / 24 + a * 0.5 + t * 0.035;
+        rad = skirt * (0.86 + b * 0.14);
+        y = gy + fx.fireR * (0.2 + s * 0.28);
+        size = (fx.fireR * (0.28 + s * 0.18) + skirt * 0.025) * clamp(1.4 - t / (fx.life * 0.55), 0.2, 1);
+      }
       pos.set(p.x + Math.cos(ang) * rad, y, p.z + Math.sin(ang) * rad);
       q.setFromAxisAngle(AY, a * 6);
-      fx.cloud.setMatrixAt(i, m.compose(pos, q, scl.set(size, size * 0.8, size)));
+      fx.cloud.setMatrixAt(i, m.compose(pos, q, scl.set(size, size * 0.82, size)));
     }
     fx.cloud.instanceMatrix.needsUpdate = true;
     // blast wave across the ground
