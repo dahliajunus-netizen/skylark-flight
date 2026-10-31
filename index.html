@@ -5551,7 +5551,8 @@ function endMissile(i) {
 // draw the decoys and, if one of their own missiles is chasing this aircraft, decide whether it takes the bait:
 // heat-seekers can only be fooled by flares, the radar-guided AIM-120 only by chaff, a decoy only works while it is
 // fresh, and the odds depend on decoyChance below. A missile chasing someone else ignores these decoys.
-const CM_LOAD = { f15: 30, typhoon: 30, su30: 32, a10: 30, b52: 45, ac130: 60 };
+// Counts are combined release salvos (2 flares + 2 chaff bundles each), scaled to aircraft capacity.
+const CM_LOAD = { f15: 90, typhoon: 96, su30: 96, a10: 120, b52: 180, ac130: 120 };
 const CM_GAP = 0.005, FLARE_LIFE = 4.5, CHAFF_LIFE = 6;
 const CM = { left: 0, cool: 0 };
 const decoys = []; // { id, owner ('' for our own), kind 'flare' | 'chaff', p, v, t, life }
