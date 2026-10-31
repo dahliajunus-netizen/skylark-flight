@@ -279,6 +279,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div class="tools" id="tools" hidden>
   <button class="tbtn" id="bBombCam" title="Hold to follow your last bomb or missile">BOMB CAM<kbd>Z</kbd></button>
   <button class="tbtn" id="bGs" hidden>GUNSHIP CAM<kbd>V</kbd></button>
+   <button class="tbtn" id="bVision">NVG<kbd>J</kbd></button>
   <button class="tbtn" id="bUi">HIDE UI<kbd>U</kbd></button>
   <button class="tbtn" id="bCam">CAM<kbd>C</kbd></button>
   <button class="tbtn touch-only" id="bBrkTool">BRAKE</button>
@@ -328,6 +329,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
       <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
       <dt>Enter</dt><dd>Chat with the other players (Enter sends, Esc closes)</dd>
+      <dt>J</dt><dd>Toggle night vision on military aircraft, or exterior lights on airliners</dd>
       <dt>C · M · P · I</dt><dd>Camera · sound · pause · invert pitch</dd>
       <dt>V (AC-130J)</dt><dd>Gunship sensor camera: 1 / 2 pick the 30 mm or 105 mm, Space or click fires, T reloads the 30 mm, scroll zooms, Y switches TV / IR</dd>
       <dt>U</dt><dd>Hide or show the instruments and buttons</dd>
@@ -631,9 +633,10 @@ const HORIZON = new THREE.Color('#bdcfd5');
 scene.fog = new THREE.Fog(HORIZON, 2600, 23000);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 120000); // far enough to see a 44 km mushroom cloud
 
-// A low afternoon sun gives the ground long, warm light while the sky keeps its cool zenith.
-const SUN_DIR = new THREE.Vector3(0.62, 0.38, 0.71).normalize();
-scene.add(new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.78));
+const DAY_SECONDS = 720; // one full day-night cycle takes twelve minutes of flight time
+const SUN_DIR = new THREE.Vector3();
+const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.78);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffe6c4', 1.25);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
@@ -642,15 +645,18 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.04;
 scene.add(sun, sun.target);
 
-// Layered sky colors and a broad solar halo suggest atmospheric scattering.
+// Day and night sky palettes blend through a short dawn and dusk.
+const SKY_DAY = { top: new THREE.Color('#3474b4'), horizon: new THREE.Color('#d9e3e2'), bottom: new THREE.Color('#aebcba'), sun: new THREE.Color('#fff0d3') };
+const SKY_NIGHT = { top: new THREE.Color('#07142c'), horizon: new THREE.Color('#263448'), bottom: new THREE.Color('#111923'), sun: new THREE.Color('#ffd4a0') };
+const SUN_WARM = new THREE.Color('#ffb16e');
 const sky = new THREE.Mesh(
   new THREE.SphereGeometry(20000, 48, 24),
   new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
     uniforms: {
-      top: { value: new THREE.Color('#3474b4') }, horizon: { value: new THREE.Color('#d9e3e2') },
-      bottom: { value: new THREE.Color('#aebcba') }, sunDir: { value: SUN_DIR },
-      sunColor: { value: new THREE.Color('#fff0d3') }
+      top: { value: SKY_DAY.top.clone() }, horizon: { value: SKY_DAY.horizon.clone() },
+      bottom: { value: SKY_DAY.bottom.clone() }, sunDir: { value: SUN_DIR },
+      sunColor: { value: SKY_DAY.sun.clone() }
     },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `uniform vec3 top, horizon, bottom, sunDir, sunColor; varying vec3 vDir;
@@ -673,6 +679,26 @@ const sky = new THREE.Mesh(
 sky.renderOrder = -1;
 sky.frustumCulled = false;
 scene.add(sky);
+function updateDayNight() {
+  const phase = S.time / DAY_SECONDS * Math.PI * 2 + Math.PI / 2;
+  const elevation = Math.sin(phase) * 0.78;
+  const azimuth = phase * 0.5 + 0.35;
+  SUN_DIR.set(Math.cos(azimuth) * Math.cos(elevation), Math.sin(elevation), Math.sin(azimuth) * Math.cos(elevation)).normalize();
+  const daylight = smooth(-0.16, 0.24, elevation);
+  const twilight = smooth(-0.32, 0.08, elevation);
+  const night = 1 - twilight;
+  const uniforms = sky.material.uniforms;
+  uniforms.top.value.copy(SKY_DAY.top).lerp(SKY_NIGHT.top, night);
+  uniforms.horizon.value.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
+  uniforms.bottom.value.copy(SKY_DAY.bottom).lerp(SKY_NIGHT.bottom, night);
+  uniforms.sunColor.value.copy(SKY_DAY.sun).lerp(SKY_NIGHT.sun, night);
+  sun.color.copy(SKY_DAY.sun).lerp(SUN_WARM, 1 - smooth(-0.02, 0.4, elevation));
+  sun.intensity = 1.25 * daylight;
+  hemi.intensity = 0.78 * (0.16 + daylight * 0.84);
+  HORIZON.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
+  scene.fog.color.copy(HORIZON);
+  uniforms.sunDir.value.copy(SUN_DIR);
+}
 
 // terrain mesh
 (function buildTerrain() {
@@ -1663,6 +1689,59 @@ const gs = { cam: false, sel: 0, zoom: 1, fov: 16, mode: 0, target: null, w: [],
 const gsEl = {};
 let A = AC.f15, GEAR = A.gear;
 const plane = new THREE.Group();
+const AIRLINER_IDS = new Set(['b757', 'b748', 'concorde']);
+const NVG_FILTER = 'grayscale(1) sepia(1) hue-rotate(65deg) saturate(5) brightness(1.5) contrast(1.18)';
+let nvgOn = false, exteriorLightsOn = false, exteriorLightGroup = null;
+const isAirliner = () => AIRLINER_IDS.has(A.id);
+function applyCanvasFilter() {
+  const filters = [];
+  if (gs.cam) filters.push(GS_FILTER[gs.mode]);
+  if (nvgOn && !isAirliner()) filters.push(NVG_FILTER);
+  canvas.style.filter = filters.filter(Boolean).join(' ');
+}
+function updateVisionButton() {
+  const button = $('#bVision');
+  if (!button) return;
+  button.firstChild.textContent = isAirliner() ? 'LIGHTS' : (nvgOn ? 'NVG ON' : 'NVG');
+  button.setAttribute('aria-pressed', String(isAirliner() ? exteriorLightsOn : nvgOn));
+  button.title = isAirliner() ? 'Toggle aircraft exterior lights (J)' : 'Toggle night vision (J)';
+}
+function toggleVision() {
+  if (!running || paused || S.crashed) return;
+  if (isAirliner()) {
+    exteriorLightsOn = !exteriorLightsOn;
+    if (exteriorLightGroup) exteriorLightGroup.visible = exteriorLightsOn;
+    updateVisionButton();
+    toast(exteriorLightsOn ? 'Exterior lights on' : 'Exterior lights off');
+  } else {
+    nvgOn = !nvgOn;
+    applyCanvasFilter(); updateVisionButton();
+    toast(nvgOn ? 'Night vision on' : 'Night vision off');
+  }
+}
+function buildExteriorLights() {
+  if (!isAirliner()) return;
+  const group = exteriorLightGroup = new THREE.Group();
+  group.visible = exteriorLightsOn;
+  plane.add(group);
+  const halfSpan = A.box.max.x * 0.92, noseZ = A.box.min.z + 2;
+  const bulb = (color, x, y, z, radius = 0.28) => {
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), new THREE.MeshBasicMaterial({ color, toneMapped: false }));
+    lamp.position.set(x, y, z); group.add(lamp);
+    const glow = new THREE.PointLight(color, 3, 260, 2);
+    glow.position.copy(lamp.position); group.add(glow);
+  };
+  bulb('#ff342b', -halfSpan, 0.2, 0, 0.36);
+  bulb('#39ff78', halfSpan, 0.2, 0, 0.36);
+  bulb('#fff2d0', 0, 0.35, A.box.max.z * 0.92, 0.3);
+  bulb('#fff2d0', 0, -0.15, noseZ, 0.32);
+  for (const x of [-0.65, 0.65]) {
+    const spot = new THREE.SpotLight('#fff0d8', 85, 900, Math.PI / 8, 0.55, 2);
+    spot.position.set(x, -0.15, noseZ);
+    const target = new THREE.Object3D(); target.position.set(x, -4, noseZ - 600);
+    group.add(spot, target); spot.target = target;
+  }
+}
 const parts = { bombs: [], spoilers: [] };
 let bombTemplate = null;
 const M = (c, r = 0.6, m = 0.2) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
@@ -2103,6 +2182,8 @@ function build757() {
 
 function setAircraft(id) {
   A = AC[id] || AC.f15;
+  nvgOn = false; exteriorLightsOn = false; exteriorLightGroup = null;
+  applyCanvasFilter();
   if (A.id !== 'b52') MP.claim = 0; else if (!MP.claim) MP.claim = Date.now(); // the B-52 is one player's at a time
   GEAR = A.gear;
   for (const mark of parts.damageMarks || []) mark.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
@@ -2110,6 +2191,7 @@ function setAircraft(id) {
   for (const k of Object.keys(parts)) delete parts[k];
   parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.droop = [];
   ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
+  buildExteriorLights();
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
@@ -3635,9 +3717,9 @@ function setGunshipCam(on) {
   if (on === gs.cam) return;
   gs.cam = on;
   document.body.classList.toggle('gscam', on);
-  canvas.style.filter = on ? GS_FILTER[gs.mode] : '';
+  applyCanvasFilter();
   if (on) { gunshipTarget(); gs.fov = A.gunship.zoom[gs.zoom]; look.active = false; lockPointer(); }
-  else { canvas.style.filter = ''; camSnap = true; if (!mouseAim()) { lockPointer.releasing = true; unlockPointer(); } }
+  else { applyCanvasFilter(); camSnap = true; if (!mouseAim()) { lockPointer.releasing = true; unlockPointer(); } }
 }
 function gunshipZoom(d) {
   if (!gs.cam) return;
@@ -3686,7 +3768,7 @@ addEventListener('keydown', e => {
   if (k === 'v') setGunshipCam(!gs.cam);
   else if (k === '1' || k === '2') selectGunshipWeapon(+k - 1);
   else if (k === 't') gunshipReload();
-  else if (k === 'y' && gs.cam) { gs.mode = (gs.mode + 1) % GS_MODES.length; canvas.style.filter = GS_FILTER[gs.mode]; }
+  else if (k === 'y' && gs.cam) { gs.mode = (gs.mode + 1) % GS_MODES.length; applyCanvasFilter(); }
   else if ((k === '=' || k === '+') && gs.cam) gunshipZoom(1);
   else if (k === '-' && gs.cam) gunshipZoom(-1);
   else if (k === 'c' && gs.cam) setGunshipCam(false);
@@ -4022,6 +4104,9 @@ function attitude() {
 
 function reset(mode) {
   lastMode = mode;
+  nvgOn = false; exteriorLightsOn = false;
+  if (exteriorLightGroup) exteriorLightGroup.visible = false;
+  applyCanvasFilter(); updateVisionButton();
   MP.rips = []; MP.life++; MP.lastHitBy = null; // a fresh, whole aircraft for everyone else too
   if (S.damaged) { S.damaged = false; setAircraft(A.id); } // put the torn-off parts back
   S.stumps = [];
@@ -4458,6 +4543,7 @@ addEventListener('keydown', e => {
   keys[k] = true;
   if (e.repeat) return;
   if (k === 'c') toggleCam();
+  else if (k === 'j') toggleVision();
   else if (k === 'm') toggleMute();
   else if (k === 'p') togglePause();
   else if (k === 'escape') togglePause(mouseAim() ? true : undefined); // in mouse aim Esc also frees the mouse, so it only pauses
@@ -4671,6 +4757,7 @@ $('#resume').onclick = () => togglePause(false);
 $('#pRebuild').onclick = $('#reRebuild').onclick = () => requestRebuild();
 $('#bCam').onclick = toggleCam;
 $('#bGs').onclick = () => setGunshipCam(!gs.cam);
+$('#bVision').onclick = toggleVision;
 $('#gsCamBtn').onclick = () => setGunshipCam(!gs.cam);
 $('#gsW1').onclick = () => selectGunshipWeapon(0);
 $('#gsW2').onclick = () => selectGunshipWeapon(1);
@@ -4699,6 +4786,7 @@ function updateAircraftUI() {
   });
   $('#wpn').hidden = !A.weapons;
   buildGunshipHUD();
+  updateVisionButton();
   $('#tBomb').hidden = !parts.bombs.length && !parts.missiles.length;
   $('#tBomb').textContent = parts.missiles.length ? 'AAM' : 'BOMB';
   $('#tLock').hidden = !A.radar;
@@ -6286,6 +6374,7 @@ function frame(now) {
   updateParticles(glow, dt); updateParticles(haze, dt);
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
   glow.mat.uniforms.uScale.value = haze.mat.uniforms.uScale.value = pScale;
+  updateDayNight();
   updateVisuals(dt);
   updateGearOverspeed(dt);
   updateCamera(dt, now);
