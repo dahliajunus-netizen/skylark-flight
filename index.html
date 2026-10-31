@@ -2339,7 +2339,11 @@ function checkStructure() {
       if (z.kind === 'core') {
         if (bi >= 0) { if (hullHit(bi, tC)) return true; break; }
         S.hitBuilding = -1;
-        if (ground === 'water') { crash('You flew into the water.'); return true; }
+        if (ground === 'water') {
+          S.hitPoint.copy(tC);
+          waterContact(tC);
+          return true;
+        }
         // a shallow, wings-level brush with the ground becomes a belly slide; anything steeper is a crash
         if (S.vel.y > -7 && S.V < 140 && Math.abs(attitude().roll) < 0.5 && slopeAt(tC.x, tC.z) < 0.25) { bellyDown('The fuselage hit the ground'); break; }
         crash('You flew into the terrain.');
@@ -3775,7 +3779,7 @@ function reset(mode) {
   if (S.damaged) { S.damaged = false; setAircraft(A.id); } // put the torn-off parts back
   S.stumps = [];
   updateDamage();
-  Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false });
+  Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false, ditched: false, ditchTime: 0, ditchFlood: 0, ditchLeak: 0 });
   initGunship(); // a fresh flight: full ammunition
   CM.left = CM_LOAD[A.id] || 0; CM.cool = 0;
   aaSel = A.ammo ? 'gun' : 'msl';
@@ -3894,7 +3898,72 @@ function crash(msg) {
 }
 const fmtTime = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
 
+function waterContact(point) {
+  if (S.ditched || S.crashed) return;
+  const impactDown = Math.max(0, -S.vel.y);
+  const horizontalSpeed = Math.hypot(S.vel.x, S.vel.z);
+  const att = attitude(), gearDown = S.gearT > 0.5;
+  const speedLimit = gearDown ? 65 : 112;
+  const controlled = impactDown <= 4.5 && horizontalSpeed <= speedLimit &&
+    Math.abs(att.roll) <= 0.42 && att.pitch >= -0.16 && att.pitch <= 0.36;
+  if (!controlled) {
+    S.hitBuilding = -1;
+    S.hitPoint.copy(point);
+    crash('The aircraft broke up on water impact.');
+    return;
+  }
+
+  // A controlled ditch skips across the surface, then floats while the fuselage floods.
+  S.ditched = true; S.ditchTime = 0; S.ditchFlood = 0;
+  S.ditchLeak = 0.018 + 0.035 * clamp((horizontalSpeed - 50) / 60, 0, 1) +
+    0.025 * clamp((impactDown - 1) / 4, 0, 1) + (gearDown ? 0.018 : 0);
+  S.hitBuilding = -1; S.hull = Math.max(0.25, S.hull - 0.12);
+  S.onGround = false; S.throttle = 0; S.firing = false; S.brake = false;
+  S.gearDown = false; S.gearT = 0; S.doorT = 1;
+  S.pos.y = Math.max(1.2, A.gear * 0.68);
+  S.vel.y = Math.min(0, S.vel.y * 0.18);
+  const splashCount = Math.min(180, 50 + Math.round(horizontalSpeed * 1.1));
+  for (let i = 0; i < splashCount; i++) {
+    emit('splash', S.pos, S.vel.x * 0.18 + (Math.random() - 0.5) * 18,
+      rr([5, 22]), S.vel.z * 0.18 + (Math.random() - 0.5) * 18, 0.8);
+  }
+  W.shake = 0.55;
+  toast('Controlled water landing · the aircraft is floating and taking on water');
+}
+function waterPhysics(dt) {
+  if (heightAt(S.pos.x, S.pos.z) >= 0) {
+    S.hitBuilding = -1; S.hitPoint.copy(S.pos);
+    crash('The ditched aircraft drifted into the riverbank.');
+    return;
+  }
+  const speed = Math.hypot(S.vel.x, S.vel.z);
+  const drag = Math.exp(-dt * (0.08 + 0.0018 * speed));
+  S.vel.x *= drag; S.vel.z *= drag;
+  S.ditchTime += dt;
+  S.ditchFlood = Math.min(1, S.ditchFlood + S.ditchLeak * dt);
+  const floatY = Math.max(1.2, A.gear * 0.68);
+  const wave = Math.sin(S.ditchTime * 1.35) * 0.07 + Math.sin(S.ditchTime * 0.73) * 0.045;
+  const targetY = floatY * (1 - S.ditchFlood) + wave;
+  S.vel.y += ((targetY - S.pos.y) * 7 - S.vel.y * 3.4) * dt;
+  S.pos.addScaledVector(S.vel, dt);
+  const att = attitude(), settle = Math.exp(-dt * 0.42);
+  S.quat.setFromEuler(eul.set(att.pitch * settle, att.hdg * Math.PI / 180, att.roll * settle, 'YXZ'));
+  S.V = S.vel.length(); S.alpha = 0; S.rho = RHO;
+  for (let n = burst(Math.min(24, speed * 0.18), dt); n > 0; n--) {
+    emit('splash', tA.set(S.pos.x - S.vel.x * 0.1, 0.2, S.pos.z - S.vel.z * 0.1),
+      S.vel.x * 0.12 + (Math.random() - 0.5) * 4, rr([1, 5]),
+      S.vel.z * 0.12 + (Math.random() - 0.5) * 4, 0.45);
+  }
+  for (let n = burst(5 + S.ditchFlood * 10, dt); n > 0; n--) {
+    emit('smoke', tA.set(S.pos.x, S.pos.y + A.scale, S.pos.z), S.vel.x * 0.05, 0.5, S.vel.z * 0.05, 0.25);
+  }
+  if (S.ditchFlood >= 1 || S.pos.y < 0.3) {
+    S.hitBuilding = -1; S.hitPoint.copy(S.pos);
+    crash('The fuselage flooded and sank after ditching.');
+  }
+}
 function physics(dt) {
+  if (S.ditched) { waterPhysics(dt); return; }
   const q = S.quat, v = S.vel;
   axes(q);
   const V = v.length();
@@ -4005,7 +4074,11 @@ function physics(dt) {
   if (comp > 0) {
     if (!S.onGround) {
       const att = attitude(), vs = v.y;
-      if (g.water) return crash('You ditched in the water.');
+      if (g.water) {
+        S.hitPoint.copy(S.pos);
+        waterContact(S.pos);
+        return;
+      }
       if (slopeAt(S.pos.x, S.pos.z) > 0.25 || vs < -12) return crash('You flew into the terrain. Keep an eye on the radar altitude in the hills.');
       // things the gear can't take: it folds, and the jet lands on its belly instead
       let fail = null;
@@ -4108,6 +4181,7 @@ addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
 function updateInputs(dt) {
+  if (S.ditched) { S.firing = false; S.brake = false; S.throttle = 0; return; }
   const ar = !gs.cam; // in the gunship camera the arrow keys slew the sensor instead
   let tp = (keys.s || (ar && keys.arrowdown) ? 1 : 0) - (keys.w || (ar && keys.arrowup) ? 1 : 0);
   if (invertPitch) tp = -tp;
@@ -5856,7 +5930,7 @@ function frame(now) {
     while (acc >= STEP && !S.crashed) { physics(STEP); acc -= STEP; }
     S.time += dt;
   } else acc = 0;
-  if (running && !paused) updateWeapons(dt);
+  if (running && !paused && !S.ditched) updateWeapons(dt);
   if (!paused) { updateCity(dt); updateNukes(dt); }
   if (S.crashed && !paused) updateWreck(dt);
   updateParticles(glow, dt); updateParticles(haze, dt);
