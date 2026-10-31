@@ -997,9 +997,18 @@ const BASE_BOXES = [];
       const i = ri * 2 + (e < 0 ? 0 : 1), fx = -e * r.ux, fz = -e * r.uz, [px, pz] = at(R, e * (hl - 95), 0);
       const u0 = (i % 5) / 5, u1 = u0 + 0.2, v1 = 1 - Math.floor(i / 5) * 0.5, v0 = v1 - 0.5, lh = 15, lw = Math.min(w * 0.2, 14);
       quad(labels, px, pz, fx, fz, lh, lw, y, WHITE, [[u0, v0], [u0, v1], [u1, v1], [u1, v0]]);
-      // threshold lights across the end
+      // Green threshold lights mark the runway end.
       const [tx, tz] = at(R, e * (hl + 2), 0);
       for (let sd = -w / 2; sd <= w / 2 + 0.1; sd += 4.5) lights.push([tx - r.uz * sd, tz + r.ux * sd, '#5cff7a']);
+      // A 900 m approach-light system on the extended centreline, with crossbars every 300 m.
+      for (let d = 30; d <= 900; d += 30) {
+        const [ax, az] = at(R, e * (hl + d), 0);
+        lights.push([ax, az, '#fff0ce']);
+      }
+      for (const d of [300, 600, 900]) for (let sd = -30; sd <= 30; sd += 10) {
+        const [ax, az] = at(R, e * (hl + d), sd);
+        lights.push([ax, az, '#fff0ce']);
+      }
     }
     for (let t = -hl; t <= hl + 0.1; t += 60) for (const sd of [-1, 1]) { const [x, z] = at(R, t, sd * (w / 2 + 2)); lights.push([x, z, '#ffe7a8']); }
   });
