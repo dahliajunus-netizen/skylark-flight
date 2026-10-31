@@ -4974,13 +4974,24 @@ addEventListener('resize', () => {
 // looks for a target near the nose and an AIM-120 flies straight. Missiles steer by proportional navigation,
 // pull limited g and burn out, so a hard turn at the right moment can beat them. The proximity fuse sends the
 // burst to the target's page, where it tears off whatever it reaches, like any other blast.
+// Approximate TNT-equivalent explosive fills in kg (not total warhead mass).
+// Variants and explosive formulations differ; these are visual/gameplay scale anchors.
 const MSL_KINDS = {
-  aim120: { name: 'AIM-120C', len: 3.65, r: 0.089, range: 50000, acc: 230, burn: 6, g: 40, life: 70, R: 16, cd: 6e-5, ir: false, col: '#e8e8e2' },
-  aim9: { name: 'AIM-9X', len: 3.0, r: 0.064, range: 15000, acc: 400, burn: 2.4, g: 60, life: 28, R: 11, cd: 9e-5, ir: true, col: '#d9dbd6' },
-  r77: { name: 'R-77', len: 3.6, r: 0.1, range: 50000, acc: 235, burn: 5.5, g: 40, life: 70, R: 17, cd: 6.5e-5, ir: false, col: '#cfd2cc' },
-  r73: { name: 'R-73', len: 2.9, r: 0.085, range: 20000, acc: 380, burn: 3, g: 60, life: 30, R: 12, cd: 9e-5, ir: true, col: '#d6d8d2' },
-  iris: { name: 'IRIS-T', len: 2.94, r: 0.064, range: 15000, acc: 400, burn: 2.4, g: 60, life: 28, R: 11, cd: 9e-5, ir: true, col: '#d4d6d0' }
+  aim120: { name: 'AIM-120C', len: 3.65, r: 0.089, range: 50000, acc: 230, burn: 6, g: 40, life: 70, R: 16, tntKg: 8.2, cd: 6e-5, ir: false, col: '#e8e8e2' },
+  aim9: { name: 'AIM-9X', len: 3.0, r: 0.064, range: 15000, acc: 400, burn: 2.4, g: 60, life: 28, R: 11, tntKg: 4.5, cd: 9e-5, ir: true, col: '#d9dbd6' },
+  r77: { name: 'R-77', len: 3.6, r: 0.1, range: 50000, acc: 235, burn: 5.5, g: 40, life: 70, R: 17, tntKg: 10, cd: 6.5e-5, ir: false, col: '#cfd2cc' },
+  r73: { name: 'R-73', len: 2.9, r: 0.085, range: 20000, acc: 380, burn: 3, g: 60, life: 30, R: 12, tntKg: 3, cd: 9e-5, ir: true, col: '#d6d8d2' },
+  iris: { name: 'IRIS-T', len: 2.94, r: 0.064, range: 15000, acc: 400, burn: 2.4, g: 60, life: 28, R: 11, tntKg: 11.4, cd: 9e-5, ir: true, col: '#d4d6d0' }
 };
+function missileExplosionProfile(kind) {
+  const K = MSL_KINDS[kind] || MSL_KINDS.aim120;
+  const yieldRatio = K.tntKg / 89; // scaled from the Mk-82 blast reference
+  return {
+    visual: 0.55 * Math.pow(yieldRatio, 0.4),
+    radius: 31 * Math.cbrt(yieldRatio),
+    power: 300 * K.tntKg / MSL_KINDS.aim120.tntKg
+  };
+}
 const mslTemplates = {};
 function makeMissile(kind) {
   const K = MSL_KINDS[kind], body = M(K.col, 0.45, 0.2), dark = M('#6d7175', 0.5, 0.3), g = new THREE.Group(), L = K.len, r = K.r;
@@ -5266,7 +5277,7 @@ const ASPECT = d => d < 0.38 ? 'HOT' : d < 1.2 ? 'FLANK' : d < 1.95 ? 'BEAM' : '
 function updateMissiles(dt) {
   updateDecoys(dt);
   for (let i = missiles.length - 1; i >= 0; i--) {
-    const m = missiles[i], K = MSL_KINDS[m.kind];
+    const m = missiles[i], K = MSL_KINDS[m.kind], fx = missileExplosionProfile(m.kind);
     m.t += dt;
     let P = m.target;
     if (P && (!MP.peers.has(P.id) || !P.obj || !P.obj.visible)) { mpSend('ms', { k: 'gone', id: m.id }, P.id); P = m.target = null; }
@@ -5289,7 +5300,7 @@ function updateMissiles(dt) {
       // chasing a decoy: same guidance, and it bursts harmlessly when it reaches it
       _mr.subVectors(D.p, m.pos);
       const dist = _mr.length();
-      if (dist < K.R * 0.5) { lastImpact = { p: m.pos.clone(), t: clockNow(), nuke: false }; explode(m.pos, 0.5, false); endMissile(i); continue; }
+      if (dist < K.R * 0.5) { lastImpact = { p: m.pos.clone(), t: clockNow(), nuke: false }; explode(m.pos, fx.visual, false); endMissile(i); continue; }
       _mv.subVectors(m.vel, D.v);
       _mo.crossVectors(_mr, _mv.negate()).divideScalar(dist * dist);
       _mc.crossVectors(_mo, m.vel).multiplyScalar(4);
@@ -5308,10 +5319,10 @@ function updateMissiles(dt) {
         const tc = dist > m.lastD ? clamp(_mr.dot(_mv) / Math.max(1, _mv.lengthSq()), -dt, 0) : 0; // back to the closest point
         _mc.subVectors(m.pos, P.obj.position).addScaledVector(_mv, tc); // missile relative to target, at the burst
         const local = _mo.copy(_mc).applyQuaternion(_mq.copy(P.obj.quaternion).invert());
-        mpSend('ms', { k: 'hit', id: m.id, o: mpV(local), R: K.R, n: K.name }, P.id);
+        mpSend('ms', { k: 'hit', id: m.id, o: mpV(local), R: fx.radius, s: fx.visual, n: K.name }, P.id);
         const impact = _mc.clone().add(P.obj.position);
         lastImpact = { p: impact.clone(), t: clockNow(), nuke: false };
-        explode(impact, 0.7, false);
+        explode(impact, fx.visual, false);
         m.target = null; endMissile(i); continue;
       }
       m.lastD = dist;
@@ -5336,10 +5347,10 @@ function updateMissiles(dt) {
     const h = heightAt(m.pos.x, m.pos.z), bi = buildingAt(m.pos.x, m.pos.z);
     if (m.pos.y <= Math.max(h, 0) || (bi >= 0 && solidAt(bi, m.pos.x, m.pos.y, m.pos.z))) {
       lastImpact = { p: m.pos.clone(), t: clockNow(), nuke: false };
-      explode(m.pos, 0.6, h < 0); blast(m.pos, 8, 300);
+      explode(m.pos, fx.visual, h < 0); blast(m.pos, fx.radius, fx.power);
       endMissile(i); continue;
     }
-    if (m.t > K.life) { lastImpact = { p: m.pos.clone(), t: clockNow(), nuke: false }; explode(m.pos, 0.4, false); endMissile(i); }
+    if (m.t > K.life) { lastImpact = { p: m.pos.clone(), t: clockNow(), nuke: false }; explode(m.pos, fx.visual, false); endMissile(i); }
   }
 }
 function clearMissiles() {
@@ -5373,7 +5384,8 @@ function onMissileMsg(id, d) {
     const o = vec(d.o);
     if (!running || S.crashed || !o || o.length() > 60 || !num(d.R, 30)) return;
     const w = o.applyQuaternion(S.quat).add(S.pos);
-    explode(w, 0.7, false, true);
+    const fxScale = num(d.s, 1) ? d.s : missileExplosionProfile('aim120').visual;
+    explode(w, fxScale, false, true);
     MP.blastBy = who;
     blastPlane(w, d.R, 'remote');
     if (!S.crashed) toast(`Hit by ${who}'s ${String(d.n || 'missile').replace(/[^\w\- ]/g, '').slice(0, 12)}`);
