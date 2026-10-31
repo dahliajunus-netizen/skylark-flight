@@ -1496,6 +1496,14 @@ function startCooldown(id) {
   try { localStorage.setItem('skylark.cool', JSON.stringify(MP.cool)); } catch (e) {}
 }
 // Aircraft with a loadouts list carry either their bombs or one nuclear bomb, picked on the start and pause screens.
+const B52_CBU87_RACK = (() => {
+  const positions = [];
+  // Ten wing-mounted canisters, released in balanced left/right pairs.
+  for (const z of [-5.35, -3.65, -1.95, -0.25, 1.45]) positions.push([-6.45, -0.16, z, 'cbu87'], [6.45, -0.16, z, 'cbu87']);
+  // Twenty in the bomb bay: two abreast, five deep, on two tiers.
+  for (const y of [-1.4, -0.8]) for (const z of [-4.75, -2.75, -0.75, 1.25, 3.25]) positions.push([-0.42, y, z, 'cbu87'], [0.42, y, z, 'cbu87']);
+  return positions;
+})();
 const loadout = { f15: 'mk82', b52: 'mk84' };
 const curLoadout = () => (A.loadouts || []).find(l => l.id === loadout[A.id]) || (A.loadouts || [])[0] || null;
 const nukeKind = () => { const l = curLoadout(); return l && l.nuke ? NUKE_KINDS[l.nuke] : null; };
@@ -1608,7 +1616,7 @@ const AC = {
     gLimit: 2.0, effV: 95, rates: [0.25, 0.1, 0.35], stabRoll: 0, tailStrike: 0.15, gear: 3.4, weapons: true, gearTime: 10, mainRetract: 'in', travel: 0.5,
     ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B52.gltf.json', podEngines: true,
     bombKg: 925, bombCd: 0.0004, bombName: 'MK-84', bombKind: 'heavy',
-    loadouts: [{ id: 'mk84', name: '20 × MK-84', spec: '20 × MK-84 BOMBS' }, { id: 'b28', name: 'B28', nuke: 'b28', spec: 'B28 NUCLEAR · 1.45 MT' }, { id: 'b41', name: 'B41', nuke: 'b41', spec: 'B41 NUCLEAR · 25 MT' }],
+    loadouts: [{ id: 'mk84', name: '20 × MK-84', spec: '20 × MK-84 BOMBS' }, { id: 'cbu87', name: '30 × CBU-87', spec: '30 × CBU-87 COMBINED EFFECTS MUNITIONS', bombs: B52_CBU87_RACK, internalFrom: 10 }, { id: 'b28', name: 'B28', nuke: 'b28', spec: 'B28 NUCLEAR · 1.45 MT' }, { id: 'b41', name: 'B41', nuke: 'b41', spec: 'B41 NUCLEAR · 25 MT' }],
     // 8 on the two wing pylons (2 abreast, 2 deep), then 12 in the bomb bay (2 abreast, 3 high, 2 deep)
     rig: { ab: [], nuke: [0, -0.9, -2.25], nukeInternal: true, bombScale: 1.6, internalFrom: 8, bombs: [
       [-6.17, -0.16, -4.75], [6.17, -0.16, -4.75], [-6.83, -0.16, -4.75], [6.83, -0.16, -4.75],
@@ -1858,7 +1866,7 @@ function addStores(bombs, scale, internalFrom) {
   const lo = curLoadout();
   if (lo && lo.aam) addMissiles();
   else if (nukeKind()) addNuke(...A.rig.nuke);
-  else addBombs(bombs, scale, internalFrom);
+  else addBombs(lo && lo.bombs || bombs, scale, lo && lo.internalFrom !== undefined ? lo.internalFrom : internalFrom);
 }
 // Explosive fill in TNT-equivalent kg, with gameplay building-damage power kept as a separate tuning value.
 // The Mk-82 anchor is 89 kg HE: published data gives 34 kPa (about 5 psi) at 31 m.
@@ -1867,7 +1875,8 @@ const BOMB_KINDS = {
   mk82: { kg: 230, name: 'MK-82', scale: 1, tntKg: 89, power: 1300 },
   heavy: { kg: 925, name: 'MK-84', scale: 1.6, tntKg: 429, power: 2800 },
   fab250: { kg: 250, name: 'FAB-250', scale: 1.1, tntKg: 100, power: 1400 },
-  fab500: { kg: 500, name: 'FAB-500', scale: 1.35, tntKg: 209, power: 2100 }
+  fab500: { kg: 500, name: 'FAB-500', scale: 1.35, tntKg: 209, power: 2100 },
+  cbu87: { kg: 430, name: 'CBU-87', scale: 1.05, tntKg: 12, power: 240 }
 };
 function bombBlastProfile(kind) {
   const b = BOMB_KINDS[kind] || BOMB_KINDS.mk82;
@@ -3875,9 +3884,23 @@ function updateBombs(dt) {
       bombsFlying.splice(b, 1);
       if (B.kind === 'nuke') { detonateNuke(p, hit === 'water', B.nk); continue; }
       if (B.kind === 'shell') { explode(p, 0.55, hit === 'water'); blast(p, hit === 'water' ? 8 : 14, 520); continue; } // 105 mm HE, ~2 kg of Comp B
-      // Mk-82, Mk-84, FAB-250 or FAB-500 (BOMB_KINDS)
+      // Conventional bombs use their tuned blast profiles; CBU-87 spreads small impacts across an area.
       const fx = bombBlastProfile(B.kind);
-      bombExplosion(p, B.kind, hit === 'water'); blast(p, hit === 'water' ? fx.radius * 0.55 : fx.radius, fx.power);
+      bombExplosion(p, B.kind, hit === 'water');
+      blast(p, hit === 'water' ? fx.radius * 0.55 : fx.radius, fx.power);
+      if (B.kind === 'cbu87' && hit !== 'water') {
+        for (let i = 0; i < 12; i++) {
+          const angle = (i / 12) * Math.PI * 2 + (Math.random() - 0.5) * 0.32;
+          const distance = Math.sqrt(Math.random()) * 145;
+          const x = p.x + Math.cos(angle) * distance * 1.25;
+          const z = p.z + Math.sin(angle) * distance * 0.65;
+          const ground = heightAt(x, z);
+          if (ground < 0) continue;
+          const impact = new THREE.Vector3(x, Math.max(0, ground) + 0.25, z);
+          if (i % 3 === 0) explode(impact, 0.14, false, false, true);
+          blast(impact, 17, 360);
+        }
+      }
       lastImpact = { p, t: clockNow(), nuke: false };
       continue;
     }
