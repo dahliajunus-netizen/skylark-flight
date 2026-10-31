@@ -700,9 +700,10 @@ scene.add(sky);
   scene.add(water);
 })();
 
-// trees
+// Forest and scrubland around the built-up area. Instancing keeps the added ground cover
+// lightweight while layered noise creates irregular clearings instead of an even tree grid.
 (function buildTrees() {
-  const rnd = mulberry(1764), N = isTouch ? 7000 : 16000;
+  const rnd = mulberry(1764), N = isTouch ? 8500 : 22000;
   const mesh = new THREE.InstancedMesh(new THREE.ConeGeometry(3.6, 13, 6), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1 }), N);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), c = new THREE.Color();
   let n = 0;
@@ -710,14 +711,40 @@ scene.add(sky);
     const x = (rnd() - 0.5) * 18000 * MAP_K, z = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ;
     if (x > CITY.x0 - 150 && x < CITY.x1 + 150 && z > CITY.z0 - 150 && z < CITY.z1 + 150) continue;
     if (airbaseSD(x, z) < 300 || (z > CITY.z1 && z < AB.zN + 300 && GATES.some(gx => Math.abs(x - gx) < 70))) continue;
-    if (fbm(x * 0.002 + 3, z * 0.002, 3) < 0.52) continue;
+    const cover = fbm(x * 0.002 + 3, z * 0.002, 3);
+    if (cover < 0.48) continue;
     const h = heightAt(x, z);
     if (h < 10 || h > 330 || slopeAt(x, z) > 0.4) continue;
     const k = 0.7 + rnd() * 0.8;
     p.set(x, h + 6 * k, z); s.set(k, k * (0.8 + rnd() * 0.5), k);
     m.compose(p, q, s);
     mesh.setMatrixAt(n, m);
-    mesh.setColorAt(n, c.setHSL(0.27 + rnd() * 0.07, 0.42, 0.18 + rnd() * 0.1));
+    mesh.setColorAt(n, c.setHSL(0.25 + rnd() * 0.09, 0.38 + rnd() * 0.16, 0.16 + rnd() * 0.13));
+    n++;
+  }
+  mesh.count = n;
+  scene.add(mesh);
+})();
+
+(function buildShrubland() {
+  const rnd = mulberry(9271), N = isTouch ? 10000 : 26000;
+  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1),
+    new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1 }), N);
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), c = new THREE.Color();
+  let n = 0;
+  for (let tries = 0; tries < N * 10 && n < N; tries++) {
+    const x = (rnd() - 0.5) * 18000 * MAP_K, z = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ;
+    if (x > CITY.x0 - 100 && x < CITY.x1 + 100 && z > CITY.z0 - 100 && z < CITY.z1 + 100) continue;
+    if (airbaseSD(x, z) < 220 || (z > CITY.z1 && z < AB.zN + 240 && GATES.some(gx => Math.abs(x - gx) < 55))) continue;
+    if (fbm(x * 0.002 + 17, z * 0.002 - 9, 3) < 0.37) continue;
+    const h = heightAt(x, z);
+    if (h < 6 || h > 300 || slopeAt(x, z) > 0.48) continue;
+    const k = 1.2 + rnd() * 1.8;
+    p.set(x, h + k * 0.42, z);
+    s.set(k * (0.8 + rnd() * 0.8), k * (0.45 + rnd() * 0.35), k * (0.8 + rnd() * 0.8));
+    m.compose(p, q, s);
+    mesh.setMatrixAt(n, m);
+    mesh.setColorAt(n, c.setHSL(0.23 + rnd() * 0.11, 0.36 + rnd() * 0.22, 0.14 + rnd() * 0.14));
     n++;
   }
   mesh.count = n;
