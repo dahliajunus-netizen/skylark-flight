@@ -1688,7 +1688,7 @@ const AC = {
     // Boeing B-52H: ~140 t plus up to 18 t of bombs, 370 m² wing, eight TF33s (~76 kN each)
     id: 'b52', mass: 140000, wing: 370, thrust: 608000, thrustAB: 0,
     CL0: 0.4, CLA: 5.0, stallA: 0.22, cd0: 0.022, k: 0.05, wave: [0.78, 0.92, 0.08],
-    gLimit: 2.0, effV: 95, rates: [0.25, 0.1, 0.35], stabRoll: 0, tailStrike: 0.15, gear: 3.4, weapons: true, gearTime: 10, mainRetract: 'in', travel: 0.5,
+    gLimit: 2.0, effV: 95, rates: [0.25, 0.1, 0.35], stabRoll: 0, tailStrike: 0.15, gear: 3.4, weapons: true, gearTime: 10, mainRetract: 'in', gearTruckTilt: 0, gearTruckStowTilt: Math.PI / 2, travel: 0.5,
     ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B52.gltf.json', podEngines: true,
     bombKg: 925, bombCd: 0.0004, bombName: 'MK-84', bombKind: 'heavy',
     loadouts: [{ id: 'mk84', name: '20 × MK-84', spec: '20 × MK-84 BOMBS' }, { id: 'cbu87', name: '30 × CBU-87', spec: '30 × CBU-87 COMBINED EFFECTS MUNITIONS', bombs: B52_CBU87_RACK, internalFrom: 10 }, { id: 'b28', name: 'B28', nuke: 'b28', spec: 'B28 NUCLEAR · 1.45 MT' }, { id: 'b41', name: 'B41', nuke: 'b41', spec: 'B41 NUCLEAR · 25 MT' }],
@@ -1861,7 +1861,7 @@ const AIRFRAME_PAINT = {
   f15: { base: M('#777c82', 0.58, 0.18), dark: M('#555b62', 0.6, 0.16) }, // Mod Eagle gray
   typhoon: { base: M('#737b81', 0.58, 0.18), dark: M('#626a71', 0.6, 0.16) },
   su30: { base: M('#718096', 0.58, 0.18), dark: M('#53647c', 0.6, 0.16) }, // blue-gray scheme
-  b52: { base: M('#62696f', 0.62, 0.14), dark: M('#50575d', 0.64, 0.12) }
+  b52: { base: M('#666c71', 0.62, 0.14), dark: M('#666c71', 0.62, 0.14) }
 };
 const isAirframeSurface = name => /fuselage|body|wing|stabil|fin|sponson|fairing|tank|nacelle|flap|aileron|rudder|elevator|canard|pylon|tail|engine.?cowling|airframe/.test(name);
 const isAircraftDetail = name => /glass|window|windscreen|canopy|radome|nose.?cone|tire|tyre|rubber|wheel|strut|bogie|rim|hub|brake|axle|propeller|spinner|exhaust|nozzle|engine.?face|intake.?lip|antenna|probe|gun|barrel|missile|bomb|weapon|light/.test(name);
@@ -2372,7 +2372,12 @@ function rigGear() {
     tmpB.copy(m.geometry.boundingBox).applyMatrix4(m.matrix);
     const cx = (tmpB.min.x + tmpB.max.x) / 2;
     const cz = (tmpB.min.z + tmpB.max.z) / 2;
-    if (Math.abs(cx) < (A.centreX || 1.5)) (legs['c' + Math.round(cz / 6)] = legs['c' + Math.round(cz / 6)] || []).push([m, tmpB.clone()]);
+    const b52Station = A.id === 'b52' && /Main (?:Gear Strut|Wheel) (14|28)[LR]/.exec(m.name || '');
+    if (b52Station) {
+      // The B-52 has four independent main trucks; keep each fore/aft and left/right assembly on its own pivot.
+      const key = (cx < 0 ? 'L' : 'R') + b52Station[1];
+      (legs[key] = legs[key] || []).push([m, tmpB.clone()]);
+    } else if (Math.abs(cx) < (A.centreX || 1.5)) (legs['c' + Math.round(cz / 6)] = legs['c' + Math.round(cz / 6)] || []).push([m, tmpB.clone()]);
     else if (Math.abs(cx) > 10) (legs[(cx < 0 ? 'L' : 'R') + 'o'] = legs[(cx < 0 ? 'L' : 'R') + 'o'] || []).push([m, tmpB.clone()]);
     else side[cx < 0 ? 'L' : 'R'].push([m, tmpB.clone(), Math.abs(cx)]);
   }
@@ -2412,13 +2417,15 @@ function rigGear() {
     truck.add(lower);
     pivot.add(upper, truck);
     // nose legs (and the F-15's mains, and a 747's body gear) fold forward; the others fold inward toward the centreline
-    const fwd = key[0] === 'c' || A.mainRetract === 'fwd' || (A.bodyFwd && Math.abs((bb.min.x + bb.max.x) / 2) < A.bodyFwd);
-    const leg = { pivot, upper, lower, truck, truckHome, truckCorners, truckFootY: pivot.position.y + truckBounds.min.y, nose: key === centre[0], len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign: fwd ? 1 : key[0] === 'R' ? -1 : 1 };
+    const b52Truck = A.id === 'b52' && /^[LR](14|28)$/.test(key);
+    const fwd = key[0] === 'c' || b52Truck || (A.mainRetract === 'fwd' && A.id !== 'b52') || (A.bodyFwd && Math.abs((bb.min.x + bb.max.x) / 2) < A.bodyFwd);
+    const sign = b52Truck ? (key[0] === 'L' ? 1 : -1) : fwd ? 1 : key[0] === 'R' ? -1 : 1;
+    const leg = { key, pivot, upper, lower, truck, truckHome, truckCorners, truckFootY: pivot.position.y + truckBounds.min.y, nose: key === centre[0], len: Math.max(0.3, -strutBottom), axis: fwd ? 'x' : 'z', sign };
     parts.gearLegs.push(leg);
     const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
     const mains = Object.keys(legs).filter(k => k[0] === key[0] && k[1] !== 'o').sort();
     const which = mains.length > 1 ? (key === mains[0] ? ' body gear' : ' wing gear') : ' main gear leg';
-    const label = key[0] === 'c' ? (centre.length > 1 ? (key === centre[0] ? 'Forward' : 'Aft') + ' main gear truck' : 'Nose gear leg') : (key[0] === 'L' ? 'Left' : 'Right') + (key[1] === 'o' ? ' outrigger wheel' : which);
+    const label = A.id === 'b52' && /^[LR](14|28)$/.test(key) ? (key.slice(1) === '14' ? 'Forward' : 'Aft') + (key[0] === 'L' ? ' left' : ' right') + ' main gear truck' : key[0] === 'c' ? (centre.length > 1 ? (key === centre[0] ? 'Forward' : 'Aft') + ' main gear truck' : 'Nose gear leg') : (key[0] === 'L' ? 'Left' : 'Right') + (key[1] === 'o' ? ' outrigger wheel' : which);
     parts.zones.push({ kind: 'gear', side: key[0] === 'c' ? '' : key[0], leg, alive: true, label,
       pts: [new THREE.Vector3(cx, bb.min.y, cz), new THREE.Vector3(cx, (bb.min.y + bb.max.y) / 2, cz)] });
   }
@@ -4598,7 +4605,7 @@ function physics(dt) {
     let lowest = Infinity, reference = Infinity;
     for (const L of parts.gearLegs) {
       reference = Math.min(reference, L.truckFootY - 0.4 * A.travel);
-      const legAngle = L.axis === 'x' ? gearA : gearA * L.sign;
+      const legAngle = gearA * L.sign;
       const legAxis = L.axis === 'x' ? AX : AZ;
       const truckTilt = L.truck.rotation.x;
       for (const corner of L.truckCorners) {
@@ -5525,8 +5532,9 @@ function updateVisuals(dt) {
     const off = clamp(S.gearComp + (L.nose ? S.noseDip : 0), 0, A.travel) - 0.4 * A.travel; // + = pushed up from the parked pose
     L.lower.position.set(-L.truck.position.x, -L.truck.position.y + off, -L.truck.position.z);
     L.upper.scale.y = Math.max(0.2, (L.len - off) / L.len);
-    L.pivot.rotation.set(L.axis === 'x' ? ga : 0, 0, L.axis === 'z' ? ga * L.sign : 0);
-    const truckStow = A.gearTruckStowTilt || 0;
+    L.pivot.rotation.set(L.axis === 'x' ? ga * L.sign : 0, 0, L.axis === 'z' ? ga * L.sign : 0);
+    const b52Truck = A.id === 'b52' && /^[LR](14|28)$/.test(L.key);
+    const truckStow = (A.gearTruckStowTilt || 0) * (b52Truck ? L.sign : 1);
     const truckTilt = truckStow + ((A.gearTruckTilt || 0) - truckStow) * gk;
     const truckTarget = !L.nose && !S.onGround ? truckTilt : 0;
     L.truck.rotation.x += (truckTarget - L.truck.rotation.x) * Math.min(1, dt * 8);
