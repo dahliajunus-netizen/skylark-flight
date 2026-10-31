@@ -374,6 +374,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <button class="btn" id="pRunway">Restart on runway</button>
       <button class="btn" id="pAir">Start airborne</button>
       <button class="btn" id="pApproach">Approach</button>
+      <button class="btn" id="pCallsign">Change callsign</button>
       <button class="btn" id="pRebuild">Rebuild city</button>
     </div>
   </div>
@@ -393,9 +394,9 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="nameGate" class="overlay" hidden>
   <div class="card glass">
     <div class="eyebrow">MULTIPLAYER</div>
-    <h2>Pick a callsign</h2>
+    <h2 id="nameTitle">Pick a callsign</h2>
     <p>Everyone flying with you sees it over your aircraft.</p>
-    <form id="nameForm"><input id="nameIn" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="Maverick" aria-label="Callsign"><button class="btn primary" type="submit">Fly</button></form>
+    <form id="nameForm"><input id="nameIn" maxlength="16" autocomplete="nickname" spellcheck="false" placeholder="Maverick" aria-label="Callsign"><button class="btn primary" id="nameSubmit" type="submit">Fly</button><button class="btn" id="nameCancel" type="button" hidden>Cancel</button></form>
     <p id="nameErr" class="reason" hidden>Use 2 to 16 letters, numbers, spaces, - or _.</p>
   </div>
 </div>
@@ -6027,13 +6028,21 @@ async function mpConnect() {
   updateMpBar();
 }
 // the callsign: asked for on the first visit, changed by clicking the player count
-function askName() {
+function askName(change = false) {
+  const editing = change || !!MP.name;
+  setText($('#nameTitle'), editing ? 'Change callsign' : 'Pick a callsign');
+  setText($('#nameSubmit'), editing ? 'Save' : 'Fly');
+  $('#nameCancel').hidden = !editing;
   $('#nameGate').hidden = false;
   $('#nameErr').hidden = true;
   $('#nameIn').value = MP.name;
   setTimeout(() => $('#nameIn').focus(), 50);
 }
-$('#nameIn').addEventListener('keydown', e => e.stopPropagation()); // typing doesn't fly the aircraft
+$('#nameIn').addEventListener('keydown', e => {
+  e.stopPropagation(); // typing doesn't fly the aircraft
+  if (e.key === 'Escape' && MP.name) { $('#nameGate').hidden = true; $('#nameErr').hidden = true; }
+});
+$('#nameCancel').onclick = () => { $('#nameGate').hidden = true; $('#nameErr').hidden = true; };
 $('#nameForm').onsubmit = e => {
   e.preventDefault();
   const v = $('#nameIn').value.trim().replace(/\s+/g, ' ');
@@ -6043,7 +6052,8 @@ $('#nameForm').onsubmit = e => {
   $('#nameGate').hidden = true;
   if (MP.room) { updateMpBar(); mpSend('st', stateMsg()); } else if (!MP.connecting) mpConnect();
 };
-$('#mpBar').onclick = () => { if (running && !paused && !S.crashed) toast('Pause to change your callsign'); else askName(); };
+$('#pCallsign').onclick = () => askName(true);
+$('#mpBar').onclick = () => { if (running && !paused && !S.crashed) toast('Pause to change your callsign'); else askName(true); };
 if (MP.name) mpConnect(); else askName();
 
 // ---------------- loop ----------------
