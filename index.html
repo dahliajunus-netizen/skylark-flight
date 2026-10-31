@@ -5176,8 +5176,8 @@ function updateHUD() {
   const terrain = !S.onGround && !S.crashed && agl < 400 && fpm < -1600;
   const gearWarn = !S.onGround && !S.crashed && S.gearT < 0.98 && agl < 1000 && fpm < -300 && kt < 220;
   const gearOverspeed = !S.onGround && !S.crashed && S.gearOverT > 0;
-  el.warn.hidden = !(stall || terrain || gearOverspeed || gearWarn);
   const structuralOverspeed = S.wingOverT > 0 && !S.wingOverFailed;
+  el.warn.hidden = !(stall || terrain || structuralOverspeed || gearOverspeed || gearWarn);
   if (stall) { setText(el.warn, 'STALL'); el.warn.className = 'stall'; }
   else if (terrain) { setText(el.warn, 'PULL UP'); el.warn.className = 'terrain'; }
   else if (structuralOverspeed) { setText(el.warn, `STRUCTURAL OVERSPEED · CLIMB / SLOW · ${Math.max(0, Math.ceil(STRUCTURAL_OVERSPEED_SECONDS - S.wingOverT))}S`); el.warn.className = 'structural'; }
