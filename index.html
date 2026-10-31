@@ -3900,7 +3900,7 @@ function physics(dt) {
   const reach = gearOK ? GEAR + 0.4 * A.travel : !S.belly && S.gearT > 0.3 ? GEAR : parts.bellyR || GEAR * 0.45;
   const travel = gearOK || !S.belly ? A.travel : 0.12; // the belly barely gives
   const comp = g.h + reach - S.pos.y; // how far the struts are pushed in
-  const k = MASS * G / (0.4 * travel), damp = 2 * 0.55 * Math.sqrt(k * MASS);
+  const springK = MASS * G / (0.4 * travel), damperC = 2 * 0.55 * Math.sqrt(springK * MASS);
   if (comp > 0) {
     if (!S.onGround) {
       const att = attitude(), vs = v.y;
@@ -3926,7 +3926,7 @@ function physics(dt) {
       }
       S.onGround = true;
     }
-    v.y += Math.max(0, k * comp - damp * v.y) / MASS * dt;
+    v.y += Math.max(0, springK * comp - damperC * v.y) / MASS * dt;
     if (comp > travel) { // bottomed out: the strut (or the belly) is solid
       S.pos.y = g.h + reach - travel;
       if (v.y < 0) v.y = 0;
@@ -3949,7 +3949,7 @@ function physics(dt) {
     const sideSpeed = Math.hypot(sideX, sideZ);
     // Tire grip follows the load on the ground: aerodynamic lift unloads the wheels, while
     // strut compression adds normal force. This keeps braking and crosswind recovery speed-dependent.
-    const normalG = clamp(1 - Math.max(0, S.g) + Math.max(0, k * comp - damp * v.y) / (MASS * G), 0, 4);
+    const normalG = clamp(1 - Math.max(0, S.g) + Math.max(0, springK * comp - damperC * v.y) / (MASS * G), 0, 4);
     const mu = S.belly ? (g.paved ? 0.34 : 0.24) : (g.paved ? 0.78 : 0.48);
     const gripDv = mu * normalG * G * dt;
     const sideScale = sideSpeed > 1e-4 ? Math.max(0, sideSpeed - gripDv) / sideSpeed : 0;
