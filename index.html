@@ -3950,12 +3950,24 @@ function physics(dt) {
     // Tire grip follows the load on the ground: aerodynamic lift unloads the wheels, while
     // strut compression adds normal force. This keeps braking and crosswind recovery speed-dependent.
     const normalG = clamp(1 - Math.max(0, S.g) + Math.max(0, springK * comp - damperC * v.y) / (MASS * G), 0, 4);
-    const mu = S.belly ? (g.paved ? 0.34 : 0.24) : (g.paved ? 0.78 : 0.48);
+    const mu = S.belly ? (g.paved ? 0.62 : 0.48) : (g.paved ? 0.78 : 0.48);
     const gripDv = mu * normalG * G * dt;
-    const sideScale = sideSpeed > 1e-4 ? Math.max(0, sideSpeed - gripDv) / sideSpeed : 0;
-    const lx = sideX * sideScale, lz = sideZ * sideScale;
-    // Rolling resistance stays small; brakes and belly scraping use the available ground grip.
-    const rollingDv = (S.belly ? 0.035 * G : (g.paved ? 0.018 : 0.045) * G) * dt;
+    let lx, lz;
+    if (S.belly) {
+      // A sliding fuselage scrapes across its full contact patch. Apply Coulomb friction
+      // to its total ground speed and cap the load so a compressed strut cannot add extra drag.
+      const slideSpeed = Math.hypot(along, sideSpeed);
+      const scrapeDv = mu * clamp(normalG, 0, 1.5) * G * dt;
+      const slideScale = slideSpeed > 1e-4 ? Math.max(0, slideSpeed - scrapeDv) / slideSpeed : 0;
+      along *= slideScale;
+      lx = sideX * slideScale; lz = sideZ * slideScale;
+    } else {
+      const sideScale = sideSpeed > 1e-4 ? Math.max(0, sideSpeed - gripDv) / sideSpeed : 0;
+      lx = sideX * sideScale; lz = sideZ * sideScale;
+    }
+    // Rolling resistance stays small; tires brake from available grip, while the belly
+    // uses the much stronger scrape friction above.
+    const rollingDv = (g.paved ? 0.018 : 0.045) * G * dt;
     const brakeDv = S.brake && !S.belly ? mu * normalG * G * dt : 0;
     const dv = rollingDv + brakeDv;
     along = Math.abs(along) <= dv ? 0 : along - Math.sign(along) * dv;
