@@ -5569,12 +5569,29 @@ function releaseCM() {
   CM.left--; CM.cool = CM_GAP;
   axes(S.quat);
   const out = [], p = new THREE.Vector3().copy(S.pos).addScaledVector(F, -6 * A.scale).addScaledVector(U, -1);
-  for (const side of [-1, 1]) {
-    // flares kick out sideways and down and fall away burning; chaff bursts into a cloud that drops behind
-    const vf = tV.copy(S.vel).multiplyScalar(0.85).addScaledVector(R, side * 18).addScaledVector(U, -12);
-    addDecoy('', 'flare', p, vf); out.push(['f', ...mpV(p), ...mpV(vf)]);
-    const vc = tV.copy(S.vel).multiplyScalar(0.5).addScaledVector(R, side * 6).addScaledVector(U, -4);
-    addDecoy('', 'chaff', p, vc); out.push(['c', ...mpV(p), ...mpV(vc)]);
+  if (A.id === 'ac130') {
+    // Angle of Death: the gunship lays a staggered defensive curtain off its left side.
+    const port = p.clone().addScaledVector(R, -4);
+    const fan = [
+      ['f', -14, -28, 2], ['f', 10, -22, -14],
+      ['c', -9, -13, 1], ['c', 8, -8, -7]
+    ];
+    for (const [kind, forward, lateral, vertical] of fan) {
+      const origin = port.clone().addScaledVector(F, forward * 0.12).addScaledVector(U, vertical * 0.12);
+      const speed = kind === 'f' ? 0.85 : 0.5;
+      const v = tV.copy(S.vel).multiplyScalar(speed)
+        .addScaledVector(F, forward).addScaledVector(R, lateral).addScaledVector(U, vertical);
+      addDecoy('', kind === 'f' ? 'flare' : 'chaff', origin, v);
+      out.push([kind, ...mpV(origin), ...mpV(v)]);
+    }
+  } else {
+    for (const side of [-1, 1]) {
+      // Other aircraft release a symmetric pair to each side.
+      const vf = tV.copy(S.vel).multiplyScalar(0.85).addScaledVector(R, side * 18).addScaledVector(U, -12);
+      addDecoy('', 'flare', p, vf); out.push(['f', ...mpV(p), ...mpV(vf)]);
+      const vc = tV.copy(S.vel).multiplyScalar(0.5).addScaledVector(R, side * 6).addScaledVector(U, -4);
+      addDecoy('', 'chaff', p, vc); out.push(['c', ...mpV(p), ...mpV(vc)]);
+    }
   }
   mpSend('ms', { k: 'cm', d: out });
 }
