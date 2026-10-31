@@ -1778,7 +1778,7 @@ function buildExteriorLights() {
   }
 }
 const parts = { bombs: [], spoilers: [] };
-let bombTemplate = null;
+const bombTemplates = {};
 const M = (c, r = 0.6, m = 0.2) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
 const LANDING_GEAR_LEG_MAT = M('#777d83', 0.68, 0.42);
 const AIRFRAME_PAINT = {
@@ -1830,34 +1830,73 @@ function addAfterburner(side, x, y, z) {
   parts[side] = ab;
 }
 // Mk-82 500 lb bomb, nose toward -Z
-function makeBomb() {
-  const olive = M('#5a6142', 0.7, 0.1), band = M('#d8b43a', 0.6, 0.1);
+function makeBomb(kind) {
+  const specs = {
+    mk82:  { r: 0.16, body: 1.36, nose: 0.48, tail: 0.34, color: '#596348', band: '#d6bd39', fins: 0.38, bandZ: [-0.42] },
+    heavy: { r: 0.2, body: 1.72, nose: 0.63, tail: 0.42, color: '#586247', band: '#d8bf3b', fins: 0.48, bandZ: [-0.52, 0.28] },
+    fab250:{ r: 0.15, body: 1.08, nose: 0.34, tail: 0.32, color: '#4b5942', band: '#9a9b54', fins: 0.32, bandZ: [0.18] },
+    fab500:{ r: 0.195, body: 1.36, nose: 0.46, tail: 0.36, color: '#536047', band: '#a5a04b', fins: 0.4, bandZ: [-0.38, 0.32] },
+    cbu87: { r: 0.195, body: 1.42, nose: 0.26, tail: 0.42, color: '#65705b', band: '#d4c23e', fins: 0.43, bandZ: [-0.52, -0.18, 0.18, 0.48] }
+  };
+  const s = specs[kind] || specs.mk82;
+  const body = M(s.color, 0.72, 0.12), marking = M(s.band, 0.56, 0.18), dark = M('#303630', 0.58, 0.38);
   const g = new THREE.Group();
-  const part = (geo, mat, z) => { const m = new THREE.Mesh(geo, mat); m.position.z = z; m.castShadow = true; g.add(m); return m; };
-  part(tube(0.18, 0.18, 1.5), olive, 0);
-  part(tube(0.18, 0.04, 0.55), olive, -1.02);
-  part(tube(0.08, 0.18, 0.5), olive, 1.0);
-  part(tube(0.186, 0.186, 0.08), band, -0.55);
-  for (const a of [Math.PI / 4, -Math.PI / 4]) part(new THREE.BoxGeometry(0.02, 0.55, 0.36), olive, 1.15).rotation.z = a;
+  const part = (geo, mat, z, x = 0, y = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+  const shoulder = s.body * 0.5;
+  // The nose tapers forward; the rear shoulder carries a separate tail cone and fin assembly.
+  part(tube(s.r, s.r, s.body), body, 0);
+  part(tube(s.r, 0.012, s.nose), body, -(shoulder + s.nose * 0.5));
+  part(tube(s.r * 0.68, s.r, s.tail * 0.48), body, shoulder + s.tail * 0.24);
+  part(tube(s.r * 0.32, s.r * 0.68, s.tail * 0.54), dark, shoulder + s.tail * 0.75);
+  for (const z of s.bandZ) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(s.r * 1.015, kind === 'cbu87' ? 0.018 : 0.012, 6, 20), marking);
+    ring.position.z = z; ring.castShadow = true; g.add(ring);
+  }
+  // Four substantial cruciform tail fins; CBU-87's segmented bands distinguish its dispenser body.
+  const finChord = s.fins, finSpan = s.r * (kind === 'heavy' ? 3.5 : 3.1), finZ = shoulder + s.tail * 0.62;
+  for (const a of [0, Math.PI / 2]) {
+    const fin = part(new THREE.BoxGeometry(finSpan, 0.035, finChord), body, finZ);
+    fin.rotation.z = a;
+  }
+  if (kind === 'cbu87') {
+    // Reinforced dispenser collar and a darker end cap around the rear ejection assembly.
+    part(tube(s.r * 0.96, s.r * 0.96, 0.08), marking, shoulder + s.tail * 0.18);
+    part(tube(s.r * 0.34, s.r * 0.34, 0.07), dark, shoulder + s.tail * 1.0);
+  }
   return g;
 }
 // B61 nuclear bomb: slim 3.6 m white body, cruciform tail
-let nukeTemplate = null;
-function makeNuke() {
-  const body = M('#dcded8', 0.4, 0.2), dark = M('#80858a', 0.5, 0.3);
+const nukeTemplates = {};
+function makeNuke(kind) {
+  const specs = {
+    b61: { r: 0.17, body: 2.4, nose: 0.75, tail: 0.5, color: '#dcded8', band: '#b8322a', fin: 0.8 },
+    b28: { r: 0.17, body: 2.4, nose: 0.85, tail: 0.5, color: '#66705b', band: '#d0bb3b', fin: 0.9 },
+    b41: { r: 0.17, body: 2.55, nose: 0.62, tail: 0.42, color: '#646b60', band: '#d1bd37', fin: 1.0 }
+  };
+  const s = specs[kind] || specs.b61, body = M(s.color, 0.48, 0.18), dark = M('#50565a', 0.52, 0.34), marking = M(s.band, 0.58, 0.15);
   const g = new THREE.Group();
-  const part = (geo, mat, z) => { const m = new THREE.Mesh(geo, mat); m.position.z = z; m.castShadow = true; g.add(m); return m; };
-  part(tube(0.17, 0.17, 2.4), body, 0);
-  part(tube(0.17, 0.05, 0.75), body, -1.57);
-  part(tube(0.1, 0.17, 0.5), dark, 1.45);
-  part(tube(0.175, 0.175, 0.05), M('#b8322a', 0.6, 0.1), -0.9);
-  for (const a of [0, Math.PI / 2]) part(new THREE.BoxGeometry(0.02, 0.8, 0.38), dark, 1.55).rotation.z = a;
+  const part = (geo, mat, z) => { const m = new THREE.Mesh(geo, mat); m.position.z = z; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+  const shoulder = s.body * 0.5;
+  part(tube(s.r, s.r, s.body), body, 0);
+  part(tube(s.r, 0.012, s.nose), body, -(shoulder + s.nose * 0.5));
+  part(tube(s.r * 0.62, s.r, s.tail * 0.42), body, shoulder + s.tail * 0.21);
+  part(tube(s.r * 0.28, s.r * 0.62, s.tail * 0.58), dark, shoulder + s.tail * 0.71);
+  // Painted identification bands and a broad cruciform tail distinguish the nuclear casings.
+  const band = new THREE.Mesh(new THREE.TorusGeometry(s.r * 1.02, kind === 'b41' ? 0.026 : 0.018, 7, 24), marking);
+  band.position.z = kind === 'b41' ? -0.36 : -0.82; g.add(band);
+  if (kind === 'b41') {
+    const second = band.clone(); second.position.z = 0.42; g.add(second);
+  }
+  for (const a of [0, Math.PI / 2]) {
+    const fin = part(new THREE.BoxGeometry(s.fin, 0.035, s.tail * 0.9), dark, shoulder + s.tail * 0.67);
+    fin.rotation.z = a;
+  }
   return g;
 }
 function addNuke(x, y, z) {
-  if (!nukeTemplate) nukeTemplate = makeNuke();
-  const nk = nukeKind();
-  const b = nukeTemplate.clone(); b.position.set(x, y, z); b.scale.set(...nk.size);
+  const load = curLoadout(), id = load && load.nuke || 'b61', nk = nukeKind();
+  if (!nukeTemplates[id]) nukeTemplates[id] = makeNuke(id);
+  const b = nukeTemplates[id].clone(); b.position.set(x, y, z); b.scale.set(...nk.size);
   b.userData.kind = 'nuke'; b.userData.nk = nk; b.userData.internal = !!A.rig.nukeInternal;
   plane.add(b); parts.nuke = b;
 }
@@ -1891,10 +1930,10 @@ function bombBlastProfile(kind) {
 const bombMass = () => parts.bombs.reduce((t, b) => t + (b.visible ? BOMB_KINDS[b.userData.kind].kg : 0), 0);
 // positions are listed in release order, alternating sides to keep the jet balanced
 function addBombs(positions, scale = 1, internalFrom = Infinity) {
-  if (!bombTemplate) bombTemplate = makeBomb();
   positions.forEach(([x, y, z, kind], i) => {
     const k = kind || A.bombKind || 'mk82';
-    const b = bombTemplate.clone(); b.position.set(x, y, z); b.scale.setScalar(kind ? BOMB_KINDS[k].scale : scale);
+    if (!bombTemplates[k]) bombTemplates[k] = makeBomb(k);
+    const b = bombTemplates[k].clone(); b.position.set(x, y, z); b.scale.setScalar(kind ? BOMB_KINDS[k].scale : scale);
     b.userData.kind = k; b.userData.internal = i >= internalFrom;
     plane.add(b); parts.bombs.push(b);
   });
