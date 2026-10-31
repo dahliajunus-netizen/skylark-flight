@@ -1470,7 +1470,7 @@ const AC = {
     // Boeing B-52H: ~140 t plus up to 18 t of bombs, 370 m² wing, eight TF33s (~76 kN each)
     id: 'b52', mass: 140000, wing: 370, thrust: 608000, thrustAB: 0,
     CL0: 0.4, CLA: 5.0, stallA: 0.22, cd0: 0.022, k: 0.05, wave: [0.78, 0.92, 0.08],
-    gLimit: 2.0, effV: 95, rates: [0.25, 0.1, 0.35], stabRoll: 0, tailStrike: 0.15, gear: 3.4, weapons: true, gearTime: 10, mainRetract: 'in', gearTruckTilt: 13 * Math.PI / 180, gearTruckStowTilt: -5 * Math.PI / 180, travel: 0.5,
+    gLimit: 2.0, effV: 95, rates: [0.25, 0.1, 0.35], stabRoll: 0, tailStrike: 0.15, gear: 3.4, weapons: true, gearTime: 10, mainRetract: 'in', travel: 0.5,
     ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B52.gltf.json', podEngines: true,
     bombKg: 925, bombCd: 0.0004, bombName: 'MK-84', bombKind: 'heavy',
     loadouts: [{ id: 'mk84', name: '20 × MK-84', spec: '20 × MK-84 BOMBS' }, { id: 'b28', name: 'B28', nuke: 'b28', spec: 'B28 NUCLEAR · 1.45 MT' }, { id: 'b41', name: 'B41', nuke: 'b41', spec: 'B41 NUCLEAR · 25 MT' }],
@@ -1509,7 +1509,7 @@ const AC = {
     // Boeing 747-8: ~300 t at a medium weight, 554 m² wing, four GEnx-2B (~290 kN each), Mach 0.855 cruise
     id: 'b748', mass: 300000, wing: 554, thrust: 1150000, thrustAB: 0,
     CL0: 0.45, CLA: 5.2, stallA: 0.26, cd0: 0.021, k: 0.042, wave: [0.82, 0.96, 0.08],
-    gLimit: 2.5, effV: 90, rates: [0.28, 0.11, 0.42], stabRoll: 0, tailStrike: 0.17, gear: 5.5, weapons: false, gearTime: 10, mainRetract: 'in', travel: 0.5,
+    gLimit: 2.5, effV: 90, rates: [0.28, 0.11, 0.42], stabRoll: 0, tailStrike: 0.17, gear: 5.5, weapons: false, gearTime: 10, mainRetract: 'in', gearTruckTilt: 13 * Math.PI / 180, gearTruckStowTilt: -5 * Math.PI / 180, travel: 0.5,
     bodyFwd: 3.5, // the body gear (inboard of 3.5 m) folds forward into the belly; the wing gear folds inward
     centreX: 1.0, // only the nose gear is on the centreline (the body trucks' inner wheels are 1.4 m out)
     ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B747.gltf.json', podEngines: true, rig: { ab: [], bombs: [], nuke: null },
