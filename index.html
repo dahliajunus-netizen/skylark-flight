@@ -593,12 +593,12 @@ for (const rw of RUNWAYS) {
       const housing = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.0, 1.0), papiCase);
       housing.position.y = 0.55;
       unit.add(housing);
-      const lens = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.75), papiWhite);
-      lens.position.set(0, 0.55, 0.506);
+      const lens = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.95), papiWhite);
+      lens.position.set(0, 0.55, 0.62);
       unit.add(lens);
       const glow = new THREE.Sprite(papiGlowWhite);
-      glow.position.set(0, 0.55, 0.53);
-      glow.scale.set(11, 11, 1);
+      glow.position.set(0, 0.55, 0.78);
+      glow.scale.set(20, 20, 1);
       unit.add(glow);
       lens.updateWorldMatrix(true, false);
       lights.push({ mesh: lens, glow, pos: lens.getWorldPosition(new THREE.Vector3()), cutoff: papiCutoffs[i] });
@@ -613,7 +613,7 @@ function updatePapi() {
     const along = dx * sys.ux + dz * sys.uz;
     const lateral = dx * sys.rightX + dz * sys.rightZ;
     const range = Math.hypot(dx, dz);
-    const inBeam = active && along < 0 && range < 15000 && Math.abs(lateral) <= range * 0.1763;
+    const inBeam = active && along < 0 && range < 25000 && Math.abs(lateral) <= range * 0.2679;
     for (const light of sys.lights) {
       light.mesh.visible = light.glow.visible = inBeam;
       if (!inBeam) continue;
