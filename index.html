@@ -2403,7 +2403,7 @@ function checkStructure() {
     if (!z.alive || (z.kind === 'gear' && S.gearT < 0.5)) continue;
     for (const p of z.pts) {
       const from = tP.copy(p).applyQuaternion(structurePrevQuat).add(structurePrevPos);
-      const to = tQ.copy(p).applyQuaternion(S.quat).add(S.pos);
+      const to = tQV.copy(p).applyQuaternion(S.quat).add(S.pos);
       const steps = Math.min(24, Math.max(1, Math.ceil(from.distanceTo(to) / 2)));
       let bi = -1, ground = null;
       for (let step = 0; step <= steps; step++) {
@@ -2934,7 +2934,7 @@ scene.add(rubbleGroup);
 const chunkGeo = new THREE.BoxGeometry(1, 1, 1);
 chunkGeo.computeBoundingBox();
 const chunkMats = new Map();
-const mB = new THREE.Matrix4(), pB = new THREE.Vector3(), sB = new THREE.Vector3(), qI = new THREE.Quaternion(), cB = new THREE.Color(), eB = new THREE.Euler();
+const mB = new THREE.Matrix4(), pB = new THREE.Vector3(), sB = new THREE.Vector3(), qI = new THREE.Quaternion(), cB = new THREE.Color(), eB = new THREE.Euler(), tP = new THREE.Vector3(), tQV = new THREE.Vector3();
 
 function setBuilding(i, h, shade) {
   const k = i * 5;
