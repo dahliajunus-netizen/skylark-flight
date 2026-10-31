@@ -1601,8 +1601,11 @@ const aircraftPaintFor = (aircraftId, meshName, material) => {
   const name = `${meshName} ${material?.name || ''}`.toLowerCase();
   if (isAircraftDetail(name)) return material;
   // Catch named airframe panels and otherwise unnamed white body meshes; retain intentional colors and markings.
-  if (!isAirframeSurface(name) && !isWhiteMaterial(material)) return material;
-  if (!isWhiteMaterial(material)) return material;
+  // The B-52 model's body materials are not consistently named and some use white textures,
+  // so force the full non-detail airframe to gray instead of relying on its source color.
+  const forceB52Paint = aircraftId === 'b52';
+  if (!forceB52Paint && !isAirframeSurface(name) && !isWhiteMaterial(material)) return material;
+  if (!forceB52Paint && !isWhiteMaterial(material)) return material;
   return /dark|lower|underside|shadow|camouflage|camo|grey.?d|gray.?d|blue.?d/.test(name) ? paint.dark : paint.base;
 };
 const LANDING_GEAR_TIRE_MAT = M('#111111', 0.9, 0.02);
