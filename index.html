@@ -5552,7 +5552,7 @@ function endMissile(i) {
 // heat-seekers can only be fooled by flares, the radar-guided AIM-120 only by chaff, a decoy only works while it is
 // fresh, and the odds depend on decoyChance below. A missile chasing someone else ignores these decoys.
 const CM_LOAD = { f15: 30, typhoon: 30, su30: 32, a10: 30, b52: 45, ac130: 60 };
-const CM_GAP = 0.6, FLARE_LIFE = 4.5, CHAFF_LIFE = 6;
+const CM_GAP = 0.005, FLARE_LIFE = 4.5, CHAFF_LIFE = 6;
 const CM = { left: 0, cool: 0 };
 const decoys = []; // { id, owner ('' for our own), kind 'flare' | 'chaff', p, v, t, life }
 let decoySeq = 0;
