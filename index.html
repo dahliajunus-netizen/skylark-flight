@@ -1008,6 +1008,7 @@ const BASE_BOXES = [];
     cx.save(); cx.translate((i % 5) * 256 + 128, Math.floor(i / 5) * 256 + 136); cx.scale(k, 1); cx.fillText(nm, 0, 0); cx.restore();
   });
   const lights = []; // [x, z, colour]
+  const approachPoles = [], approachBars = [], approachHeads = [];
   RUNWAYS.forEach((R, ri) => {
     const r = R.rect, hl = r.hl, w = R.w, y = Y + LAYER.rwy + 0.02;
     const mk = (t, s, len, wid) => { const [x, z] = at(R, t, s); quad(paint, x, z, r.ux, r.uz, len / 2, wid / 2, y, WHITE); };
@@ -1026,14 +1027,21 @@ const BASE_BOXES = [];
       // Green threshold lights mark the runway end.
       const [tx, tz] = at(R, e * (hl + 2), 0);
       for (let sd = -w / 2; sd <= w / 2 + 0.1; sd += 4.5) lights.push([tx - r.uz * sd, tz + r.ux * sd, '#5cff7a']);
-      // A 900 m approach-light system on the extended centreline, with crossbars every 300 m.
+      // Raised approach lights sit on yellow poles that descend toward the threshold.
       for (let d = 30; d <= 900; d += 30) {
-        const [ax, az] = at(R, e * (hl + d), 0);
-        lights.push([ax, az, '#fff0ce']);
+        const [ax, az] = at(R, e * (hl + d), 0), h = 1.4 + 10.6 * d / 900;
+        approachPoles.push([ax, az, h]);
+        approachHeads.push([ax, az, Y + h + 0.35]);
       }
-      for (const d of [300, 600, 900]) for (let sd = -30; sd <= 30; sd += 10) {
-        const [ax, az] = at(R, e * (hl + d), sd);
-        lights.push([ax, az, '#fff0ce']);
+      // Yellow crossbar trusses at 300 m intervals carry their lamps above the grass.
+      for (const d of [300, 600, 900]) {
+        const [cx, cz] = at(R, e * (hl + d), 0), h = 1.4 + 10.6 * d / 900;
+        approachBars.push([cx, cz, h, -r.uz, r.ux]);
+        for (const sd of [-30, -20, -10, 10, 20, 30]) {
+          const [ax, az] = at(R, e * (hl + d), sd);
+          approachHeads.push([ax, az, Y + h + 0.35]);
+          if (Math.abs(sd) === 30) approachPoles.push([ax, az, h]);
+        }
       }
     }
     for (let t = -hl; t <= hl + 0.1; t += 60) for (const sd of [-1, 1]) { const [x, z] = at(R, t, sd * (w / 2 + 2)); lights.push([x, z, '#ffe7a8']); }
@@ -1069,6 +1077,24 @@ const BASE_BOXES = [];
   const lm = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 0.5, 0.6), new THREE.MeshBasicMaterial({ color: '#ffffff' }), lights.length);
   lights.forEach(([x, z, col], i) => { lm.setMatrixAt(i, m.makeTranslation(x, Y + 0.3, z)); lm.setColorAt(i, c.set(col)); });
   scene.add(lm);
+  // Yellow tapered supports rise toward the outer approach and carry bright white lamp heads.
+  const yellow = new THREE.MeshStandardMaterial({ color: '#d9ad2b', roughness: 0.72, metalness: 0.12 });
+  const poleMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.27, 1, 8), yellow, approachPoles.length);
+  approachPoles.forEach(([x, z, h], i) => poleMesh.setMatrixAt(i, m.compose(p.set(x, Y + h / 2, z), q.identity(), sc.set(1, h, 1))));
+  poleMesh.castShadow = poleMesh.receiveShadow = true;
+  scene.add(poleMesh);
+  const barMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.22, 0.22), yellow, approachBars.length);
+  const axisX = new THREE.Vector3(1, 0, 0), axis = new THREE.Vector3();
+  approachBars.forEach(([x, z, h, rx, rz], i) => {
+    q.setFromUnitVectors(axisX, axis.set(rx, 0, rz));
+    barMesh.setMatrixAt(i, m.compose(p.set(x, Y + h, z), q, sc.set(60, 1, 1)));
+  });
+  barMesh.castShadow = barMesh.receiveShadow = true;
+  scene.add(barMesh);
+  const headMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.58, 8, 6),
+    new THREE.MeshBasicMaterial({ color: '#fff0ce', toneMapped: false }), approachHeads.length);
+  approachHeads.forEach(([x, z, y], i) => headMesh.setMatrixAt(i, m.makeScale(1, 1, 1).setPosition(x, y, z)));
+  scene.add(headMesh);
   const dm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 }), deco.length);
   deco.forEach(([x, y, z, sx, sy, sz, col], i) => { dm.setMatrixAt(i, m.compose(p.set(x, y, z), q.identity(), sc.set(sx, sy, sz))); dm.setColorAt(i, c.set(col)); });
   dm.castShadow = dm.receiveShadow = true;
