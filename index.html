@@ -1300,16 +1300,32 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
   mat.onBeforeCompile = s => worldPosShader(s, '', `float winLit = 0.0;
 {
   vec3 n = normalize(vWN);
-  float fade = 1.0 - smoothstep(1800.0, 5000.0, distance(vWPos, cameraPosition));
+  float fade = 1.0 - smoothstep(1400.0, 4600.0, distance(vWPos, cameraPosition));
   if (abs(n.y) < 0.5 && fade > 0.0) {
     float u = abs(n.x) > 0.5 ? vWPos.z : vWPos.x;
-    float fy = fract(vWPos.y / 3.4), fu = fract(u / 2.8);
-    float win = step(0.25, fy) * step(fy, 0.8) * step(0.2, fu) * step(fu, 0.8) * step(${CITY_H + 4}.0, vWPos.y) * step(vWPos.z, ${(AB.zN - 300).toFixed(1)});
-    float r = fract(sin(dot(vec2(floor(u / 2.8), floor(vWPos.y / 3.4)), vec2(12.9898, 78.233))) * 43758.5453);
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.15, 0.19, 0.24) + r * 0.08, win * 0.8 * fade);
-    winLit = win * step(0.87, r) * fade;
-  } else if (n.y > 0.5) diffuseColor.rgb *= 0.8;
-}`, 'totalEmissiveRadiance += vec3(1.0, 0.75, 0.42) * winLit * 0.55;');
+    float fu = fract(u / 2.8), fy = fract(vWPos.y / 3.4);
+    float floorId = floor(vWPos.y / 3.4), columnId = floor(u / 2.8);
+    float r = fract(sin(dot(vec2(columnId, floorId), vec2(12.9898, 78.233))) * 43758.5453);
+    float facade = step(${CITY_H + 4}.0, vWPos.y) * step(vWPos.z, ${(AB.zN - 300).toFixed(1)});
+    float frame = step(0.08, fu) * step(fu, 0.92) * step(0.16, fy) * step(fy, 0.86);
+    float glass = step(0.15, fu) * step(fu, 0.85) * step(0.23, fy) * step(fy, 0.78);
+    float window = frame * facade;
+    float litWindow = glass * facade;
+    float slab = (1.0 - smoothstep(0.10, 0.17, fy)) * facade;
+    float pier = (1.0 - smoothstep(0.035, 0.075, fu)) * facade;
+    float storey = 1.0 - smoothstep(${CITY_H + 5}.0, ${CITY_H + 10}.0, vWPos.y);
+    vec3 glassColor = mix(vec3(0.07, 0.11, 0.15), vec3(0.16, 0.21, 0.25), r);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.39, 0.40), window * (1.0 - glass) * 0.68 * fade);
+    diffuseColor.rgb = mix(diffuseColor.rgb, glassColor, litWindow * 0.88 * fade);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.82 + vec3(0.035), slab * 0.7 * fade);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.12, pier * 0.42 * fade);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.22, 0.24, 0.25), storey * facade * 0.28 * fade);
+    winLit = litWindow * step(0.91, r) * fade;
+  } else if (n.y > 0.5) {
+    float roofGrain = fract(sin(dot(floor(vWPos.xz / 4.0), vec2(41.7, 289.3))) * 43758.5453);
+    diffuseColor.rgb *= 0.72 + roofGrain * 0.06;
+  }
+}`, 'totalEmissiveRadiance += vec3(1.0, 0.75, 0.42) * winLit * 0.7;');
   const mesh = new THREE.InstancedMesh(geo, mat, boxes.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
   boxes.forEach(([x0, z0, x1, z1, h, col], i) => {
