@@ -1114,14 +1114,21 @@ float zAt(float j) { return (j + ${f(NET.iz0)}) * ${f(BLOCK)} + floor(zLine(j).r
 const BLD = [];               // x0, z0, x1, z1, top  (5 numbers per building)
 const bCol = [];              // original colour per building
 let cityMesh = null;
+let CITY_MAX_TOP = CITY_H;
 const blockMap = new Map();   // grid square key -> building indices (a building is listed in every square it covers)
 const blockKey = (ix, iz) => ix * 100000 + iz;
 // stacked tower tiers overlap; the first listed wins, so taller (narrower) tiers are listed before the ones below them
 function buildingAt(x, z) {
   const list = blockMap.get(blockKey(Math.floor(x / BLOCK), Math.floor(z / BLOCK)));
   if (!list) return -1;
-  for (const i of list) { const k = i * 5; if (x >= BLD[k] && x <= BLD[k + 2] && z >= BLD[k + 1] && z <= BLD[k + 3]) return i; }
-  return -1;
+  let best = -1, top = -Infinity;
+  for (const i of list) {
+    const k = i * 5;
+    if (BLD[k + 4] > top && x >= BLD[k] && x <= BLD[k + 2] && z >= BLD[k + 1] && z <= BLD[k + 3]) {
+      best = i; top = BLD[k + 4];
+    }
+  }
+  return best;
 }
 const floorAt = (x, z) => { const i = buildingAt(x, z); return Math.max(heightAt(x, z), i < 0 ? -1e9 : BLD[i * 5 + 4]); };
 // outward normal of the face of building i nearest to point p
@@ -1152,6 +1159,7 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
     if (x1 - x0 < 2 || z1 - z0 < 2 || h < 0.3) return -1;
     const i = BLD.length / 5;
     BLD.push(x0, z0, x1, z1, CITY_H + h);
+    CITY_MAX_TOP = Math.max(CITY_MAX_TOP, CITY_H + h);
     boxes.push([x0, z0, x1, z1, h, pal[Math.floor(rnd() * pal.length)]]);
     for (let bx = Math.floor(x0 / BLOCK); bx <= Math.floor(x1 / BLOCK); bx++) for (let bz = Math.floor(z0 / BLOCK); bz <= Math.floor(z1 / BLOCK); bz++) {
       const key = blockKey(bx, bz);
@@ -2364,22 +2372,32 @@ function updateDamage() {
   S.dmg = { wingL: frac('wing', 'L'), wingR: frac('wing', 'R'), stab: frac('stab'), fin: frac('fin'), engL: frac('eng', 'L'), engR: frac('eng', 'R'),
     legsLost: parts.zones.filter(z => z.kind === 'gear' && !z.alive).length };
 }
+// Previous pose is saved each physics step so thin buildings cannot be skipped between frames.
+const structurePrevPos = new THREE.Vector3(), structurePrevQuat = new THREE.Quaternion();
 // returns true if the core hit something (a crash)
 function checkStructure() {
   const reach = parts.reach || 25;
-  const nearGround = !S.onGround && S.pos.y - Math.max(0, heightAt(S.pos.x, S.pos.z)) < reach + 2;
-  const nearCity = S.pos.y - reach < CITY_H + 400 && S.pos.x > CITY.x0 - reach && S.pos.x < CITY.x1 + reach && S.pos.z > CITY.z0 - reach && S.pos.z < CITY.z1 + reach;
+  const nearGround = !S.onGround && Math.min(S.pos.y, structurePrevPos.y) - Math.max(0, heightAt(S.pos.x, S.pos.z)) < reach + 2;
+  const minX = Math.min(S.pos.x, structurePrevPos.x), maxX = Math.max(S.pos.x, structurePrevPos.x);
+  const minZ = Math.min(S.pos.z, structurePrevPos.z), maxZ = Math.max(S.pos.z, structurePrevPos.z);
+  const nearCity = Math.min(S.pos.y, structurePrevPos.y) - reach < CITY_MAX_TOP &&
+    maxX > CITY.x0 - reach && minX < CITY.x1 + reach && maxZ > CITY.z0 - reach && minZ < CITY.z1 + reach;
   if (!nearGround && !nearCity) return false;
   for (const z of parts.zones) {
     if (!z.alive || (z.kind === 'gear' && S.gearT < 0.5)) continue;
     for (const p of z.pts) {
-      tC.copy(p).applyQuaternion(S.quat).add(S.pos);
+      const from = tP.copy(p).applyQuaternion(structurePrevQuat).add(structurePrevPos);
+      const to = tQ.copy(p).applyQuaternion(S.quat).add(S.pos);
+      const steps = Math.min(24, Math.max(1, Math.ceil(from.distanceTo(to) / 2)));
       let bi = -1, ground = null;
-      if (nearCity) { const b = buildingAt(tC.x, tC.z); if (b >= 0 && solidAt(b, tC.x, tC.y, tC.z)) bi = b; }
-      if (bi < 0 && nearGround && z.kind !== 'gear') {
-        const h = heightAt(tC.x, tC.z);
-        // the core gets a metre of slack so a flared landing doesn't count the tail as a terrain strike
-        if (tC.y < Math.max(h, 0) - (z.kind === 'core' ? 1.0 : 0.1)) ground = h < 0 ? 'water' : 'ground';
+      for (let step = 0; step <= steps; step++) {
+        tC.lerpVectors(from, to, step / steps);
+        if (nearCity) { const b = buildingAt(tC.x, tC.z); if (b >= 0 && solidAt(b, tC.x, tC.y, tC.z)) { bi = b; break; } }
+        if (nearGround && z.kind !== 'gear') {
+          const h = heightAt(tC.x, tC.z);
+          // the core gets a metre of slack so a flared landing doesn't count the tail as a terrain strike
+          if (tC.y < Math.max(h, 0) - (z.kind === 'core' ? 1.0 : 0.1)) { ground = h < 0 ? 'water' : 'ground'; break; }
+        }
       }
       if (bi < 0 && !ground) continue;
       if (z.kind === 'core') {
@@ -2900,7 +2918,7 @@ scene.add(rubbleGroup);
 const chunkGeo = new THREE.BoxGeometry(1, 1, 1);
 chunkGeo.computeBoundingBox();
 const chunkMats = new Map();
-const mB = new THREE.Matrix4(), pB = new THREE.Vector3(), sB = new THREE.Vector3(), qI = new THREE.Quaternion(), cB = new THREE.Color(), eB = new THREE.Euler();
+const mB = new THREE.Matrix4(), pB = new THREE.Vector3(), sB = new THREE.Vector3(), qI = new THREE.Quaternion(), cB = new THREE.Color(), eB = new THREE.Euler(), tP = new THREE.Vector3(), tQ = new THREE.Vector3();
 
 function setBuilding(i, h, shade) {
   const k = i * 5;
@@ -4133,6 +4151,7 @@ function waterPhysics(dt) {
 function physics(dt) {
   if (S.ditched) { waterPhysics(dt); return; }
   const q = S.quat, v = S.vel;
+  structurePrevPos.copy(S.pos); structurePrevQuat.copy(q);
   axes(q);
   const V = v.length();
   const vf = v.dot(F), vu = v.dot(U), vr = v.dot(R);
@@ -4225,8 +4244,8 @@ function physics(dt) {
 
   // structure: every zone of the airframe against buildings, the ground and the water
   if (parts.hasCore) {
-    if ((S.stepN = (S.stepN || 0) + 1) % 2 === 0 && checkStructure()) return;
-  } else if (S.pos.y < CITY_H + 400) {
+    if (checkStructure()) return;
+  } else if (S.pos.y < CITY_MAX_TOP + reach) {
     axes(q);
     for (const [f, r, u] of A.hitPts) {
       tC.copy(S.pos).addScaledVector(F, f).addScaledVector(R, r).addScaledVector(U, u);
