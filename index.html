@@ -1585,6 +1585,7 @@ const parts = { bombs: [], spoilers: [] };
 let bombTemplate = null;
 const M = (c, r = 0.6, m = 0.2) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
 const LANDING_GEAR_LEG_MAT = M('#777d83', 0.68, 0.42);
+const AC130_AIRFRAME_MAT = M('#585e63', 0.6, 0.15);
 const LANDING_GEAR_TIRE_MAT = M('#111111', 0.9, 0.02);
 const add = (geo, mat, x, y, z, parent = plane) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
 const extrude = (pts, t) => { const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach(p => s.lineTo(p[0], p[1])); return new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false }); };
@@ -1730,6 +1731,7 @@ function buildFromGltf(model) {
     m.castShadow = true; m.receiveShadow = true;
     m.userData.fromModel = true;
     const n = src.name.toLowerCase();
+    if (A.id === 'ac130' && /^(fuselage|wing|stabilizer|fin|sponson|centre fairing|wing tank|wing pylon tank|nacelle(?! propeller))/.test(n)) m.material = AC130_AIRFRAME_MAT;
     if (/wheel|strut|bogie/.test(n)) gear.add(m);
     else if (/bomb_bay_door/.test(n)) {
       const pivot = new THREE.Group(); pivot.position.copy(m.position); plane.add(pivot);
