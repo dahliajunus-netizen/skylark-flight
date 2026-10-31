@@ -636,9 +636,9 @@ const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 12
 
 const DAY_SECONDS = 720; // one full day-night cycle takes twelve minutes of flight time
 const SUN_DIR = new THREE.Vector3();
-const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.78);
+const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.62);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight('#ffe6c4', 1.25);
+const sun = new THREE.DirectionalLight('#ffe6c4', 1.05);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 3200 });
@@ -694,8 +694,8 @@ function updateDayNight() {
   uniforms.bottom.value.copy(SKY_DAY.bottom).lerp(SKY_NIGHT.bottom, night);
   uniforms.sunColor.value.copy(SKY_DAY.sun).lerp(SKY_NIGHT.sun, night);
   sun.color.copy(SKY_DAY.sun).lerp(SUN_WARM, 1 - smooth(-0.02, 0.4, elevation));
-  sun.intensity = 1.25 * daylight;
-  hemi.intensity = 0.78 * (0.16 + daylight * 0.84);
+  sun.intensity = 1.05 * daylight;
+  hemi.intensity = 0.62 * (0.2 + daylight * 0.8);
   HORIZON.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
   scene.fog.color.copy(HORIZON);
   uniforms.sunDir.value.copy(SUN_DIR);
@@ -1717,7 +1717,7 @@ const gsEl = {};
 let A = AC.f15, GEAR = A.gear;
 const plane = new THREE.Group();
 const AIRLINER_IDS = new Set(['b757', 'b748', 'concorde']);
-const NVG_FILTER = 'grayscale(1) sepia(1) hue-rotate(65deg) saturate(5) brightness(1.5) contrast(1.18)';
+const NVG_FILTER = 'grayscale(1) sepia(1) hue-rotate(65deg) saturate(3.8) brightness(1.12) contrast(1.12)';
 let nvgOn = false, exteriorLightsOn = false, exteriorLightGroup = null;
 const isAirliner = () => AIRLINER_IDS.has(A.id);
 function applyCanvasFilter() {
