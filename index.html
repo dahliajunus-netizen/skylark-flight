@@ -2999,6 +2999,7 @@ scene.add(cellMesh);
 const cellOwner = new Int32Array(CELL_CAP), cellIdx = new Int32Array(CELL_CAP);
 const conv = new Map(), dirtyCells = new Set(), fallingBlocks = [];
 const zeroM = new THREE.Matrix4().makeScale(0, 0, 0), cTmp = new THREE.Vector3(), dTmp = new THREE.Vector3();
+const cDamage = new THREE.Color('#493c35');
 let cellsChanged = false;
 
 function cellCenter(B, c, out) {
@@ -3018,14 +3019,17 @@ function cellAt(B, x, y, z) {
 function convertBuilding(i) {
   const k = i * 5, w = BLD[k + 2] - BLD[k], d = BLD[k + 3] - BLD[k + 1], h = BLD[k + 4] - CITY_H;
   if (h < 1) return null;
-  let nx = Math.max(1, Math.round(w / 5)), nz = Math.max(1, Math.round(d / 5)), ny = Math.max(1, Math.round(h / (h > 40 ? 6.8 : 3.4)));
+  // Smaller floor-sized cells leave jagged breaches and partial floor failures instead of 5 m cube holes.
+  let nx = Math.max(1, Math.round(w / 3.5)), nz = Math.max(1, Math.round(d / 3.5)), ny = Math.max(1, Math.round(h / 3.4));
   while (nx * ny * nz > 3500) { nx = Math.max(1, Math.round(nx * 0.8)); nz = Math.max(1, Math.round(nz * 0.8)); ny = Math.max(1, Math.round(ny * 0.85)); }
   const N = nx * ny * nz;
   if (cellMesh.count + N > CELL_CAP) return null; // out of budget: the caller falls back to whole-building damage
   const B = { i, nx, ny, nz, cx: w / nx, cy: h / ny, cz: d / nz, x0: BLD[k], z0: BLD[k + 1], lost: 0,
     alive: new Uint8Array(N).fill(1), hp: new Float32Array(N), inst: new Int32Array(N) };
-  B.hp.fill(4 + B.cx * B.cy * B.cz / 250); // about 5 cannon rounds for a 5 m cell, more for big tower cells
+  B.hpMax = 4 + B.cx * B.cy * B.cz / 250;
+  B.hp.fill(B.hpMax);
   cB.fromArray(cityMesh.instanceColor.array, i * 3); // keep any scorching it already has
+  B.paint = cB.clone();
   for (let c = 0; c < N; c++) {
     const slot = cellMesh.count++;
     cellOwner[slot] = i; cellIdx[slot] = c; B.inst[c] = slot;
@@ -3104,6 +3108,12 @@ function damageAt(i, p, radius, power) {
     if (d > radius) continue;
     B.hp[c] -= power * (1 - 0.8 * d / radius);
     if (B.hp[c] <= 0) { crumbleCell(B, c, removed < 8); removed++; }
+    else {
+      // Exposed cells darken progressively from blast soot and structural spalling.
+      const damage = 1 - B.hp[c] / B.hpMax;
+      cellMesh.setColorAt(B.inst[c], cB.copy(B.paint).lerp(cDamage, damage * 0.72));
+      cellsChanged = true;
+    }
   }
   if (removed) dirtyCells.add(i);
 }
