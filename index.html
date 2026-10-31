@@ -1585,7 +1585,26 @@ const parts = { bombs: [], spoilers: [] };
 let bombTemplate = null;
 const M = (c, r = 0.6, m = 0.2) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
 const LANDING_GEAR_LEG_MAT = M('#777d83', 0.68, 0.42);
-const AC130_AIRFRAME_MAT = M('#585e63', 0.6, 0.15);
+const AIRFRAME_PAINT = {
+  ac130: { base: M('#585e63', 0.6, 0.15), dark: M('#43484c', 0.62, 0.12) },
+  f15: { base: M('#777c82', 0.58, 0.18), dark: M('#555b62', 0.6, 0.16) }, // Mod Eagle gray
+  typhoon: { base: M('#737b81', 0.58, 0.18), dark: M('#626a71', 0.6, 0.16) },
+  su30: { base: M('#718096', 0.58, 0.18), dark: M('#53647c', 0.6, 0.16) }, // blue-gray scheme
+  b52: { base: M('#62696f', 0.62, 0.14), dark: M('#50575d', 0.64, 0.12) }
+};
+const isAirframeSurface = name => /fuselage|body|wing|stabil|fin|sponson|fairing|tank|nacelle|flap|aileron|rudder|elevator|canard|pylon|tail|engine.?cowling|airframe/.test(name);
+const isAircraftDetail = name => /glass|window|windscreen|canopy|radome|nose.?cone|tire|tyre|rubber|wheel|strut|bogie|rim|hub|brake|axle|propeller|spinner|exhaust|nozzle|engine.?face|intake.?lip|antenna|probe|gun|barrel|missile|bomb|weapon|light/.test(name);
+const isWhiteMaterial = mat => !!mat?.color && mat.color.r > 0.78 && mat.color.g > 0.78 && mat.color.b > 0.78;
+const aircraftPaintFor = (aircraftId, meshName, material) => {
+  const paint = AIRFRAME_PAINT[aircraftId];
+  if (!paint) return material;
+  const name = `${meshName} ${material?.name || ''}`.toLowerCase();
+  if (isAircraftDetail(name)) return material;
+  // Catch named airframe panels and otherwise unnamed white body meshes; retain intentional colors and markings.
+  if (!isAirframeSurface(name) && !isWhiteMaterial(material)) return material;
+  if (!isWhiteMaterial(material)) return material;
+  return /dark|lower|underside|shadow|camouflage|camo|grey.?d|gray.?d|blue.?d/.test(name) ? paint.dark : paint.base;
+};
 const LANDING_GEAR_TIRE_MAT = M('#111111', 0.9, 0.02);
 const DAMAGE_SCORCH_MAT = new THREE.MeshBasicMaterial({ color: '#302b27', transparent: true, opacity: 0.78, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 });
 const DAMAGE_HOLE_MAT = new THREE.MeshBasicMaterial({ color: '#101112', side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3 });
@@ -1732,8 +1751,12 @@ function buildFromGltf(model) {
     m4.multiplyMatrices(turn, src.matrixWorld).decompose(m.position, m.quaternion, m.scale);
     m.castShadow = true; m.receiveShadow = true;
     m.userData.fromModel = true;
-    const n = src.name.toLowerCase();
-    if (A.id === 'ac130' && /^(fuselage|wing|stabilizer|fin|sponson|centre fairing|wing tank|wing pylon tank|nacelle(?! propeller))/.test(n)) m.material = AC130_AIRFRAME_MAT;
+    const n = (src.name || '').toLowerCase();
+    if (AIRFRAME_PAINT[A.id]) {
+      const sourceMaterials = Array.isArray(src.material) ? src.material : [src.material];
+      const paintedMaterials = sourceMaterials.map(material => aircraftPaintFor(A.id, n, material));
+      m.material = Array.isArray(src.material) ? paintedMaterials : paintedMaterials[0];
+    }
     if (/wheel|strut|bogie/.test(n)) gear.add(m);
     else if (/bomb_bay_door/.test(n)) {
       const pivot = new THREE.Group(); pivot.position.copy(m.position); plane.add(pivot);
