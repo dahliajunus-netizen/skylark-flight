@@ -2625,6 +2625,9 @@ function buildWreck(mode, wet, n, building) {
   axes(S.quat);
   const V = S.vel.length(), vn = Math.max(0, -S.vel.dot(n));
   const omega = new THREE.Vector3().addScaledVector(R, S.ang.x).addScaledVector(U, -S.ang.y).addScaledVector(F, S.ang.z);
+  const impactDir = S.vel.clone();
+  if (impactDir.lengthSq() < 1) impactDir.copy(F);
+  impactDir.normalize();
   const iGear = plane.children.indexOf(parts.gear), iAb = [parts.abL, parts.abR, parts.abL2, parts.abR2].filter(Boolean).map(o => plane.children.indexOf(o));
   plane.updateMatrixWorld(true);
   const wreck = plane.clone();
@@ -2639,14 +2642,29 @@ function buildWreck(mode, wet, n, building) {
     tR.subVectors(p.obj.position, S.pos);
     p.v.copy(S.vel).add(tV.crossVectors(omega, tR));
     if (scatter) {
-      // the surface (ground or wall, normal n) absorbs most of the impact; what's left sprays back out
-      const into = p.v.dot(n);
-      if (into < 0) p.v.addScaledVector(n, -into * (1 + rr([0.1, 0.4])));
-      const keep = clamp(1 - vn / 60, 0.15, 0.7) * rr([0.6, 1]);
-      tV.copy(n).multiplyScalar(p.v.dot(n));
-      p.v.sub(tV).multiplyScalar(keep).add(tV);
-      tA.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).addScaledVector(n, rr([0.5, 1.2])).normalize();
-      p.v.addScaledVector(tA, (4 + vn * 0.8) * Math.random() / (0.6 + p.size * 0.08));
+      if (building) {
+        // A wall absorbs impact energy, but fragments keep the aircraft's forward momentum instead of bouncing backward.
+        const along = p.v.dot(impactDir);
+        tV.copy(p.v).addScaledVector(impactDir, -along);
+        const keep = clamp(1 - vn / 180, 0.28, 0.78) * rr([0.85, 1]);
+        p.v.copy(impactDir).multiplyScalar(Math.max(Math.max(0, along) * keep, vn * 0.32));
+        p.v.addScaledVector(tV, keep * 0.65);
+        tA.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).addScaledVector(impactDir, -tA.dot(impactDir));
+        if (tA.lengthSq() < 0.01) tA.set(impactDir.z, 0, -impactDir.x);
+        if (tA.lengthSq() < 0.01) tA.set(1, 0, 0);
+        tA.y += 0.25; tA.normalize();
+        const spread = (4 + vn * 0.25) * Math.random() / (0.6 + p.size * 0.08);
+        p.v.addScaledVector(tA, spread).addScaledVector(impactDir, (2 + vn * 0.1) * Math.random() / (0.6 + p.size * 0.08));
+      } else {
+        // Ground and water impacts still bounce their normal velocity away from the surface.
+        const into = p.v.dot(n);
+        if (into < 0) p.v.addScaledVector(n, -into * (1 + rr([0.1, 0.4])));
+        const keep = clamp(1 - vn / 60, 0.15, 0.7) * rr([0.6, 1]);
+        tV.copy(n).multiplyScalar(p.v.dot(n));
+        p.v.sub(tV).multiplyScalar(keep).add(tV);
+        tA.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).addScaledVector(n, rr([0.5, 1.2])).normalize();
+        p.v.addScaledVector(tA, (4 + vn * 0.8) * Math.random() / (0.6 + p.size * 0.08));
+      }
       p.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2 * (3 + V / 25) / (0.5 + p.size * 0.15));
     } else {
       p.v.y = Math.max(0, -p.v.y * 0.1);
