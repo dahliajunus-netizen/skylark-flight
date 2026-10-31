@@ -276,7 +276,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="vote" class="glass" hidden><span id="voteText"></span><button class="pickb" id="voteYes" aria-pressed="false">Yes <kbd>Y</kbd></button><button class="pickb" id="voteNo" aria-pressed="false">No</button></div>
 
 <div class="tools" id="tools" hidden>
-  <button class="tbtn" id="bBombCam" title="Hold to follow your last bomb">BOMB CAM<kbd>Z</kbd></button>
+  <button class="tbtn" id="bBombCam" title="Hold to follow your last bomb or missile">BOMB CAM<kbd>Z</kbd></button>
   <button class="tbtn" id="bGs" hidden>GUNSHIP CAM<kbd>V</kbd></button>
   <button class="tbtn" id="bUi">HIDE UI<kbd>U</kbd></button>
   <button class="tbtn" id="bCam">CAM<kbd>C</kbd></button>
@@ -323,7 +323,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
       <dt>K</dt><dd>Countermeasures: one salvo of flares and chaff (not on the airliners)</dd>
       <dt>1 · 2</dt><dd>Air-to-air weapon: gun (with a radar lock, the orange circle shows the gun lead) or missiles</dd>
-      <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb down and watch it go off; hold the right mouse and drag to look around it</dd>
+      <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb or missile and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
       <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
       <dt>Enter</dt><dd>Chat with the other players (Enter sends, Esc closes)</dd>
@@ -337,7 +337,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>Right slider</dt><dd>Throttle (top 15% is afterburner)</dd>
       <dt>Brake · Gear</dt><dd>Hold to brake; tap to raise or lower the gear</dd>
       <dt>Gun · Bomb · Nuke</dt><dd>Hold GUN to fire the cannon; tap BOMB to drop one on the magenta marker; with a nuclear loadout (B61, B28 or B41), tap its button for the nuke (get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41)</dd>
-      <dt>Bomb cam</dt><dd>Hold BOMB CAM to follow your last bomb down</dd>
+      <dt>Bomb cam</dt><dd>Hold BOMB CAM to follow your last bomb or missile</dd>
     </dl>
     <p style="font-size:13px;color:var(--dim)" id="acTip"></p>
   </div>
@@ -3754,10 +3754,11 @@ function nukeBoom(dist, killR) {
 }
 
 // ---------------- bomb camera ----------------
-// Hold Z (or the BOMB CAM button): follow the latest bomb down, then watch where it went off.
+// Hold Z (or the BOMB CAM button): follow the latest bomb or missile, then watch the impact.
 const bombCam = { btn: false, mode: '', ang: 0, free: '' }; // free: the mode the free-look orbit was last set up for
 function bombCamTarget() {
   for (let i = bombsFlying.length - 1; i >= 0; i--) if (bombsFlying[i].kind === 'nuke') return bombsFlying[i];
+  if (missiles.length) return missiles[missiles.length - 1];
   for (let i = bombsFlying.length - 1; i >= 0; i--) if (bombsFlying[i].kind !== 'shell') return bombsFlying[i]; // not the gunship's shells
   if (lastImpact && clockNow() - lastImpact.t < (lastImpact.nuke ? lastImpact.life : 12)) return lastImpact;
   return null;
@@ -4204,7 +4205,7 @@ addEventListener('keydown', e => {
   else if (k === 'k') releaseCM();
   else if ((k === '1' || k === '2') && !A.gunship) selectAA(k === '1' ? 'gun' : 'msl');
   else if (k === 'n') dropNuke();
-  else if (k === 'z' && running && !bombCamTarget()) toast('Nothing to watch yet: drop a bomb first');
+  else if (k === 'z' && running && !bombCamTarget()) toast('Nothing to watch yet: drop a bomb or fire a missile first');
   else if (k === 'u') toggleUI();
   else if (k === 'enter' && S.crashed && running) start(lastMode);
 });
@@ -4367,7 +4368,7 @@ $('#tCm').addEventListener('pointerdown', () => releaseCM());
 $('#tHiG').addEventListener('pointerdown', () => { touchIn.hiG = true; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('#tHiG').addEventListener(ev, () => { touchIn.hiG = false; });
 const bBombCam = $('#bBombCam');
-bBombCam.addEventListener('pointerdown', e => { bombCam.btn = true; if (!bombCamTarget()) toast('Nothing to watch yet: drop a bomb first'); try { bBombCam.setPointerCapture(e.pointerId); } catch (err) {} });
+bBombCam.addEventListener('pointerdown', e => { bombCam.btn = true; if (!bombCamTarget()) toast('Nothing to watch yet: drop a bomb or fire a missile first'); try { bBombCam.setPointerCapture(e.pointerId); } catch (err) {} });
 for (const ev of ['pointerup', 'pointercancel']) bBombCam.addEventListener(ev, () => { bombCam.btn = false; });
 addEventListener('blur', () => { bombCam.btn = false; });
 
@@ -5288,7 +5289,7 @@ function updateMissiles(dt) {
       // chasing a decoy: same guidance, and it bursts harmlessly when it reaches it
       _mr.subVectors(D.p, m.pos);
       const dist = _mr.length();
-      if (dist < K.R * 0.5) { explode(m.pos, 0.5, false); endMissile(i); continue; }
+      if (dist < K.R * 0.5) { lastImpact = { p: m.pos.clone(), t: clockNow(), nuke: false }; explode(m.pos, 0.5, false); endMissile(i); continue; }
       _mv.subVectors(m.vel, D.v);
       _mo.crossVectors(_mr, _mv.negate()).divideScalar(dist * dist);
       _mc.crossVectors(_mo, m.vel).multiplyScalar(4);
@@ -5308,7 +5309,9 @@ function updateMissiles(dt) {
         _mc.subVectors(m.pos, P.obj.position).addScaledVector(_mv, tc); // missile relative to target, at the burst
         const local = _mo.copy(_mc).applyQuaternion(_mq.copy(P.obj.quaternion).invert());
         mpSend('ms', { k: 'hit', id: m.id, o: mpV(local), R: K.R, n: K.name }, P.id);
-        explode(_mc.add(P.obj.position), 0.7, false);
+        const impact = _mc.clone().add(P.obj.position);
+        lastImpact = { p: impact.clone(), t: clockNow(), nuke: false };
+        explode(impact, 0.7, false);
         m.target = null; endMissile(i); continue;
       }
       m.lastD = dist;
@@ -5332,10 +5335,11 @@ function updateMissiles(dt) {
     // the ground, the sea or a building
     const h = heightAt(m.pos.x, m.pos.z), bi = buildingAt(m.pos.x, m.pos.z);
     if (m.pos.y <= Math.max(h, 0) || (bi >= 0 && solidAt(bi, m.pos.x, m.pos.y, m.pos.z))) {
+      lastImpact = { p: m.pos.clone(), t: clockNow(), nuke: false };
       explode(m.pos, 0.6, h < 0); blast(m.pos, 8, 300);
       endMissile(i); continue;
     }
-    if (m.t > K.life) { explode(m.pos, 0.4, false); endMissile(i); }
+    if (m.t > K.life) { lastImpact = { p: m.pos.clone(), t: clockNow(), nuke: false }; explode(m.pos, 0.4, false); endMissile(i); }
   }
 }
 function clearMissiles() {
