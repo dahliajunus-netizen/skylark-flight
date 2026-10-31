@@ -4286,7 +4286,7 @@ function physics(dt) {
   if (!S.belly && S.gearT > 0.3 && parts.gearLegs.length) {
     // Keep the actual lowest wheel on the surface as pitch and the truck-tilt animation move the gear below the fuselage.
     const gearK = S.gearT * S.gearT * (3 - 2 * S.gearT), gearA = (1 - gearK) * Math.PI / 2;
-    const stroke = -0.4 * A.travel + (gearOK ? S.gearComp : 0);
+    const stroke = -0.4 * A.travel; // use the uncompressed strut here; gearComp is applied by the spring response below
     let lowest = Infinity, reference = Infinity;
     for (const L of parts.gearLegs) {
       reference = Math.min(reference, L.truckFootY - 0.4 * A.travel);
