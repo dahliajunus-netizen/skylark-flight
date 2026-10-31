@@ -4029,6 +4029,10 @@ function crash(msg) {
   const building = S.hitBuilding >= 0;
   const n = building ? wallNormal(S.hitBuilding, S.hitPoint, new THREE.Vector3()) : new THREE.Vector3(0, 1, 0);
   const V = S.vel.length(), vn = Math.max(0, -S.vel.dot(n));
+  // Structural crash damage follows normal kinetic energy (1/2 m v²): a 100 kt impact is
+  // localized, while a Mach 1 impact carries roughly forty times the energy for the same aircraft.
+  const impactEnergy = building ? clamp((A.mass / 26000) * (vn / 100) ** 2, 0.025, 40) : 1;
+  const crashBlastRadius = building ? clamp(0.2 + 0.22 * Math.sqrt(impactEnergy), 0.2, 1.8) : 1;
   const wet = !building && heightAt(S.pos.x, S.pos.z) < 0;
   // shallow, slow impacts leave the airframe in one piece and it skids; anything harder breaks it up
   const gentle = !building && vn < 7 && V < (wet ? 70 : 115);
@@ -4038,8 +4042,15 @@ function crash(msg) {
   plane.visible = false;
   // the impact (and any bombs still on the pylons) wrecks what's around it
   if (!wet) {
-    if (building) hitAt(S.hitBuilding, S.hitPoint, 8 * A.scale, 30); // punches a hole where it went in
-    if (!gentle || S.bombs > 0) blast(W.site, A.crashBlast[0] + S.bombs * 6, A.crashBlast[1] + S.bombs * 900);
+    if (building) {
+      const breachRadius = (3 + 2.5 * Math.sqrt(impactEnergy)) * A.scale;
+      hitAt(S.hitBuilding, S.hitPoint, breachRadius, 4 * impactEnergy);
+    }
+    if (!gentle || S.bombs > 0) {
+      const crashRadius = A.crashBlast[0] * crashBlastRadius + S.bombs * 6;
+      const crashPower = A.crashBlast[1] * impactEnergy + S.bombs * 900;
+      blast(W.site, crashRadius, crashPower);
+    }
     if (S.bombs > 0) explode(W.site, 1 + S.bombs * 0.25, false);
   }
   $('#reason').textContent = `${msg} Impact at ${Math.round(V * 1.94384)} kt.`;
