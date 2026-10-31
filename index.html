@@ -637,8 +637,8 @@ const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 12
 
 const DAY_SECONDS = 720; // one full day-night cycle takes twelve minutes of flight time
 const SUN_DIR = new THREE.Vector3();
-scene.add(new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.78));
-const hemi = scene.children[scene.children.length - 1];
+const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.78);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffe6c4', 1.25);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
@@ -650,6 +650,7 @@ scene.add(sun, sun.target);
 // Day and night sky palettes blend through a short dawn and dusk.
 const SKY_DAY = { top: new THREE.Color('#3474b4'), horizon: new THREE.Color('#d9e3e2'), bottom: new THREE.Color('#aebcba'), sun: new THREE.Color('#fff0d3') };
 const SKY_NIGHT = { top: new THREE.Color('#07142c'), horizon: new THREE.Color('#263448'), bottom: new THREE.Color('#111923'), sun: new THREE.Color('#ffd4a0') };
+const SUN_WARM = new THREE.Color('#ffb16e');
 const sky = new THREE.Mesh(
   new THREE.SphereGeometry(20000, 48, 24),
   new THREE.ShaderMaterial({
@@ -693,7 +694,7 @@ function updateDayNight() {
   uniforms.horizon.value.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
   uniforms.bottom.value.copy(SKY_DAY.bottom).lerp(SKY_NIGHT.bottom, night);
   uniforms.sunColor.value.copy(SKY_DAY.sun).lerp(SKY_NIGHT.sun, night);
-  sun.color.copy(SKY_DAY.sun).lerp(new THREE.Color('#ffb16e'), 1 - smooth(-0.02, 0.4, elevation));
+  sun.color.copy(SKY_DAY.sun).lerp(SUN_WARM, 1 - smooth(-0.02, 0.4, elevation));
   sun.intensity = 1.25 * daylight;
   hemi.intensity = 0.78 * (0.16 + daylight * 0.84);
   HORIZON.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
