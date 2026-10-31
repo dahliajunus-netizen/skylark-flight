@@ -3900,6 +3900,7 @@ function physics(dt) {
   const reach = gearOK ? GEAR + 0.4 * A.travel : !S.belly && S.gearT > 0.3 ? GEAR : parts.bellyR || GEAR * 0.45;
   const travel = gearOK || !S.belly ? A.travel : 0.12; // the belly barely gives
   const comp = g.h + reach - S.pos.y; // how far the struts are pushed in
+  const k = MASS * G / (0.4 * travel), damp = 2 * 0.55 * Math.sqrt(k * MASS);
   if (comp > 0) {
     if (!S.onGround) {
       const att = attitude(), vs = v.y;
@@ -3925,7 +3926,6 @@ function physics(dt) {
       }
       S.onGround = true;
     }
-    const k = MASS * G / (0.4 * travel), damp = 2 * 0.55 * Math.sqrt(k * MASS);
     v.y += Math.max(0, k * comp - damp * v.y) / MASS * dt;
     if (comp > travel) { // bottomed out: the strut (or the belly) is solid
       S.pos.y = g.h + reach - travel;
