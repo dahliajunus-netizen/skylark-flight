@@ -1658,6 +1658,7 @@ function bombBlastProfile(kind) {
   const relativeYield = b.tntKg / BOMB_KINDS.mk82.tntKg;
   return {
     visual: 0.55 * Math.pow(relativeYield, 0.4),
+    fireball: 7 * Math.pow(relativeYield, 0.4),
     radius: 31 * Math.cbrt(relativeYield),
     power: b.power
   };
@@ -3207,25 +3208,73 @@ function blastPlane(p, R, from) {
     } else if (bd < R) ripZone(z, best, tC.copy(best).applyQuaternion(S.quat).add(S.pos));
   }
 }
-function explode(p, k, wet, remote = false) {
+function explode(p, k, wet, remote = false, scaleSpread = false) {
   if (!remote) mpFx({ k: 'e', p: mpV(p), s: k, w: wet ? 1 : 0 });
+  const spread = scaleSpread ? k : 1;
   if (wet) {
-    for (let i = 0; i < 130 * k; i++) emit('splash', p, (Math.random() - 0.5) * 16, rr([15, 60]) * k, (Math.random() - 0.5) * 16, 1.3 * k);
-    for (let i = 0; i < 20; i++) emit('steam', p, (Math.random() - 0.5) * 8, 3, (Math.random() - 0.5) * 8, k);
+    for (let i = 0; i < 130 * k; i++) emit('splash', p, (Math.random() - 0.5) * 16 * spread, rr([15, 60]) * k, (Math.random() - 0.5) * 16 * spread, 1.3 * k);
+    for (let i = 0; i < 20; i++) emit('steam', p, (Math.random() - 0.5) * 8 * spread, 3 * spread, (Math.random() - 0.5) * 8 * spread, k);
   } else {
     for (let i = 0; i < 110 * k; i++) {
       tA.set(Math.random() - 0.5, rr([0, 0.9]), Math.random() - 0.5).normalize().multiplyScalar(rr([6, 40]) * k);
       emit('fire', p, tA.x, tA.y, tA.z, 2 * k);
     }
-    for (let i = 0; i < 40; i++) emit('smoke', p, (Math.random() - 0.5) * 16, rr([4, 14]), (Math.random() - 0.5) * 16, 1.5 * k);
-    for (let i = 0; i < 50; i++) { const a = Math.random() * Math.PI * 2, s = rr([10, 35]); emit('dust', p, Math.cos(a) * s, rr([2, 8]), Math.sin(a) * s, 1.6 * k); }
-    for (let i = 0; i < 40; i++) emit('spark', p, (Math.random() - 0.5) * 60, rr([20, 60]), (Math.random() - 0.5) * 60);
+    for (let i = 0; i < 40; i++) emit('smoke', p, (Math.random() - 0.5) * 16 * spread, rr([4, 14]) * spread, (Math.random() - 0.5) * 16 * spread, 1.5 * k);
+    for (let i = 0; i < 50; i++) { const a = Math.random() * Math.PI * 2, s = rr([10, 35]) * spread; emit('dust', p, Math.cos(a) * s, rr([2, 8]) * spread, Math.sin(a) * s, 1.6 * k); }
+    for (let i = 0; i < 40; i++) emit('spark', p, (Math.random() - 0.5) * 60 * spread, rr([20, 60]) * spread, (Math.random() - 0.5) * 60 * spread, scaleSpread ? k : 1);
   }
   boomLight.position.copy(p).y += 8;
   boomLight.intensity = Math.max(boomLight.intensity, 10 * k);
   const dist = camera.position.distanceTo(p);
   W.shake = Math.max(W.shake, 2.5 * k * clamp(1 - dist / 1800, 0, 1));
   setTimeout(() => boom(k * 400 / (400 + dist), wet), dist / 340 * 1000); // sound arrives late from far away
+}
+
+// Short-lived surface-burst visuals for conventional bombs: a compact fireball and a fast ground-level dust front.
+const bombBurstGeo = new THREE.SphereGeometry(1, 20, 14);
+const bombDustRingGeo = new THREE.RingGeometry(0.9, 1, 64);
+const bombBursts = [];
+function clearBombBursts() {
+  for (const fx of bombBursts) {
+    scene.remove(fx.ball, fx.ring);
+    fx.ball.material.dispose();
+    fx.ring.material.dispose();
+  }
+  bombBursts.length = 0;
+}
+function bombExplosion(p, kind, wet, remote = false) {
+  const profile = bombBlastProfile(kind);
+  if (!remote) mpFx({ k: 'e', p: mpV(p), s: profile.visual, w: wet ? 1 : 0, b: kind });
+  // The shared particle system supplies the debris, smoke, flash lighting, sound and camera shake.
+  explode(p, profile.visual, wet, true, true);
+  if (wet) return; // water impacts use the scaled splash and steam plume instead of a land fireball.
+  const ballMat = new THREE.MeshBasicMaterial({ color: '#ffb34e', transparent: true, opacity: 1, depthWrite: false, fog: false });
+  const ringMat = new THREE.MeshBasicMaterial({ color: '#d2b08b', transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const ball = new THREE.Mesh(bombBurstGeo, ballMat);
+  const ring = new THREE.Mesh(bombDustRingGeo, ringMat);
+  ball.position.copy(p);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(p.x, Math.max(0, heightAt(p.x, p.z)) + 0.35, p.z);
+  scene.add(ball, ring);
+  bombBursts.push({ ball, ring, p: p.clone(), fireball: profile.fireball, radius: profile.radius, t: 0 });
+}
+function updateBombBursts(dt) {
+  for (let i = bombBursts.length - 1; i >= 0; i--) {
+    const fx = bombBursts[i], t = (fx.t += dt);
+    const grow = clamp(t / 0.16, 0, 1);
+    fx.ball.scale.setScalar(fx.fireball * (0.08 + 0.92 * grow));
+    fx.ball.position.y = fx.p.y + fx.fireball * 0.12 * grow;
+    fx.ball.material.opacity = clamp(1 - t / 0.58, 0, 1);
+    const front = clamp(t / 0.72, 0, 1);
+    fx.ring.scale.setScalar(Math.max(0.001, fx.radius * front));
+    fx.ring.material.opacity = 0.55 * clamp(1 - t / 1.05, 0, 1);
+    if (t >= 1.05) {
+      scene.remove(fx.ball, fx.ring);
+      fx.ball.material.dispose();
+      fx.ring.material.dispose();
+      bombBursts.splice(i, 1);
+    }
+  }
 }
 
 // ---------------- M61 cannon ----------------
@@ -3575,7 +3624,7 @@ function updateBombs(dt) {
       if (B.kind === 'shell') { explode(p, 0.55, hit === 'water'); blast(p, hit === 'water' ? 8 : 14, 520); continue; } // 105 mm HE, ~2 kg of Comp B
       // Mk-82, Mk-84, FAB-250 or FAB-500 (BOMB_KINDS)
       const fx = bombBlastProfile(B.kind);
-      explode(p, fx.visual, hit === 'water'); blast(p, hit === 'water' ? fx.radius * 0.55 : fx.radius, fx.power);
+      bombExplosion(p, B.kind, hit === 'water'); blast(p, hit === 'water' ? fx.radius * 0.55 : fx.radius, fx.power);
       lastImpact = { p, t: clockNow(), nuke: false };
       continue;
     }
@@ -3601,6 +3650,7 @@ function clearWeapons() {
   parts.bombs.forEach(b => { b.visible = true; });
   if (parts.nuke) parts.nuke.visible = true;
   clearMissiles();
+  clearBombBursts();
   lastImpact = null;
 }
 function updateWeapons(dt) {
@@ -5485,7 +5535,13 @@ function applyFx(ev, P, replay) {
   if (!ev || typeof ev !== 'object') return;
   const p = ev.k === 'h' ? null : vec(ev.p);
   if (ev.k === 'b' && p && num(ev.R, 400) && num(ev.pw, 1e5)) { MP.blastBy = P ? P.name : ''; blast(p, ev.R, ev.pw, replay ? 'replay' : 'remote'); }
-  else if (ev.k === 'e' && p && num(ev.s, 10)) { if (!replay) explode(p, ev.s, !!ev.w, true); return; }
+  else if (ev.k === 'e' && p && num(ev.s, 10)) {
+    if (!replay) {
+      if (typeof ev.b === 'string' && BOMB_KINDS[ev.b]) bombExplosion(p, ev.b, !!ev.w, true);
+      else explode(p, ev.s, !!ev.w, true);
+    }
+    return;
+  }
   else if (ev.k === 'n' && p && NUKE_KINDS.hasOwnProperty(ev.id)) {
     const nk = NUKE_KINDS[ev.id];
     if (replay) nukeDamage(p, nk);
@@ -5978,7 +6034,7 @@ function frame(now) {
     S.time += dt;
   } else acc = 0;
   if (running && !paused && !S.ditched) updateWeapons(dt);
-  if (!paused) { updateCity(dt); updateNukes(dt); }
+  if (!paused) { updateCity(dt); updateNukes(dt); updateBombBursts(dt); }
   if (S.crashed && !paused) updateWreck(dt);
   updateParticles(glow, dt); updateParticles(haze, dt);
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
