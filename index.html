@@ -61,6 +61,7 @@ body { background: var(--night); color: var(--fg); font-family: var(--font-ui); 
 #warn.stall { color: var(--night); background: var(--red); }
 #warn.terrain { color: var(--night); background: var(--amber); }
 #warn.gear { color: var(--night); background: var(--amber); font-size: clamp(11px, 2.1vw, 17px); letter-spacing: .06em; white-space: nowrap; }
+#warn.structural { color: #fff; background: #c62322; font-size: clamp(11px, 2.1vw, 17px); letter-spacing: .08em; white-space: nowrap; }
 @keyframes blink { 50% { opacity: .35; } }
 #toast { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; pointer-events: none; transition: opacity .3s; white-space: nowrap; }
 
@@ -4094,7 +4095,7 @@ function bombCamTarget() {
 const S = {
   pos: new THREE.Vector3(), vel: new THREE.Vector3(), quat: new THREE.Quaternion(), ang: new THREE.Vector3(),
   throttle: 0, onGround: true, crashed: false, brake: false, alpha: 0, V: 0, time: 0, maxAlt: 0, maxSpd: 0, wingDrop: 1,
-  gearDown: true, gearT: 1, gearComp: 0, gearOverT: 0, noseDip: 0, damaged: false, stumps: [], dmg: { wingL: 1, wingR: 1, stab: 1, fin: 1, engL: 1, engR: 1, legsLost: 0 }, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
+  gearDown: true, gearT: 1, gearComp: 0, gearOverT: 0, wingOverT: 0, wingOverFailed: false, noseDip: 0, damaged: false, stumps: [], dmg: { wingL: 1, wingR: 1, stab: 1, fin: 1, engL: 1, engR: 1, legsLost: 0 }, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
   ammo: AMMO_MAX, bombs: BOMBS_MAX, nukes: NUKES_MAX, firing: false
 };
 const inp = { pitch: 0, roll: 0, yaw: 0 };
@@ -4137,7 +4138,7 @@ function reset(mode) {
   if (S.damaged) { S.damaged = false; setAircraft(A.id); } // put the torn-off parts back
   S.stumps = [];
   updateDamage();
-  Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false, ditched: false, ditchTime: 0, ditchFlood: 0, ditchLeak: 0, gearOverT: 0 });
+  Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false, ditched: false, ditchTime: 0, ditchFlood: 0, ditchLeak: 0, gearOverT: 0, wingOverT: 0, wingOverFailed: false });
   initGunship(); // a fresh flight: full ammunition
   CM.left = CM_LOAD[A.id] || 0; CM.cool = 0;
   aaSel = A.ammo ? 'gun' : 'msl';
@@ -5051,6 +5052,38 @@ function updateGearOverspeed(dt) {
   S.gearDown = false; S.gearT = 0; S.gearOverT = 0;
   toast('LANDING GEAR TORN OFF BY OVERSPEED');
 }
+const LOW_ALT_WING_LIMIT_KT = { su30: 700, f15: 700, typhoon: 700, a10: 470, b52: 500, b757: 450, b748: 450, concorde: 600, ac130: 360 };
+const STRUCTURAL_OVERSPEED_AGL = 550; // 1,800 ft
+const STRUCTURAL_OVERSPEED_CLEAR_AGL = 760;
+const STRUCTURAL_OVERSPEED_SECONDS = 6;
+function updateLowAltitudeOverspeed(dt) {
+  if (!running || paused || S.crashed || S.onGround || S.belly || S.wingOverFailed) {
+    if (!paused) S.wingOverT = 0;
+    return;
+  }
+  const agl = S.pos.y - Math.max(0, heightAt(S.pos.x, S.pos.z));
+  const kt = indicatedKnots(), limit = LOW_ALT_WING_LIMIT_KT[A.id] || 500;
+  const dangerous = agl < STRUCTURAL_OVERSPEED_AGL && kt > limit;
+  if (!dangerous) {
+    S.wingOverT = agl > STRUCTURAL_OVERSPEED_CLEAR_AGL || kt < limit * 0.94
+      ? 0 : Math.max(0, S.wingOverT - dt * 2.5);
+    return;
+  }
+  if (S.wingOverT === 0) toast(`STRUCTURAL OVERSPEED · CLIMB OR SLOW BELOW ${limit} KT`);
+  S.wingOverT += dt;
+  if (S.wingOverT < STRUCTURAL_OVERSPEED_SECONDS) return;
+
+  S.wingOverFailed = true;
+  const wings = parts.zones.filter(z => z.kind === 'wing' && z.alive);
+  if (!wings.length) {
+    crash('Low-altitude overspeed tore the wings off');
+    return;
+  }
+  plane.position.copy(S.pos); plane.quaternion.copy(S.quat); plane.updateMatrixWorld(true);
+  const localRoot = new THREE.Vector3(0, 0, 0), worldRoot = localRoot.clone().applyMatrix4(plane.matrixWorld);
+  for (const z of wings) ripZone(z, localRoot, worldRoot);
+  toast('WINGS TORN OFF BY LOW-ALTITUDE OVERSPEED');
+}
 function updateHUD() {
   updateGunshipHUD();
   const att = attitude();
@@ -5144,8 +5177,10 @@ function updateHUD() {
   const gearWarn = !S.onGround && !S.crashed && S.gearT < 0.98 && agl < 1000 && fpm < -300 && kt < 220;
   const gearOverspeed = !S.onGround && !S.crashed && S.gearOverT > 0;
   el.warn.hidden = !(stall || terrain || gearOverspeed || gearWarn);
+  const structuralOverspeed = S.wingOverT > 0 && !S.wingOverFailed;
   if (stall) { setText(el.warn, 'STALL'); el.warn.className = 'stall'; }
   else if (terrain) { setText(el.warn, 'PULL UP'); el.warn.className = 'terrain'; }
+  else if (structuralOverspeed) { setText(el.warn, `STRUCTURAL OVERSPEED · CLIMB / SLOW · ${Math.max(0, Math.ceil(STRUCTURAL_OVERSPEED_SECONDS - S.wingOverT))}S`); el.warn.className = 'structural'; }
   else if (gearOverspeed) { setText(el.warn, `GEAR OVERSPEED · ${Math.max(0, Math.ceil(GEAR_OVERSPEED_SECONDS - S.gearOverT))}S · RETRACT OR SLOW`); el.warn.className = 'gear'; }
   else if (gearWarn) { setText(el.warn, 'GEAR · PRESS G'); el.warn.className = 'terrain'; }
   return stall;
@@ -5316,6 +5351,18 @@ function updateCamera(dt, now) {
 function updateVisuals(dt) {
   plane.position.copy(S.pos);
   plane.quaternion.copy(S.quat);
+  const wingShake = smooth(0.08, STRUCTURAL_OVERSPEED_SECONDS, S.wingOverT) * 0.065;
+  if (wingShake > 0 || parts.zones.some(z => z.kind === 'wing' && z.meshes.some(m => m.userData.structuralBaseRotZ !== undefined))) {
+    for (const z of parts.zones) if (z.kind === 'wing') for (const m of z.meshes) {
+      if (m.userData.structuralBaseRotZ === undefined) {
+        m.userData.structuralBaseRotZ = m.rotation.z;
+        m.userData.structuralBaseRotY = m.rotation.y;
+      }
+      const phase = S.time * 42 + Math.abs(m.position.x) * 0.7 + (z.side === 'L' ? 0 : Math.PI);
+      m.rotation.z = m.userData.structuralBaseRotZ + Math.sin(phase) * wingShake * (z.side === 'L' ? -1 : 1);
+      m.rotation.y = m.userData.structuralBaseRotY + Math.sin(phase * 1.31) * wingShake * 0.16;
+    }
+  }
   parts.stabL.rotation.x = -inp.pitch * 0.3 * A.stabSign + inp.roll * A.stabRoll;
   parts.stabR.rotation.x = -inp.pitch * 0.3 * A.stabSign - inp.roll * A.stabRoll;
   for (const c of parts.canards) c.rotation.x = inp.pitch * 0.35; // foreplanes lead the pitch the other way
@@ -6421,6 +6468,7 @@ function frame(now) {
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
   glow.mat.uniforms.uScale.value = haze.mat.uniforms.uScale.value = pScale;
   updateDayNight();
+  updateLowAltitudeOverspeed(dt);
   updateVisuals(dt);
   updateGearOverspeed(dt);
   updateCamera(dt, now);
