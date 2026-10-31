@@ -60,6 +60,7 @@ body { background: var(--night); color: var(--fg); font-family: var(--font-ui); 
 #warn { position: fixed; top: calc(18% + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); font-family: var(--font-num); font-weight: 700; font-size: 22px; letter-spacing: .2em; padding: 6px 16px; border-radius: 6px; pointer-events: none; animation: blink .5s steps(2) infinite; }
 #warn.stall { color: var(--night); background: var(--red); }
 #warn.terrain { color: var(--night); background: var(--amber); }
+#warn.gear { color: var(--night); background: var(--amber); font-size: clamp(11px, 2.1vw, 17px); letter-spacing: .06em; white-space: nowrap; }
 @keyframes blink { 50% { opacity: .35; } }
 #toast { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; pointer-events: none; transition: opacity .3s; white-space: nowrap; }
 
@@ -2140,7 +2141,7 @@ function rigGear() {
 // Zones carry sample points from their own vertices; when one touches a building, the ground or the water,
 // that zone is torn off at the point of impact and the jet flies on without it. Only the core hitting is a crash.
 const ZONE_RULES = [['eng', /nacelle|fan_face|exhaust_cone|engine_pylon/], ['wing', /wing(?!_body)|spoiler|flap_fairing/],
-  ['stab', /stabilator|stabili[sz]er|canard/], ['fin', /vertical_tail|^fin$/]];
+  ['stab', /stabilator|stabili[sz]er|canard/], ['fin', /vertical_tail|^fin$/], ['gear', /wheel|strut|bogie/]];
 const SURFACE = /^wing[lr]?$|stabilator|stabili[sz]er|canard|vertical_tail|^fin$/;
 const nameOf = m => (m.name || '').toLowerCase();
 const _inv = new THREE.Matrix4(), _v = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
@@ -2325,6 +2326,7 @@ function ripZone(z, pl, pw) {
     spawnGroupDebris(z.leg.pivot, new THREE.Box3(new THREE.Vector3(-0.5, -z.leg.len - 0.8, -0.8), new THREE.Vector3(0.5, 0, 0.8)));
     parts.gearLegs = parts.gearLegs.filter(L => L !== z.leg);
     clearDetachedDamageMarks(z, -Infinity);
+    MP.rips.push([z.kind, z.side, null, 0]);
     z.alive = false;
     updateDamage();
     toast(z.label + ' torn off');
@@ -3927,7 +3929,7 @@ function bombCamTarget() {
 const S = {
   pos: new THREE.Vector3(), vel: new THREE.Vector3(), quat: new THREE.Quaternion(), ang: new THREE.Vector3(),
   throttle: 0, onGround: true, crashed: false, brake: false, alpha: 0, V: 0, time: 0, maxAlt: 0, maxSpd: 0, wingDrop: 1,
-  gearDown: true, gearT: 1, gearComp: 0, noseDip: 0, damaged: false, stumps: [], dmg: { wingL: 1, wingR: 1, stab: 1, fin: 1, engL: 1, engR: 1, legsLost: 0 }, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
+  gearDown: true, gearT: 1, gearComp: 0, gearOverT: 0, noseDip: 0, damaged: false, stumps: [], dmg: { wingL: 1, wingR: 1, stab: 1, fin: 1, engL: 1, engR: 1, legsLost: 0 }, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
   ammo: AMMO_MAX, bombs: BOMBS_MAX, nukes: NUKES_MAX, firing: false
 };
 const inp = { pitch: 0, roll: 0, yaw: 0 };
@@ -3967,7 +3969,7 @@ function reset(mode) {
   if (S.damaged) { S.damaged = false; setAircraft(A.id); } // put the torn-off parts back
   S.stumps = [];
   updateDamage();
-  Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false, ditched: false, ditchTime: 0, ditchFlood: 0, ditchLeak: 0 });
+  Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false, ditched: false, ditchTime: 0, ditchFlood: 0, ditchLeak: 0, gearOverT: 0 });
   initGunship(); // a fresh flight: full ammunition
   CM.left = CM_LOAD[A.id] || 0; CM.cool = 0;
   aaSel = A.ammo ? 'gun' : 'msl';
@@ -4852,6 +4854,28 @@ function placeReticle(node, p) {
 }
 const el = { aimRet: $('#aimRet'), noseRet: $('#noseRet'), nukes: $('#nukes'), ccipN: $('#ccipN'), gun: $('#gun'), bombs: $('#bombs'), gunRet: $('#gunRet'), ccip: $('#ccip'), spd: $('#spd'), mach: $('#mach'), gl: $('#gload'), alt: $('#alt'), vs: $('#vs'), aoa: $('#aoa'), rwy: $('#rwy'), gnd: $('#cGnd'), brk: $('#cBrk'), gear: $('#cGear'), ab: $('#cAb'), ra: $('#cRa'), warn: $('#warn') };
 const setText = (node, s) => { if (node.textContent !== s) node.textContent = s; };
+const GEAR_VLE_KT = { su30: 300, f15: 300, typhoon: 280, a10: 250, b52: 260, b757: 260, b748: 260, concorde: 300, ac130: 220 };
+const GEAR_OVERSPEED_SECONDS = 4;
+const indicatedKnots = () => S.V * Math.sqrt(S.rho / RHO) * 1.94384;
+function updateGearOverspeed(dt) {
+  if (!running || paused || S.crashed || S.onGround || S.belly || !S.gearDown || S.gearT < 0.05 || !parts.gearLegs.length) {
+    if (!paused) S.gearOverT = 0;
+    return;
+  }
+  const limit = GEAR_VLE_KT[A.id] || 250, kt = indicatedKnots();
+  if (kt <= limit) { S.gearOverT = 0; return; }
+  if (S.gearOverT === 0) toast(`GEAR OVERSPEED · RETRACT OR SLOW BELOW ${limit} KT`);
+  S.gearOverT += dt;
+  if (S.gearOverT < GEAR_OVERSPEED_SECONDS) return;
+  plane.updateMatrixWorld(true);
+  const gearZones = parts.zones.filter(z => z.kind === 'gear' && z.alive);
+  for (const z of gearZones) {
+    const worldPoint = z.pts[0].clone().applyMatrix4(plane.matrixWorld);
+    ripZone(z, z.pts[0], worldPoint);
+  }
+  S.gearDown = false; S.gearT = 0; S.gearOverT = 0;
+  toast('LANDING GEAR TORN OFF BY OVERSPEED');
+}
 function updateHUD() {
   updateGunshipHUD();
   const att = attitude();
@@ -4943,9 +4967,11 @@ function updateHUD() {
   const stall = !S.onGround && !S.crashed && S.alpha > A.stallA - 0.02 && S.V > 5;
   const terrain = !S.onGround && !S.crashed && agl < 400 && fpm < -1600;
   const gearWarn = !S.onGround && !S.crashed && S.gearT < 0.98 && agl < 1000 && fpm < -300 && kt < 220;
-  el.warn.hidden = !(stall || terrain || gearWarn);
+  const gearOverspeed = !S.onGround && !S.crashed && S.gearOverT > 0;
+  el.warn.hidden = !(stall || terrain || gearOverspeed || gearWarn);
   if (stall) { setText(el.warn, 'STALL'); el.warn.className = 'stall'; }
   else if (terrain) { setText(el.warn, 'PULL UP'); el.warn.className = 'terrain'; }
+  else if (gearOverspeed) { setText(el.warn, `GEAR OVERSPEED · ${Math.max(0, Math.ceil(GEAR_OVERSPEED_SECONDS - S.gearOverT))}S · RETRACT OR SLOW`); el.warn.className = 'gear'; }
   else if (gearWarn) { setText(el.warn, 'GEAR · PRESS G'); el.warn.className = 'terrain'; }
   return stall;
 }
@@ -6200,6 +6226,7 @@ function frame(now) {
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
   glow.mat.uniforms.uScale.value = haze.mat.uniforms.uScale.value = pScale;
   updateVisuals(dt);
+  updateGearOverspeed(dt);
   updateCamera(dt, now);
   updatePapi();
   const stall = running ? updateHUD() : false;
