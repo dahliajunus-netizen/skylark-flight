@@ -553,7 +553,7 @@ const papiSystems = [];
 const papiWhite = new THREE.MeshBasicMaterial({ color: 0xfff8e8, toneMapped: false });
 const papiRed = new THREE.MeshBasicMaterial({ color: 0xff241f, toneMapped: false });
 const papiCase = new THREE.MeshStandardMaterial({ color: 0x292d31, roughness: 0.85 });
-const papiCutoffs = [2.65, 2.85, 3.15, 3.35];
+const papiCutoffs = [2.5, 2.85, 3.15, 3.5];
 for (const rw of RUNWAYS) {
   for (const end of [0, 1]) {
     const hdg = (rw.hdg + end * 180) * Math.PI / 180;
