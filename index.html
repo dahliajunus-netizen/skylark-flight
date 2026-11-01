@@ -1688,7 +1688,7 @@ const AC = {
     CL0: 0.175, CLA: 3.5, stallA: 0.45, cd0: 0.022, k: 0.12, wave: [0.85, 1.05, 0.03],
     gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'fwd', travel: 0.3,
     hiG: { g: 12, rate: 1.7, aoa: 1.75, cl: 1.15, cd: 3.2, cobraV: 175 }, // held Shift: see physics
-    ammo: 940, muzzle: [1.6, 0.8, 3.0], stabSign: 1, model: 'F-15C.gltf.json',
+    ammo: 940, muzzle: [1.6, 0.8, 3.0], stabSign: 1, model: 'f-15c_eagle_usa.glb',
     loadouts: [{ id: 'mk82', name: '6 × MK-82', spec: '6 × MK-82' }, { id: 'b61', name: 'B61', nuke: 'b61', spec: 'B61 NUCLEAR · 0.3 KT' },
       { id: 'aam', name: 'AIM-120 · AIM-9', aam: true, spec: '4 × AIM-120C · 4 × AIM-9X' }],
     radar: { name: 'APG-63', range: 120000, cone: 1.05 },
@@ -2123,6 +2123,18 @@ function buildF15() {
 function buildFromGltf(model) {
   const turn = new THREE.Matrix4().makeRotationY(Math.PI), m4 = new THREE.Matrix4();
   model.updateMatrixWorld(true);
+  if (A.id === 'f15') {
+    // The Sketchfab export is in a different coordinate system and about 10x larger than the sim's F-15.
+    // Center its bounds, aim its longest axis down -Z, and fit its length to the 19.6 m F-15 airframe.
+    const bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+    const axis = size.x >= size.z ? 'x' : 'z';
+    const orient = new THREE.Matrix4().makeRotationY(axis === 'x' ? Math.PI / 2 : Math.PI);
+    const scale = 19.6 / Math.max(size[axis], 0.001);
+    const centerAtOrigin = new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z);
+    const uniformScale = new THREE.Matrix4().makeScale(scale, scale, scale);
+    turn.multiplyMatrices(orient, uniformScale).multiply(centerAtOrigin);
+  }
   const gear = new THREE.Group(); plane.add(gear);
   const meshes = [];
   model.traverse(o => { if (o.isMesh) meshes.push(o); });
