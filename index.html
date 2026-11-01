@@ -3222,7 +3222,7 @@ if (THREE.GLTFLoader) {
       const m = new THREE.Mesh(b.geo, b.mat); m.castShadow = true; m.receiveShadow = true; g.add(m);
     }
     mslTemplates.iris = g;
-    for (const m of parts.missiles) if (m.userData.mkind === 'iris') { m.clear(); g.children.forEach(c => m.add(c.clone())); }
+    for (const m of parts.missiles) if (m.userData.mkind === 'iris') { m.clear(); m.rotation.y = Math.PI; g.children.forEach(c => m.add(c.clone())); }
   }, undefined, err => console.warn('iris-t (1).glb did not load; using the simple IRIS-T.', err));
   // B61 (c083f0d99a19445e8e3afb90d15857df.glb, Sketchfab "B-61 bomb"): its node transform is skewed, so the
   // meshes are baked, then the long axis is aimed down -Z with the finned (wider) end aft, centred and sized
@@ -6101,6 +6101,7 @@ function addMissiles() {
     if (!mslTemplates[kind]) mslTemplates[kind] = makeMissile(kind);
     const m = mslTemplates[kind].clone();
     m.position.set(x, y, z); m.userData.mkind = kind;
+    if (kind === 'iris') m.rotation.y = Math.PI; // the pylon-mounted model faces opposite its flight-model axis
     plane.add(m); parts.missiles.push(m);
   }
 }
