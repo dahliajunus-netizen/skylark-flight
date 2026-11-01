@@ -3213,7 +3213,7 @@ if (THREE.GLTFLoader) {
     const axis = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
     const toZ = new THREE.Matrix4();
     if (axis === 'x') toZ.makeRotationY(Math.PI / 2);
-    else if (axis === 'y') toZ.makeRotationX(-Math.PI / 2);
+    else if (axis === 'y') toZ.makeRotationX(Math.PI / 2);
     const fit = new THREE.Matrix4().makeScale(2.94 / size[axis], 2.94 / size[axis], 2.94 / size[axis])
       .multiply(toZ).multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
     const g = new THREE.Group();
