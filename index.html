@@ -3555,12 +3555,26 @@ if (THREE.GLTFLoader) {
       const src = o.material, materials = Array.isArray(src) ? src : [src];
       const mat = materials.map(m => {
         const copy = m.clone();
-        if (copy.color) copy.color.convertLinearToSRGB();
+        if (copy.color) {
+          const tooDark = copy.color.r + copy.color.g + copy.color.b < 0.12;
+          copy.color.convertLinearToSRGB();
+          // Some War Thunder exports use a black material tint beside a valid texture; in glTF that tint
+          // multiplies the texture to black. Clear the tint so the embedded paint map can show through.
+          if (tooDark) copy.color.set(copy.map ? '#ffffff' : '#747a68');
+        }
+        if (copy.map && THREE.SRGBColorSpace) copy.map.colorSpace = THREE.SRGBColorSpace;
+        if (copy.emissive) copy.emissive.set('#171a12');
+        copy.emissiveIntensity = Math.max(copy.emissiveIntensity || 0, 0.12);
+        copy.roughness = Math.max(copy.roughness ?? 0.7, 0.58);
         copy.side = THREE.DoubleSide;
+        copy.needsUpdate = true;
         return copy;
       });
       const geo = bakeGltfMesh(o);
       for (const attr of ['color', 'uv2']) if (o.geometry.attributes[attr]) geo.setAttribute(attr, o.geometry.attributes[attr].clone());
+      // bakeGltfMesh preserves vertex data but not glTF material assignment ranges.
+      // Restore groups so each section receives its proper textured material instead of the first (often black) one.
+      if (Array.isArray(src)) for (const group of o.geometry.groups) geo.addGroup(group.start, group.count, group.materialIndex);
       baked.push({ geo, mat: Array.isArray(src) ? mat : mat[0], name: o.name || '' });
     });
     const box = new THREE.Box3();
