@@ -1784,7 +1784,7 @@ const AC = {
     radar: { name: 'APG-63', range: 120000, cone: 1.05 },
     // Stations on the model: wing pylons at x ±2.82 (bottom y -0.85, z 0.44-3.85); the belly is flat at y -1.41.
     // Two on a twin rack under each wing pylon, then two in tandem on the centerline clear of the nose gear.
-    rig: { ab: [[-0.73, -0.57, 8.28], [0.73, -0.57, 8.28]], bombs: [[-3.04, -1.03, 2.15], [3.04, -1.03, 2.15], [-2.6, -1.03, 2.15], [2.6, -1.03, 2.15], [0, -1.65, -1.2], [0, -1.65, 1.2]], nuke: [0, -1.7, -0.885],
+    rig: { ab: [[-0.73, -0.57, 8.28], [0.73, -0.57, 8.28]], bombs: [[-3.04, -1.03, 2.15], [3.04, -1.03, 2.15], [-2.6, -1.03, 2.15], [2.6, -1.03, 2.15], [0, -1.65, -1.2], [0, -1.65, 1.2]], nuke: [0, -1.85, -0.885],
       // AIM-9s on the wing pylon side rails, AIM-120s on the lower corners of the intake trunks (aft pair behind the main gear)
       aam: [[-3.09, -0.72, 1.4, 'aim9'], [3.09, -0.72, 1.4, 'aim9'], [-2.55, -0.72, 1.4, 'aim9'], [2.55, -0.72, 1.4, 'aim9'],
         [-1.55, -1.6, -1.4, 'aim120'], [1.55, -1.6, -1.4, 'aim120'], [-1.55, -1.6, 4.3, 'aim120'], [1.55, -1.6, 4.3, 'aim120']] },
@@ -2129,7 +2129,7 @@ function addNuke(x, y, z) {
   const load = curLoadout(), id = load && load.nuke || 'b61', nk = nukeKind();
   if (!nukeTemplates[id]) nukeTemplates[id] = makeNuke(id);
   const b = nukeTemplates[id].clone(); b.position.set(x, y, z); b.scale.set(...nk.size);
-  b.userData.kind = 'nuke'; b.userData.nk = nk; b.userData.internal = !!A.rig.nukeInternal;
+  b.userData.kind = 'nuke'; b.userData.nk = nk; b.userData.id = id; b.userData.internal = !!A.rig.nukeInternal;
   plane.add(b); parts.nuke = b;
 }
 // the picked loadout: the bombs, or the one nuclear bomb
@@ -3102,6 +3102,49 @@ if (THREE.GLTFLoader) {
       for (const m of parts.missiles) if (m.userData.mkind === kind) { m.clear(); g.children.forEach(c => m.add(c.clone())); }
     }
   }, undefined, err => console.warn('aam.glb did not load; using the simple missiles.', err));
+  // B61 (c083f0d99a19445e8e3afb90d15857df.glb, Sketchfab "B-61 bomb"): its node transform is skewed, so the
+  // meshes are baked, then the long axis is aimed down -Z with the finned (wider) end aft, centred and sized
+  // to the B61's 3.58 m. Its unlit materials become lit ones so it shades and darkens at night like the jet.
+  loader.load('c083f0d99a19445e8e3afb90d15857df.glb', gltf => {
+    gltf.scene.updateMatrixWorld(true);
+    const baked = [];
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      const src = o.material, mat = new THREE.MeshStandardMaterial({ color: src.color.clone().convertLinearToSRGB(), map: src.map || null, roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide });
+      baked.push({ geo: bakeGltfMesh(o), mat });
+    });
+    const box = new THREE.Box3();
+    baked.forEach(b => { b.geo.computeBoundingBox(); box.union(b.geo.boundingBox); });
+    const size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+    const axes = ['x', 'y', 'z'], ax = size.x >= size.y && size.x >= size.z ? 0 : size.y >= size.z ? 1 : 2;
+    const o1 = (ax + 1) % 3, o2 = (ax + 2) % 3, v = new THREE.Vector3();
+    // the fins make the tail the end whose last 8% reaches furthest from the axis
+    const spanAt = end => {
+      let r = 0;
+      for (const b of baked) {
+        const pos = b.geo.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).sub(centre);
+          const t = v.getComponent(ax) / (size.getComponent(ax) / 2);
+          if (t * end > 0.84) r = Math.max(r, Math.hypot(v.getComponent(o1), v.getComponent(o2)));
+        }
+      }
+      return r;
+    };
+    const tail = spanAt(1) > spanAt(-1) ? 1 : -1, k = 3.58 / size.getComponent(ax);
+    // basis: (o1, o2, ax) -> (x, y, z) is a cyclic, right-handed mapping; flipping z for the tail also flips x
+    const e = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    e[0][o1] = tail; e[1][o2] = 1; e[2][ax] = tail;
+    const fit = new THREE.Matrix4().set(e[0][0], e[0][1], e[0][2], 0, e[1][0], e[1][1], e[1][2], 0, e[2][0], e[2][1], e[2][2], 0, 0, 0, 0, 1)
+      .premultiply(new THREE.Matrix4().makeScale(k, k, k)).multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
+    const g = new THREE.Group();
+    for (const b of baked) {
+      b.geo.applyMatrix4(fit); b.geo.computeBoundingBox();
+      const m = new THREE.Mesh(b.geo, b.mat); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    }
+    nukeTemplates.b61 = g;
+    if (parts.nuke && parts.nuke.userData.id === 'b61') { parts.nuke.clear(); g.children.forEach(c => parts.nuke.add(c.clone())); }
+  }, undefined, err => console.warn('The B61 model did not load; using the simple B61.', err));
   for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
