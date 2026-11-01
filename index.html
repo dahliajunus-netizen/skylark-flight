@@ -2104,14 +2104,41 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
 const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b748: null, b52: null, ac130: null, su30: null, concorde: null }; // Blender-built models, filled in as they load
-const AB_MATS = [['#ff8c3a', 0.75], ['#fff1c4', 0.9]].map(([c, o]) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+const AB_MATS = [
+  ['#62aaff', 0.24], // cool outer sheath
+  ['#ff7136', 0.58], // turbulent orange flame
+  ['#ffc77d', 0.72], // hot inner plume
+  ['#fff4d4', 0.92]  // bright nozzle core
+].map(([color, opacity]) => new THREE.MeshBasicMaterial({
+  color, transparent: true, opacity, blending: THREE.AdditiveBlending,
+  depthWrite: false, side: THREE.DoubleSide, fog: false
+}));
+const AB_SHOCK_COLORS = ['#b9e3ff', '#ffbd87', '#8ec5ff', '#ffd0a0', '#9ccfff'];
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
-  ab.userData.s = A.rig.abScale || 1; // flame size to suit the nozzles
-  ab.scale.setScalar(ab.userData.s);
-  [[0.52, 4.5], [0.3, 2.6]].forEach(([r, l], i) => {
-    const g = new THREE.ConeGeometry(r, l, 14, 1, true); g.translate(0, l / 2, 0); g.rotateX(Math.PI / 2);
-    ab.add(new THREE.Mesh(g, AB_MATS[i]));
+  const size = A.rig.abScale || 1;
+  ab.userData.s = size;
+  ab.userData.phase = Object.keys(parts).filter(k => /^ab/.test(k)).length * 1.7;
+  ab.userData.flames = AB_MATS.map(mat => mat.clone());
+  ab.scale.setScalar(size);
+  const plume = (radius, length, material) => {
+    const g = new THREE.ConeGeometry(radius, length, 24, 1, true);
+    g.translate(0, length / 2, 0); g.rotateX(Math.PI / 2);
+    const mesh = new THREE.Mesh(g, material); mesh.frustumCulled = false; ab.add(mesh);
+  };
+  plume(0.72, 6.4, ab.userData.flames[0]);
+  plume(0.49, 4.8, ab.userData.flames[1]);
+  plume(0.30, 3.25, ab.userData.flames[2]);
+  plume(0.16, 1.9, ab.userData.flames[3]);
+  // Periodic shock diamonds give the exhaust a hot, compressed jet-plume profile.
+  [[0.36, 0.05], [0.43, 0.045], [0.34, 0.04], [0.38, 0.035], [0.28, 0.03]].forEach(([r, tube], i) => {
+    const mat = new THREE.MeshBasicMaterial({
+      color: AB_SHOCK_COLORS[i], transparent: true, opacity: 0.42 - i * 0.035,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false
+    });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 8, 24), mat);
+    ring.position.z = 0.55 + i * 0.88;
+    ab.add(ring);
   });
   ab.visible = false;
   parts[side] = ab;
@@ -5974,7 +6001,13 @@ function updateVisuals(dt) {
   const abOn = running && !S.crashed && !!A.thrustAB && S.throttle > AB_AT;
   for (const ab of [parts.abL, parts.abR, parts.abL2, parts.abR2].filter(Boolean)) {
     ab.visible = abOn;
-    if (abOn) { const k = 0.55 + (S.throttle - AB_AT) / (1 - AB_AT) * 0.45; const s = ab.userData.s || 1; ab.scale.set(s, s, s * k * (0.9 + Math.random() * 0.2)); }
+    if (abOn) {
+      const k = 0.55 + (S.throttle - AB_AT) / (1 - AB_AT) * 0.45, s = ab.userData.s || 1;
+      const flutter = 1 + 0.035 * Math.sin(S.time * 31 + ab.userData.phase);
+      const width = 0.97 + 0.05 * Math.sin(S.time * 19 + ab.userData.phase * 1.4);
+      ab.scale.set(s * width, s * width, s * k * flutter);
+      ab.userData.flames[0].opacity = 0.18 + 0.04 * (0.5 + 0.5 * Math.sin(S.time * 23 + ab.userData.phase));
+    }
   }
   emitStumps(dt);
   S.bayOpen = Math.max(0, (S.bayOpen || 0) - dt);
