@@ -1769,7 +1769,7 @@ const CITY_TRAFFIC = [];
   cabs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   wheels.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const colors = ['#a34832', '#7b827b', '#d0c6a7', '#3f5663', '#b3aa91', '#6a705a', '#c4c7c2', '#343a40'];
-  const carQ = new THREE.Quaternion();
+  const carQ = new THREE.Quaternion(), trafficUp = new THREE.Vector3(0, 1, 0);
   const p = new THREE.Vector3(), scale = new THREE.Vector3(1, 1, 1), matrix = new THREE.Matrix4(), local = new THREE.Vector3(), offsetQ = new THREE.Quaternion();
   const cars = [];
   for (let i = 0; i < count; i++) {
@@ -1802,7 +1802,7 @@ const CITY_TRAFFIC = [];
       const dx = (e.b.x - e.a.x) / e.len * car.direction, dz = (e.b.z - e.a.z) / e.len * car.direction;
       const yaw = Math.atan2(-dx, -dz);
       const x = e.a.x + (e.b.x - e.a.x) * u, z = e.a.z + (e.b.z - e.a.z) * u;
-      carQ.setFromAxisAngle(U.set(0, 1, 0), yaw);
+      carQ.setFromAxisAngle(trafficUp, yaw);
       p.set(x, CITY_H + 0.48, z);
       matrix.compose(p, carQ, scale); bodies.setMatrixAt(i, matrix);
       local.set(0, 0.72, -0.22).applyQuaternion(carQ);
