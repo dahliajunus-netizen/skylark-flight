@@ -1693,11 +1693,12 @@ const AC = {
     loadouts: [{ id: 'mk82', name: '6 × MK-82', spec: '6 × MK-82' }, { id: 'b61', name: 'B61', nuke: 'b61', spec: 'B61 NUCLEAR · 0.3 KT' },
       { id: 'aam', name: 'AIM-120 · AIM-9', aam: true, spec: '4 × AIM-120C · 4 × AIM-9X' }],
     radar: { name: 'APG-63', range: 120000, cone: 1.05 },
-    // four under the wings, then two in tandem on the centerline
-    rig: { ab: [[-0.73, -0.57, 8.28], [0.73, -0.57, 8.28]], bombs: [[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2], [0, -1.10, -2.3], [0, -1.10, 0.5]], nuke: [0, -1.10, -0.885],
-      // AIM-9s on the wing pylon rails, AIM-120s on the fuselage corners
-      aam: [[-4.25, -0.5, 1.6, 'aim9'], [4.25, -0.5, 1.6, 'aim9'], [-2.95, -0.5, 1.6, 'aim9'], [2.95, -0.5, 1.6, 'aim9'],
-        [-1.75, -0.95, -1.4, 'aim120'], [1.75, -0.95, -1.4, 'aim120'], [-1.75, -0.95, 2.8, 'aim120'], [1.75, -0.95, 2.8, 'aim120']] },
+    // Stations on the model: wing pylons at x ±2.82 (bottom y -0.85, z 0.44-3.85); the belly is flat at y -1.41.
+    // Two on a twin rack under each wing pylon, then two in tandem on the centerline clear of the nose gear.
+    rig: { ab: [[-0.73, -0.57, 8.28], [0.73, -0.57, 8.28]], bombs: [[-3.04, -1.03, 2.15], [3.04, -1.03, 2.15], [-2.6, -1.03, 2.15], [2.6, -1.03, 2.15], [0, -1.65, -1.2], [0, -1.65, 1.2]], nuke: [0, -1.7, -0.885],
+      // AIM-9s on the wing pylon side rails, AIM-120s on the lower corners of the intake trunks (aft pair behind the main gear)
+      aam: [[-3.09, -0.72, 1.4, 'aim9'], [3.09, -0.72, 1.4, 'aim9'], [-2.55, -0.72, 1.4, 'aim9'], [2.55, -0.72, 1.4, 'aim9'],
+        [-1.55, -1.54, -1.4, 'aim120'], [1.55, -1.54, -1.4, 'aim120'], [-1.55, -1.54, 4.3, 'aim120'], [1.55, -1.54, 4.3, 'aim120']] },
     box: new THREE.Box3(new THREE.Vector3(-6.6, -0.75, -10.1), new THREE.Vector3(6.6, 3.8, 9.8)), slideI: 60,
     // nose, wingtips, tail, fin, belly (forward, right, up): touching a building with any of these is a crash
     hitPts: [[9.8, 0, 0], [0, 6.5, 0], [0, -6.5, 0], [-9.5, 0, 0], [-8, 0, 3.6], [0, 0, -0.8]],
@@ -2916,9 +2917,78 @@ function emitStumps(dt) {
 }
 setAircraft('f15');
 scene.add(plane);
+// Bake a (possibly skinned) glTF mesh into a static geometry in its world pose.
+function bakeGltfMesh(o) {
+  const src = o.geometry, pos = src.attributes.position, nrm = src.attributes.normal, n = pos.count;
+  const P = new Float32Array(n * 3), N = new Float32Array(n * 3), M4 = new THREE.Matrix4(), B = new THREE.Matrix4(), nm = new THREE.Matrix3();
+  const v = new THREE.Vector3(), w = new THREE.Vector3();
+  if (o.isSkinnedMesh) o.skeleton.update();
+  let flip = false;
+  for (let i = 0; i < n; i++) {
+    M4.copy(o.matrixWorld);
+    if (o.isSkinnedMesh) {
+      // world = matrixWorld · bindMatrixInverse · Σ(weight · boneMatrix) · bindMatrix
+      const e = B.elements.fill(0);
+      for (let k = 0; k < 4; k++) {
+        const get = ['getX', 'getY', 'getZ', 'getW'][k];
+        const wt = src.attributes.skinWeight[get](i);
+        if (!wt) continue;
+        const j = src.attributes.skinIndex[get](i) * 16;
+        for (let c = 0; c < 16; c++) e[c] += wt * o.skeleton.boneMatrices[j + c];
+      }
+      M4.multiply(o.bindMatrixInverse).multiply(B).multiply(o.bindMatrix);
+    }
+    if (i === 0) flip = M4.determinant() < 0;
+    v.fromBufferAttribute(pos, i).applyMatrix4(M4); P.set([v.x, v.y, v.z], i * 3);
+    if (nrm) { w.fromBufferAttribute(nrm, i).applyMatrix3(nm.getNormalMatrix(M4)).normalize(); N.set([w.x, w.y, w.z], i * 3); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  if (nrm) geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); else geo.computeVertexNormals();
+  if (src.attributes.uv) geo.setAttribute('uv', src.attributes.uv.clone());
+  if (src.index) {
+    const ix = src.index.array.slice();
+    if (flip) for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; }
+    geo.setIndex(new THREE.BufferAttribute(ix, 1));
+  }
+  return geo;
+}
 // load the Blender-built models published next to this page, then swap each in
 if (THREE.GLTFLoader) {
   const loader = new THREE.GLTFLoader();
+  // Mk-82 (mk82.glb): baked static, nose (the fuze) toward -Z, centred and sized to the real bomb's 2.21 m.
+  // It replaces the procedural Mk-82, including any already hanging on the jet.
+  loader.load('mk82.glb', gltf => {
+    gltf.scene.updateMatrixWorld(true);
+    const baked = [];
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      const mat = o.material.clone();
+      if (mat.color) mat.color.convertLinearToSRGB();
+      mat.vertexTangents = false; // the baked geometry has no tangent attribute; derive tangents for the normal map
+      mat.needsUpdate = true;
+      baked.push({ geo: bakeGltfMesh(o), mat, fuze: /chrome/.test(mat.name || '') });
+    });
+    const box = new THREE.Box3();
+    baked.forEach(b => { b.geo.computeBoundingBox(); box.union(b.geo.boundingBox); });
+    const size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+    const axis = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
+    const fuze = baked.find(b => b.fuze), fuzeAt = fuze ? fuze.geo.boundingBox.getCenter(new THREE.Vector3())[axis] - centre[axis] : -1;
+    const toZ = new THREE.Matrix4();
+    if (axis === 'x') toZ.makeRotationY(Math.PI / 2); else if (axis === 'y') toZ.makeRotationX(Math.PI / 2);
+    // after aiming the long axis down Z, turn it round if the fuze ended up aft
+    const probe = new THREE.Vector3().setComponent(['x', 'y', 'z'].indexOf(axis), fuzeAt).applyMatrix4(toZ);
+    if (probe.z > 0) toZ.premultiply(new THREE.Matrix4().makeRotationY(Math.PI));
+    const k = 2.21 / size[axis];
+    const fit = new THREE.Matrix4().makeScale(k, k, k).multiply(toZ).multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
+    const g = new THREE.Group();
+    for (const b of baked) {
+      b.geo.applyMatrix4(fit);
+      const m = new THREE.Mesh(b.geo, b.mat); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    }
+    bombTemplates.mk82 = g;
+    for (const b of parts.bombs) if (b.userData.kind === 'mk82') { b.clear(); g.children.forEach(c => b.add(c.clone())); }
+  }, undefined, err => console.warn('mk82.glb did not load; using the simple Mk-82.', err));
   for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
