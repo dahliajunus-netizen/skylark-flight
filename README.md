@@ -12,3 +12,4 @@ Everyone who has the page open flies in the same world under a callsign picked o
 - Only one player at a time can fly the B-52.
 - After a nuclear bomb is dropped, that bomb needs to cool down before the next one: B61 2 minutes, B28 4 minutes, B41 8 minutes.
 - With other players online, Rebuild city starts a vote (Y votes yes). The city is rebuilt for everyone when at least 2/3 of the players vote yes.
+
