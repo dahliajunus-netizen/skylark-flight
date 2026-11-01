@@ -554,7 +554,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio || 1, isTouch ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.62;
+renderer.toneMappingExposure = 0.54;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -672,17 +672,17 @@ function updatePapi() {
     }
   }
 }
-const HORIZON = new THREE.Color('#bccfd8');
+const HORIZON = new THREE.Color('#788997');
 scene.fog = new THREE.Fog(HORIZON, 2600, 23000);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 120000); // far enough to see a 44 km mushroom cloud
 
 const DAY_SECONDS = 720; // one full day-night cycle takes twelve minutes of flight time
 const SUN_DIR = new THREE.Vector3();
-const HEMI_BASE = 0.16; // most of the ambient now comes from the sky environment map
-const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', HEMI_BASE);
+const HEMI_BASE = 0.12; // subdued ambient keeps silhouettes and terrain contrast stronger
+const hemi = new THREE.HemisphereLight('#8492a1', '#4a4841', HEMI_BASE);
 scene.add(hemi);
-const SUN_BASE = 1.15; // strong direct sun against darker ambient keeps the contrast up
-const sun = new THREE.DirectionalLight('#ffe6c4', SUN_BASE);
+const SUN_BASE = 0.98; // restrained, warm daylight over darker ambient
+const sun = new THREE.DirectionalLight('#e9ddca', SUN_BASE);
 sun.castShadow = true;
 sun.shadow.mapSize.set(isTouch ? 1024 : 2048, isTouch ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 3200 });
@@ -691,8 +691,8 @@ sun.shadow.normalBias = 0.04;
 scene.add(sun, sun.target);
 
 // Day and night sky palettes blend through a short dawn and dusk.
-const SKY_DAY = { top: new THREE.Color('#2a64a6'), horizon: new THREE.Color('#bccfd8'), bottom: new THREE.Color('#93a7aa'), sun: new THREE.Color('#fff0d3') };
-const SKY_NIGHT = { top: new THREE.Color('#07142c'), horizon: new THREE.Color('#263448'), bottom: new THREE.Color('#111923'), sun: new THREE.Color('#ffd4a0') };
+const SKY_DAY = { top: new THREE.Color('#203a5b'), horizon: new THREE.Color('#788997'), bottom: new THREE.Color('#596a70'), sun: new THREE.Color('#f6dfbd') };
+const SKY_NIGHT = { top: new THREE.Color('#050b17'), horizon: new THREE.Color('#1b2635'), bottom: new THREE.Color('#0c1119'), sun: new THREE.Color('#d6a575') };
 const SUN_WARM = new THREE.Color('#ffb16e');
 const sky = new THREE.Mesh(
   new THREE.SphereGeometry(20000, 48, 24),
