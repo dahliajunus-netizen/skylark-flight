@@ -109,6 +109,8 @@ body.noui:not(.chatting) #chat { display: none; }
 #vote { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; font-size: 13px; max-width: calc(100vw - 32px); flex-wrap: wrap; justify-content: center; }
 #vote .pickb { padding: 5px 14px; }
 .mpTag { position: fixed; left: 0; top: 0; padding: 2px 7px; font-size: 11px; color: #fff; background: rgba(8,14,20,.55); border-radius: 5px; pointer-events: none; white-space: nowrap; will-change: transform; }
+.navalTag { position: fixed; left: 0; top: 0; z-index: 6; padding: 4px 8px; border: 1px solid rgba(255,181,71,.75); border-radius: 4px; background: rgba(8,14,20,.82); color: #ffd28a; font: 700 11px var(--font-num); letter-spacing: .1em; text-shadow: 0 1px 3px #000; pointer-events: none; white-space: nowrap; box-shadow: 0 0 10px rgba(255,160,50,.22); }
+.navalTag.carrier { border-color: rgba(79,216,234,.8); color: #8cecff; box-shadow: 0 0 10px rgba(79,216,234,.24); }
 body.noui .mpTag { display: none; }
 .pickb.busy { opacity: .45; text-decoration: line-through; }
 .tools { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); display: flex; gap: 6px; }
@@ -3751,10 +3753,14 @@ function installNavalModel(type, model) {
 }
 function addNavalVessel(id, type, angle, orbit, speed, hp) {
   const group = new THREE.Group();
-  const ship = { id, type, angle, startAngle: angle, orbit, speed, hp, maxHp: hp, group, model: null,
+  const tag = document.createElement('div');
+  tag.className = 'navalTag' + (type === 'carrier' ? ' carrier' : '');
+  tag.hidden = true; document.body.appendChild(tag);
+  const ship = { id, type, label: type === 'carrier' ? 'CARRIER' : 'CRUISER ' + id.split('-').pop(),
+    angle, startAngle: angle, orbit, speed, hp, maxHp: hp, group, model: null, tag,
     length: type === 'carrier' ? 333 : 252, width: type === 'carrier' ? 72 : 32,
     deckHalfLength: type === 'carrier' ? 153 : 0, deckHalfWidth: type === 'carrier' ? 34 : 0,
-    deckLocalY: 0, sinking: false, sunk: false, sinkT: 0, fxT: 0 };
+    deckLocalY: 0, sinking: false, sunk: false, sinkT: 0, fxT: 0, tagT: 0 };
   scene.add(group); NAVAL_VESSELS.push(ship);
   if (NAVAL_MODELS[type]) installNavalModel(type, NAVAL_MODELS[type]);
   placeNaval(ship);
@@ -3779,6 +3785,7 @@ function navalLocal(ship, x, z, out) {
   return out.set(c * dx - sn * dz, sn * dx + c * dz);
 }
 const navalTmp = new THREE.Vector2();
+const navalTmp3 = new THREE.Vector3();
 function navalCollisionAt(p) {
   for (const ship of NAVAL_VESSELS) {
     if (!ship.model || ship.sinking || ship.sunk) continue;
@@ -4662,6 +4669,28 @@ function updateBombBursts(dt) {
       fx.ball.material.dispose();
       fx.ring.material.dispose();
       bombBursts.splice(i, 1);
+    }
+  }
+}
+const navalMarkerPos = new THREE.Vector3(), navalMarkerDir = new THREE.Vector3();
+function updateNavalMarkers() {
+  camera.getWorldDirection(navalMarkerDir);
+  for (const ship of NAVAL_VESSELS) {
+    const tag = ship.tag;
+    if (!ship.model || ship.sinking || ship.sunk || !ship.group.visible) { tag.hidden = true; continue; }
+    navalMarkerPos.set(ship.group.position.x, ship.group.position.y + ship.deckLocalY + (ship.type === 'carrier' ? 18 : 15), ship.group.position.z);
+    const dist = camera.position.distanceTo(navalMarkerPos);
+    const forward = navalMarkerDir.dot(navalTmp3.subVectors(navalMarkerPos, camera.position));
+    if (forward <= 0 || dist > 100000) { tag.hidden = true; continue; }
+    const projected = navalMarkerPos.project(camera);
+    if (projected.z < -1 || projected.z > 1) { tag.hidden = true; continue; }
+    const x = clamp(projected.x, -0.94, 0.94), y = clamp(projected.y, -0.9, 0.94);
+    const edge = Math.abs(projected.x) > 0.94 || Math.abs(projected.y) > 0.9;
+    tag.hidden = false;
+    tag.style.transform = `translate(${((x + 1) / 2 * innerWidth).toFixed(0)}px, ${((1 - y) / 2 * innerHeight).toFixed(0)}px) translate(-50%, -100%)`;
+    if (performance.now() - ship.tagT > 250) {
+      ship.tagT = performance.now();
+      tag.textContent = `${edge ? '↗ ' : ''}${ship.label} · ${(dist / 1000).toFixed(1)} KM`;
     }
   }
 }
@@ -7748,6 +7777,7 @@ function frame(now) {
   updateAudio(stall);
   mpUpdate(dt);
   updateRadar(dt);
+  updateNavalMarkers();
   updateRwr();
   renderer.render(scene, camera);
   if (bloom) bloom.apply(dt);
