@@ -5919,12 +5919,20 @@ document.addEventListener('pointerlockchange', () => {
 });
 document.addEventListener('mousemove', e => {
   if (!locked() || !mouseAim() || gs.cam || look.active || !running || paused || S.crashed) return;
-  // turn the aim point: left/right about the vertical, up/down about the camera's right
-  const k = 0.0022, dy = (invertPitch ? -1 : 1) * e.movementY;
-  aim.dir.applyAxisAngle(worldUp, -e.movementX * k);
-  tA.crossVectors(aim.dir, worldUp).normalize();
-  const el = Math.asin(clamp(aim.dir.y, -1, 1)) - dy * k;
-  if (Math.abs(el) < 1.45) aim.dir.applyAxisAngle(tA, -dy * k);
+  const k = 0.0022, dx = e.movementX, dy = (invertPitch ? -1 : 1) * e.movementY;
+  if (camMode === 'cockpit') {
+    // Steer the aim point in the cockpit's screen plane. World-up yaw feels rotated when the aircraft banks.
+    const right = tA.set(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+    const up = tmp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+    aim.dir.applyAxisAngle(up, -dx * k);
+    aim.dir.applyAxisAngle(right, -dy * k);
+  } else {
+    // Chase view is horizon-level, so keep its target movement aligned to world up.
+    aim.dir.applyAxisAngle(worldUp, -dx * k);
+    tA.crossVectors(aim.dir, worldUp).normalize();
+    const el = Math.asin(clamp(aim.dir.y, -1, 1)) - dy * k;
+    if (Math.abs(el) < 1.45) aim.dir.applyAxisAngle(tA, -dy * k);
+  }
   aim.dir.normalize();
 });
 canvas.addEventListener('mousedown', e => {
