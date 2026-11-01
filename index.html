@@ -548,6 +548,9 @@ const canvas = $('#gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, isTouch ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -641,7 +644,7 @@ const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.62);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffe6c4', 1.05);
 sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.mapSize.set(isTouch ? 1024 : 2048, isTouch ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 3200 });
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.04;
@@ -681,6 +684,23 @@ const sky = new THREE.Mesh(
 sky.renderOrder = -1;
 sky.frustumCulled = false;
 scene.add(sky);
+
+// A sparse upper-sky star field fades in naturally through dusk and stays camera-centered.
+const STAR_COUNT = 1500, starGeo = new THREE.BufferGeometry();
+const starPos = new Float32Array(STAR_COUNT * 3), starColors = new Float32Array(STAR_COUNT * 3), starRnd = mulberry(8675309);
+const starTint = new THREE.Color();
+for (let i = 0; i < STAR_COUNT; i++) {
+  const y = 0.025 + starRnd() * 0.975, a = starRnd() * Math.PI * 2, r = Math.sqrt(1 - y * y), k = i * 3;
+  starPos[k] = Math.cos(a) * r * 19000; starPos[k + 1] = y * 19000; starPos[k + 2] = Math.sin(a) * r * 19000;
+  starTint.setHSL(0.55 + starRnd() * 0.12, 0.08 + starRnd() * 0.2, 0.68 + starRnd() * 0.3);
+  starColors[k] = starTint.r; starColors[k + 1] = starTint.g; starColors[k + 2] = starTint.b;
+}
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+const starMaterial = new THREE.PointsMaterial({ size: 1.8, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, fog: false });
+const stars = new THREE.Points(starGeo, starMaterial);
+stars.frustumCulled = false; stars.renderOrder = 0; scene.add(stars);
+
 function updateDayNight() {
   const phase = S.time / DAY_SECONDS * Math.PI * 2 + Math.PI / 2;
   const elevation = Math.sin(phase) * 0.78;
@@ -689,6 +709,8 @@ function updateDayNight() {
   const daylight = smooth(-0.16, 0.24, elevation);
   const twilight = smooth(-0.32, 0.08, elevation);
   const night = 1 - twilight;
+  starMaterial.opacity = 0.88 * smooth(0.28, 0.82, night);
+  stars.visible = starMaterial.opacity > 0.005;
   const uniforms = sky.material.uniforms;
   uniforms.top.value.copy(SKY_DAY.top).lerp(SKY_NIGHT.top, night);
   uniforms.horizon.value.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
@@ -700,6 +722,26 @@ function updateDayNight() {
   HORIZON.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
   scene.fog.color.copy(HORIZON);
   uniforms.sunDir.value.copy(SUN_DIR);
+}
+
+// Procedural, seamless wave relief gives the open water small moving highlights without extra geometry.
+let waterBumpMap = null, cloudField = null;
+function makeWaterBumpMap() {
+  const size = 128, canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d'), image = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const u = x / size, v = y / size;
+    const wave = 0.68 * Math.sin(u * Math.PI * 8 + Math.sin(v * Math.PI * 6)) + 0.32 * Math.sin(v * Math.PI * 14 - u * Math.PI * 4);
+    const value = Math.round(128 + wave * 28), i = (y * size + x) * 4;
+    image.data[i] = image.data[i + 1] = image.data[i + 2] = value; image.data[i + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(580, 580);
+  texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  return texture;
 }
 
 // terrain mesh
@@ -733,7 +775,9 @@ function updateDayNight() {
   mesh.receiveShadow = true;
   scene.add(mesh);
 
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(120000, 120000), new THREE.MeshStandardMaterial({ color: '#2e7088', roughness: 0.3, metalness: 0.15 }));
+  waterBumpMap = makeWaterBumpMap();
+  const waterMaterial = new THREE.MeshPhysicalMaterial({ color: '#2d687a', roughness: 0.27, metalness: 0.06, clearcoat: 0.62, clearcoatRoughness: 0.24, bumpMap: waterBumpMap, bumpScale: 0.16 });
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(120000, 120000), waterMaterial);
   water.rotation.x = -Math.PI / 2;
   water.position.y = 0;
   scene.add(water);
@@ -802,15 +846,16 @@ function updateDayNight() {
       PUFFS.push([cx + (rnd() - 0.5) * spanX, base + (rnd() - 0.25) * 70, cz + (rnd() - 0.5) * spanZ, size]);
     }
   }
-  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 7),
-    new THREE.MeshStandardMaterial({ color: '#f6f7f4', roughness: 1, transparent: true, opacity: 0.84, depthWrite: false }), PUFFS.length);
+  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12),
+    new THREE.MeshStandardMaterial({ color: '#f9fbff', roughness: 1, transparent: true, opacity: 0.9, depthWrite: false }), PUFFS.length);
+  cloudField = mesh;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), tint = new THREE.Color();
   PUFFS.forEach((pf, i) => {
     p.set(pf[0], pf[1], pf[2]);
     const size = pf[3], broadness = 0.85 + rnd() * 0.55;
     s.set(size * broadness, size * (0.48 + rnd() * 0.28), size * (0.82 + rnd() * 0.4));
     m.compose(p, q, s); mesh.setMatrixAt(i, m);
-    mesh.setColorAt(i, tint.setHSL(0.58, 0.07, 0.76 + rnd() * 0.18));
+    mesh.setColorAt(i, tint.setHSL(0.58, 0.06, 0.78 + rnd() * 0.17));
   });
   scene.add(mesh);
 })();
@@ -5575,6 +5620,7 @@ function updateVisuals(dt) {
   sun.position.copy(focus).addScaledVector(SUN_DIR, 400);
   sun.target.position.copy(focus);
   sky.position.copy(camera.position);
+  stars.position.copy(camera.position);
 }
 
 addEventListener('resize', () => {
@@ -6638,6 +6684,8 @@ function frame(now) {
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
   glow.mat.uniforms.uScale.value = haze.mat.uniforms.uScale.value = pScale;
   updateDayNight();
+  if (waterBumpMap) { waterBumpMap.offset.x = (waterBumpMap.offset.x + dt * 0.00002) % 1; waterBumpMap.offset.y = (waterBumpMap.offset.y + dt * 0.000008) % 1; }
+  if (cloudField) { cloudField.position.x += dt * 1.7; cloudField.position.z += dt * 0.65; }
   updateLowAltitudeOverspeed(dt);
   updateVisuals(dt);
   updateGearOverspeed(dt);
