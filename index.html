@@ -3190,12 +3190,20 @@ if (THREE.GLTFLoader) {
       const src = o.material, materials = Array.isArray(src) ? src : [src];
       const mat = materials.map(m => {
         const copy = m.clone();
-        if (copy.color) copy.color.convertLinearToSRGB();
+        if (copy.color) {
+          copy.color.convertLinearToSRGB();
+          if (copy.color.r + copy.color.g + copy.color.b < 0.12) copy.color.set('#707363');
+        }
+        copy.side = THREE.DoubleSide;
         return copy;
       });
       const geo = bakeGltfMesh(o);
       // Preserve baked-model attributes used by painted materials and AO textures.
       for (const attr of ['color', 'uv2']) if (o.geometry.attributes[attr]) geo.setAttribute(attr, o.geometry.attributes[attr].clone());
+      if (!geo.attributes.color && materials.some(m => m.vertexColors)) {
+        const white = new Float32Array(geo.attributes.position.count * 3); white.fill(1);
+        geo.setAttribute('color', new THREE.BufferAttribute(white, 3));
+      }
       baked.push({ geo, mat: Array.isArray(src) ? mat : mat[0], name: o.name || '' });
     });
     const box = new THREE.Box3();
