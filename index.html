@@ -1769,8 +1769,8 @@ const CITY_TRAFFIC = [];
   cabs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   wheels.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const colors = ['#a34832', '#7b827b', '#d0c6a7', '#3f5663', '#b3aa91', '#6a705a', '#c4c7c2', '#343a40'];
-  const carQ = new THREE.Quaternion(), wheelQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
-  const p = new THREE.Vector3(), scale = new THREE.Vector3(1, 1, 1), matrix = new THREE.Matrix4(), local = new THREE.Vector3(), forward = new THREE.Vector3(), offsetQ = new THREE.Quaternion();
+  const carQ = new THREE.Quaternion();
+  const p = new THREE.Vector3(), scale = new THREE.Vector3(1, 1, 1), matrix = new THREE.Matrix4(), local = new THREE.Vector3(), offsetQ = new THREE.Quaternion();
   const cars = [];
   for (let i = 0; i < count; i++) {
     const e = edges[Math.floor(rnd() * edges.length)], direction = rnd() < 0.5 ? 1 : -1;
@@ -1786,12 +1786,17 @@ const CITY_TRAFFIC = [];
       let guard = 0;
       while ((car.t > car.edge.len || car.t < 0) && guard++ < 4) {
         const atEnd = car.t > car.edge.len, reached = atEnd ? car.edge.b : car.edge.a;
-        car.prev = car.edge;
-        const choices = (links.get(reached.key) || []).filter(e => e !== car.prev);
-        car.edge = choices.length ? choices[Math.floor(rnd() * choices.length)] : car.prev;
-        if (car.edge === car.prev) car.direction *= -1;
-        else car.direction = car.edge.a === reached ? 1 : -1;
-        car.t = atEnd ? car.t - car.prev.len : car.prev.len + car.t;
+        const overrun = atEnd ? car.t - car.edge.len : -car.t;
+        const previous = car.edge, choices = (links.get(reached.key) || []).filter(e => e !== previous);
+        car.prev = previous;
+        if (choices.length) {
+          car.edge = choices[Math.floor(rnd() * choices.length)];
+          car.direction = car.edge.a === reached ? 1 : -1;
+          car.t = car.direction > 0 ? overrun : car.edge.len - overrun;
+        } else {
+          car.direction *= -1;
+          car.t = atEnd ? previous.len - overrun : overrun;
+        }
       }
       const e = car.edge, u = clamp(car.t / e.len, 0, 1);
       const dx = (e.b.x - e.a.x) / e.len * car.direction, dz = (e.b.z - e.a.z) / e.len * car.direction;
@@ -1800,15 +1805,14 @@ const CITY_TRAFFIC = [];
       carQ.setFromAxisAngle(U.set(0, 1, 0), yaw);
       p.set(x, CITY_H + 0.48, z);
       matrix.compose(p, carQ, scale); bodies.setMatrixAt(i, matrix);
-      local.set(0, 0.88, -0.22).applyQuaternion(carQ);
+      local.set(0, 0.72, -0.22).applyQuaternion(carQ);
       p.set(x + local.x, CITY_H + 0.48 + local.y, z + local.z);
       matrix.compose(p, carQ, scale); cabs.setMatrixAt(i, matrix);
-      forward.set(dx, 0, dz);
       for (let w = 0; w < 4; w++) {
         const sx = (w & 1) ? 0.82 : -0.82, sz = (w & 2) ? 1.35 : -1.35;
         local.set(sx, -0.2, sz).applyQuaternion(carQ);
         p.set(x + local.x, CITY_H + 0.31, z + local.z);
-        offsetQ.copy(carQ).multiply(wheelQ);
+        offsetQ.copy(carQ);
         matrix.compose(p, offsetQ, scale); wheels.setMatrixAt(i * 4 + w, matrix);
       }
     }
