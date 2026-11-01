@@ -472,7 +472,9 @@ const riverZ = x => RIVER.z + RIVER.a1 * Math.sin(x / RIVER.w1) + RIVER.a2 * Mat
 const AB = { zN: -2700, xW: -15500, xE: 10500, r: MAP_R - 700, blend: 900 };
 const GATES = [-1500, 3000]; // x of the access roads and their gates
 const airbaseSD = (x, z) => Math.max(Math.hypot(x, z - MAP_CZ) - AB.r, AB.zN - z, x - AB.xE, AB.xW - x); // < 0 inside
-function heightAt(x, z) {
+const TERRAIN_CRATERS = [];
+let terrainGeometry = null, terrainSegments = 0, terrainSize = 0;
+function baseHeightAt(x, z) {
   // fast paths: the city plain is exactly flat away from the river, and so is the airbase
   if (x > CITY.x0 && x < CITY.x1 && z > CITY.z0 && z < CITY.z1 && Math.abs(z - riverZ(x)) > 96) return CITY_H;
   const sd = airbaseSD(x, z);
@@ -493,6 +495,53 @@ function heightAt(x, z) {
   if (x > CITY.x1) h = Math.min(h, CITY_H - (x - CITY.x1) * 0.25); // eastern shoreline drops into the sea
   h -= Math.max(0, Math.hypot(x, z - MAP_CZ) - MAP_R) * 0.25; // edge of the map falls into the sea
   return h;
+}
+function craterOffsetAt(x, z) {
+  let offset = 0;
+  for (const c of TERRAIN_CRATERS) {
+    const r = Math.hypot(x - c.x, z - c.z) / c.radius;
+    if (r >= 1.18) continue;
+    if (r < 1) offset -= c.depth * Math.pow(1 - r * r, 2);
+    else offset += c.rim * Math.pow(1 - (r - 1) / 0.18, 2);
+  }
+  return offset;
+}
+function heightAt(x, z) { return baseHeightAt(x, z) + craterOffsetAt(x, z); }
+function makeTerrainCrater(p, kind) {
+  if (!terrainGeometry) return;
+  const kindInfo = BOMB_KINDS[kind] || BOMB_KINDS.mk82;
+  const relativeYield = kindInfo.tntKg / BOMB_KINDS.mk82.tntKg;
+  const scale = Math.cbrt(relativeYield);
+  const crater = kind === 'cbu87'
+    ? { x: p.x, z: p.z, radius: 38, depth: 4.5, rim: 1.2 }
+    : { x: p.x, z: p.z, radius: 52 * scale, depth: 12 * scale, rim: 2.2 * scale };
+  TERRAIN_CRATERS.push(crater);
+  const pos = terrainGeometry.attributes.position;
+  const step = terrainSize / terrainSegments, half = terrainSize * 0.5;
+  const cx = Math.round((p.x + half) / step), rz = Math.round((p.z - (MAP_CZ - half)) / step);
+  const pad = Math.ceil(crater.radius * 1.18 / step) + 1, side = terrainSegments + 1;
+  const c0 = Math.max(0, cx - pad), c1 = Math.min(terrainSegments, cx + pad);
+  const r0 = Math.max(0, rz - pad), r1 = Math.min(terrainSegments, rz + pad);
+  for (let row = r0; row <= r1; row++) for (let col = c0; col <= c1; col++) {
+    const i = row * side + col, dx = pos.getX(i) - crater.x, dz = pos.getZ(i) - crater.z;
+    const r = Math.hypot(dx, dz) / crater.radius;
+    if (r >= 1.18) continue;
+    const delta = r < 1 ? -crater.depth * Math.pow(1 - r * r, 2) : crater.rim * Math.pow(1 - (r - 1) / 0.18, 2);
+    pos.setY(i, pos.getY(i) + delta);
+  }
+  pos.needsUpdate = true;
+  terrainGeometry.computeVertexNormals();
+  terrainGeometry.computeBoundingSphere();
+}
+function clearTerrainCraters() {
+  if (!TERRAIN_CRATERS.length) return;
+  TERRAIN_CRATERS.length = 0;
+  if (!terrainGeometry) return;
+  const pos = terrainGeometry.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setY(i, baseHeightAt(pos.getX(i), pos.getZ(i)));
+  pos.needsUpdate = true;
+  terrainGeometry.computeVertexNormals();
+  terrainGeometry.computeBoundingSphere();
 }
 // Paved surfaces: each is a rectangle along a direction (centre, unit direction ux/uz, half length, half width),
 // kept in a coarse grid so the ground test only looks at the few nearby.
@@ -822,6 +871,7 @@ function makeWaterNormalMap() {
 (function buildTerrain() {
   const SIZE = 18000 * MAP_K, SEG = isTouch ? 400 : 720; // finer samples preserve ridges and valleys at flight altitude
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
+  terrainGeometry = geo; terrainSegments = SEG; terrainSize = SIZE;
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, 0, MAP_CZ);
   const pos = geo.attributes.position;
@@ -3947,6 +3997,7 @@ function startCollapse(i, quiet = false) {
 }
 function rebuildCity() {
   restoreCity();
+  clearTerrainCraters();
   MP.log.length = 0; MP.hits.length = 0; MP.logHits = 0;
   clearNukes();
   clearParticles(glow); clearParticles(haze);
@@ -4273,6 +4324,7 @@ function clearBombBursts() {
 }
 function bombExplosion(p, kind, wet, remote = false) {
   const profile = bombBlastProfile(kind);
+  if (!wet) makeTerrainCrater(p, kind);
   if (!remote) mpFx({ k: 'e', p: mpV(p), s: profile.visual, w: wet ? 1 : 0, b: kind });
   // The shared particle system supplies the debris, smoke, flash lighting, sound and camera shake.
   explode(p, profile.visual, wet, true, true);
@@ -4666,6 +4718,8 @@ function updateBombs(dt) {
           const ground = heightAt(x, z);
           if (ground < 0) continue;
           const impact = new THREE.Vector3(x, Math.max(0, ground) + 0.25, z);
+          makeTerrainCrater(impact, 'cbu87');
+          mpFx({ k: 'c', p: mpV(impact), b: 'cbu87' });
           if (i % 3 === 0) explode(impact, 0.14, false, false, true);
           blast(impact, 30, 1500);
         }
@@ -6777,9 +6831,12 @@ function nukeDamage(p, nk) {
 function applyFx(ev, P, replay) {
   if (!ev || typeof ev !== 'object') return;
   const p = ev.k === 'h' ? null : vec(ev.p);
-  if (ev.k === 'b' && p && num(ev.R, 400) && num(ev.pw, 1e5)) { MP.blastBy = P ? P.name : ''; blast(p, ev.R, ev.pw, replay ? 'replay' : 'remote'); }
+  if (ev.k === 'c' && p && BOMB_KINDS[ev.b]) makeTerrainCrater(p, ev.b);
+  else if (ev.k === 'b' && p && num(ev.R, 400) && num(ev.pw, 1e5)) { MP.blastBy = P ? P.name : ''; blast(p, ev.R, ev.pw, replay ? 'replay' : 'remote'); }
   else if (ev.k === 'e' && p && num(ev.s, 10)) {
-    if (!replay) {
+    if (replay) {
+      if (!ev.w && typeof ev.b === 'string' && BOMB_KINDS[ev.b]) makeTerrainCrater(p, ev.b);
+    } else {
       if (typeof ev.b === 'string' && BOMB_KINDS[ev.b]) bombExplosion(p, ev.b, !!ev.w, true);
       else explode(p, ev.s, !!ev.w, true);
     }
