@@ -4405,7 +4405,7 @@ document.addEventListener('mousemove', e => {
 
 // ---------------- bombs: Mk-82, Mk-84, B61, B28 and B41 ----------------
 const bombsFlying = [];
-const BOMB_DRAG = 0.015, NOSE = new THREE.Vector3(0, 0, -1);
+const BOMB_DRAG = 0.015, NOSE = new THREE.Vector3(0, 0, -1), IRIS_NOSE = new THREE.Vector3(0, 0, 1);
 let lastImpact = null; // { p, t, nuke, s } for the bomb camera
 const clockNow = () => performance.now() / 1000;
 
@@ -6453,7 +6453,7 @@ function updateMissiles(dt) {
     _ma.addScaledVector(m.vel, -K.cd * Math.exp(-Math.max(0, m.pos.y) / 8500) * v);
     m.vel.addScaledVector(_ma, dt);
     m.pos.addScaledVector(m.vel, dt);
-    m.obj.quaternion.setFromUnitVectors(NOSE, _mc.copy(m.vel).normalize());
+    m.obj.quaternion.setFromUnitVectors(m.kind === 'iris' ? IRIS_NOSE : NOSE, _mc.copy(m.vel).normalize());
     if (m.t < K.burn + 0.5) { emit('smoke', m.pos, 0, 0.5, 0, 0.45); if (m.t < K.burn) emit('fire', m.pos, -m.vel.x * 0.05, 0, -m.vel.z * 0.05, 0.25); }
     // the ground, the sea or a building
     const h = heightAt(m.pos.x, m.pos.z), bi = buildingAt(m.pos.x, m.pos.z);
