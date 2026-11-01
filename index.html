@@ -2142,7 +2142,16 @@ function buildFromGltf(model) {
   for (const src of meshes) {
     const modelMatrix = m4.multiplyMatrices(turn, src.matrixWorld).clone();
     const geometry = src.geometry.clone();
-    if (f15Model) geometry.applyMatrix4(modelMatrix); // baked into sim coordinates for spatial rigging
+    if (f15Model) {
+      geometry.applyMatrix4(modelMatrix); // baked into sim coordinates for spatial rigging
+      // The Sketchfab node chain mirrors (Y/Z swap). The scene graph would compensate, but baking it in leaves
+      // every face wound inward, and the double-sided material then lights the airframe from the wrong side.
+      if (modelMatrix.determinant() < 0 && geometry.index) {
+        const ix = geometry.index.array;
+        for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; }
+        geometry.index.needsUpdate = true;
+      }
+    }
     const m = new THREE.Mesh(geometry, src.material);
     m.name = src.name;
     if (f15Model) { m.position.set(0, 0, 0); m.quaternion.identity(); m.scale.set(1, 1, 1); }
