@@ -449,6 +449,7 @@ const MAP_K = Math.sqrt(10), MAP_AZ = 5800;
 const mapZ = z => MAP_AZ + (z - MAP_AZ) * MAP_K; // an original z in the scaled map
 const MAP_CZ = mapZ(-2200), MAP_R = 8000 * MAP_K;  // centre and radius of the main landmass
 const CITY_H = 24, BLOCK = 144, ROAD = 12;
+const NAVAL_VESSELS = [], NAVAL_MODELS = Object.create(null);
 const CITY0 = { x0: -3400, x1: 3700, z0: -7200, z1: 2800 }; // the city's original bounds
 const CITY = { x0: CITY0.x0 * MAP_K, x1: CITY0.x1 * MAP_K, z0: mapZ(CITY0.z0), z1: mapZ(CITY0.z1) };
 // tower districts: the old downtown plus new centres across the larger city (r: how far its towers reach)
@@ -630,11 +631,24 @@ for (const R of RUNWAYS) {
   R.rect = pave('rwy', R.x - ux * hl, R.z - uz * hl, R.x + ux * hl, R.z + uz * hl, R.w);
   RWY_ENDS.push({ name: R.names[0], x: R.x - ux * hl, z: R.z - uz * hl }, { name: R.names[1], x: R.x + ux * hl, z: R.z + uz * hl });
 }
+function carrierDeckAt(x, z) {
+  for (const ship of NAVAL_VESSELS) {
+    if (ship.type !== 'carrier' || ship.sinking || ship.sunk || !ship.model) continue;
+    const dx = x - ship.group.position.x, dz = z - ship.group.position.z, c = Math.cos(ship.group.rotation.y), sn = Math.sin(ship.group.rotation.y);
+    const lx = c * dx - sn * dz, lz = sn * dx + c * dz;
+    if (Math.abs(lx) <= ship.deckHalfWidth && Math.abs(lz) <= ship.deckHalfLength)
+      return { h: ship.group.position.y + ship.deckLocalY, ship };
+  }
+  return null;
+}
 function ground(x, z) {
+  const carrier = carrierDeckAt(x, z);
+  if (carrier) return { h: carrier.h, water: false, paved: true, runway: false, carrier: true };
   const h = heightAt(x, z), p = h === CITY_H ? pavedAt(x, z) : null;
   return { h: Math.max(h, 0), water: h < 0, paved: !!p, runway: !!p && p.kind === 'rwy' };
 }
 function slopeAt(x, z) {
+  if (carrierDeckAt(x, z)) return 0;
   const h = heightAt(x, z);
   return Math.hypot(heightAt(x + 3, z) - h, heightAt(x, z + 3) - h) / 3;
 }
@@ -3637,6 +3651,10 @@ if (THREE.GLTFLoader) {
       parts.nuke.visible = visible;
     }
   }, undefined, err => console.warn('B28 nuclear-thunder GLB did not load; using the simple B28.', err));
+  loader.load('kirov-class_cruiser.glb', gltf => installNavalModel('cruiser', prepareNavalModel(gltf, 252)), undefined,
+    err => console.warn('Kirov cruiser model did not load; ships will remain hidden.', err));
+  loader.load('gerald_ford_aircraft_carrier.glb', gltf => installNavalModel('carrier', prepareNavalModel(gltf, 333)), undefined,
+    err => console.warn('Gerald Ford carrier model did not load; carrier landing deck unavailable.', err));
   for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
@@ -3654,6 +3672,155 @@ if (THREE.GLTFLoader) {
   }
 }
 
+// Naval traffic: Kirov cruisers patrol around the island; the carrier follows a wider route and is landable.
+function prepareNavalModel(gltf, targetLength) {
+  gltf.scene.updateMatrixWorld(true);
+  const baked = [];
+  gltf.scene.traverse(o => {
+    if (!o.isMesh) return;
+    const src = o.material, materials = Array.isArray(src) ? src : [src];
+    const mats = materials.map(m => {
+      const copy = m.clone();
+      if (copy.color) {
+        const dark = copy.color.r + copy.color.g + copy.color.b < 0.12;
+        copy.color.convertLinearToSRGB();
+        if (dark) copy.color.set(copy.map ? '#ffffff' : '#727873');
+      }
+      copy.side = THREE.DoubleSide; copy.needsUpdate = true;
+      return copy;
+    });
+    const geo = bakeGltfMesh(o);
+    for (const attr of ['color', 'uv2']) if (o.geometry.attributes[attr]) geo.setAttribute(attr, o.geometry.attributes[attr].clone());
+    if (Array.isArray(src)) for (const group of o.geometry.groups) geo.addGroup(group.start, group.count, group.materialIndex);
+    baked.push({ geo, mat: Array.isArray(src) ? mats : mats[0] });
+  });
+  const box = new THREE.Box3();
+  baked.forEach(b => { b.geo.computeBoundingBox(); box.union(b.geo.boundingBox); });
+  if (box.isEmpty()) throw new Error('Ship model has no meshes');
+  const size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+  const axis = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
+  const ax = ['x', 'y', 'z'].indexOf(axis), ortho = [0, 1, 2].filter(i => i !== ax), toZ = new THREE.Matrix4();
+  if (axis === 'x') toZ.makeRotationY(Math.PI / 2);
+  else if (axis === 'y') toZ.makeRotationX(-Math.PI / 2);
+  const endWidth = sign => {
+    let width = 0;
+    for (const b of baked) {
+      const pos = b.geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, i).sub(centre);
+        if (v.getComponent(ax) * sign > size.getComponent(ax) * 0.38)
+          width = Math.max(width, Math.hypot(v.getComponent(ortho[0]), v.getComponent(ortho[1])));
+      }
+    }
+    return width;
+  };
+  const bowSign = endWidth(1) <= endWidth(-1) ? 1 : -1;
+  if (new THREE.Vector3().setComponent(ax, bowSign).applyMatrix4(toZ).z > 0) toZ.premultiply(new THREE.Matrix4().makeRotationY(Math.PI));
+  const k = targetLength / size[axis];
+  const fit = new THREE.Matrix4().makeScale(k, k, k).multiply(toZ).multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
+  const root = new THREE.Group(), output = new THREE.Box3();
+  for (const b of baked) {
+    b.geo.applyMatrix4(fit); b.geo.computeBoundingBox(); output.union(b.geo.boundingBox);
+    const mesh = new THREE.Mesh(b.geo, b.mat); mesh.castShadow = true; mesh.receiveShadow = true; root.add(mesh);
+  }
+  const outSize = output.getSize(new THREE.Vector3());
+  return {
+    root, length: outSize.z, width: outSize.x, height: outSize.y,
+    minY: output.min.y, maxY: output.max.y,
+    deckLocalY: output.min.y + outSize.y * 0.48
+  };
+}
+function placeNaval(ship) {
+  ship.group.position.x = Math.sin(ship.angle) * ship.orbit;
+  ship.group.position.z = MAP_CZ + Math.cos(ship.angle) * ship.orbit;
+  ship.group.rotation.y = ship.angle - Math.PI / 2;
+}
+function installNavalModel(type, model) {
+  NAVAL_MODELS[type] = model;
+  for (const ship of NAVAL_VESSELS) if (ship.type === type) {
+    ship.group.clear();
+    ship.group.add(model.root.clone(true));
+    ship.model = model;
+    ship.length = model.length; ship.width = model.width;
+    ship.deckLocalY = model.deckLocalY;
+    ship.deckHalfLength = model.length * 0.46;
+    ship.deckHalfWidth = Math.max(18, model.width * 0.42);
+    ship.group.position.y = -model.minY - 8; // float the keel below the waterline
+    placeNaval(ship);
+  }
+}
+function addNavalVessel(id, type, angle, orbit, speed, hp) {
+  const group = new THREE.Group();
+  const ship = { id, type, angle, startAngle: angle, orbit, speed, hp, maxHp: hp, group, model: null,
+    length: type === 'carrier' ? 333 : 252, width: type === 'carrier' ? 72 : 32,
+    deckHalfLength: type === 'carrier' ? 153 : 0, deckHalfWidth: type === 'carrier' ? 34 : 0,
+    deckLocalY: 0, sinking: false, sunk: false, sinkT: 0, fxT: 0 };
+  scene.add(group); NAVAL_VESSELS.push(ship);
+  if (NAVAL_MODELS[type]) installNavalModel(type, NAVAL_MODELS[type]);
+  placeNaval(ship);
+  return ship;
+}
+addNavalVessel('cruiser-1', 'cruiser', 0.35, MAP_R + 520, 12, 220);
+addNavalVessel('cruiser-2', 'cruiser', 2.4, MAP_R + 520, 10, 220);
+addNavalVessel('cruiser-3', 'cruiser', 4.55, MAP_R + 520, 11, 220);
+addNavalVessel('cruiser-4', 'cruiser', 5.7, MAP_R + 520, 13, 220);
+addNavalVessel('carrier-1', 'carrier', 1.4, MAP_R + 1050, 9, 520);
+function resetNaval() {
+  for (const ship of NAVAL_VESSELS) {
+    ship.angle = ship.startAngle; ship.hp = ship.maxHp;
+    ship.sinking = ship.sunk = false; ship.sinkT = ship.fxT = 0; ship.group.visible = true;
+    ship.group.rotation.x = ship.group.rotation.z = 0;
+    if (ship.model) ship.group.position.y = -ship.model.minY - 8;
+    placeNaval(ship);
+  }
+}
+function navalLocal(ship, x, z, out) {
+  const dx = x - ship.group.position.x, dz = z - ship.group.position.z, c = Math.cos(ship.group.rotation.y), sn = Math.sin(ship.group.rotation.y);
+  return out.set(c * dx - sn * dz, sn * dx + c * dz);
+}
+const navalTmp = new THREE.Vector2();
+function navalCollisionAt(p) {
+  for (const ship of NAVAL_VESSELS) {
+    if (!ship.model || ship.sinking || ship.sunk) continue;
+    navalLocal(ship, p.x, p.z, navalTmp);
+    if (Math.abs(navalTmp.x) <= ship.width * 0.5 && Math.abs(navalTmp.y) <= ship.length * 0.5 &&
+        p.y >= ship.group.position.y + ship.model.minY && p.y <= ship.group.position.y + ship.model.maxY) return ship;
+  }
+  return null;
+}
+function damageNavalUnits(p, radius, power) {
+  for (const ship of NAVAL_VESSELS) {
+    if (!ship.model || ship.sinking || ship.sunk) continue;
+    navalLocal(ship, p.x, p.z, navalTmp);
+    const dx = Math.max(0, Math.abs(navalTmp.x) - ship.width * 0.5);
+    const dz = Math.max(0, Math.abs(navalTmp.y) - ship.length * 0.5);
+    const minY = ship.group.position.y + ship.model.minY, maxY = ship.group.position.y + ship.model.maxY;
+    const dy = p.y < minY ? minY - p.y : p.y > maxY ? p.y - maxY : 0;
+    const d = Math.hypot(dx, dy, dz);
+    if (d > radius + 20) continue;
+    const proximity = clamp(1 - d / (radius + 20), 0, 1);
+    ship.hp -= Math.min(ship.maxHp, power / 18 * proximity);
+    if (ship.hp <= 0) { ship.hp = 0; ship.sinking = true; ship.sinkT = 0; }
+  }
+}
+function updateNaval(dt) {
+  for (const ship of NAVAL_VESSELS) {
+    if (ship.sunk) continue;
+    if (ship.sinking) {
+      ship.sinkT += dt; ship.group.position.y -= dt * 0.9;
+      ship.group.rotation.x += dt * 0.012; ship.group.rotation.z += dt * (ship.id === 'carrier-1' ? 0.028 : 0.045);
+      ship.fxT -= dt;
+      if (ship.fxT <= 0 && ship.model) {
+        ship.fxT = 0.8;
+        emit('smoke', tC.set(ship.group.position.x, ship.group.position.y + ship.deckLocalY * 0.6, ship.group.position.z), rr([-5, 5]), rr([2, 8]), rr([-5, 5]), rr([5, 10]));
+      }
+      if (ship.sinkT > 28) { ship.sunk = true; ship.group.visible = false; }
+      continue;
+    }
+    ship.angle = (ship.angle + ship.speed / ship.orbit * dt) % (Math.PI * 2);
+    placeNaval(ship);
+  }
+}
 // ---------------- particles: fire, smoke, sparks, splash, dust ----------------
 const puffTex = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -4390,6 +4557,7 @@ function updateCity(dt) {
 // from: '' for a blast made here, 'remote' for another player's, 'replay' when catching up on the shared city
 function blast(p, R, power, from = '') {
   if (!from) mpFx({ k: 'b', p: mpV(p), R, pw: power });
+  damageNavalUnits(p, R, power);
   const ix0 = Math.floor((p.x - R) / BLOCK), ix1 = Math.floor((p.x + R) / BLOCK), iz0 = Math.floor((p.z - R) / BLOCK), iz1 = Math.floor((p.z + R) / BLOCK);
   const seen = new Set(); // a building spanning several grid squares is listed in each of them
   for (let ix = ix0; ix <= ix1; ix++) for (let iz = iz0; iz <= iz1; iz++) {
@@ -4835,19 +5003,21 @@ function updateBombs(dt) {
       const bi = buildingAt(tC.x, tC.z);
       const h = heightAt(tC.x, tC.z);
       if (bi >= 0 && solidAt(bi, tC.x, tC.y, tC.z)) hit = 'building';
+      else if (navalCollisionAt(tC)) hit = 'ship';
       else if (tC.y <= Math.max(h, 0)) { hit = h < 0 ? 'water' : 'ground'; tC.y = Math.max(h, 0); }
     }
     if (hit) {
       const p = tC.clone();
       scene.remove(o);
       bombsFlying.splice(b, 1);
-      if (B.kind === 'nuke') { detonateNuke(p, hit === 'water', B.nk); continue; }
-      if (B.kind === 'shell') { explode(p, 0.55, hit === 'water'); blast(p, hit === 'water' ? 8 : 14, 520); continue; } // 105 mm HE, ~2 kg of Comp B
+      const wet = hit === 'water' || hit === 'ship';
+      if (B.kind === 'nuke') { detonateNuke(p, wet, B.nk); continue; }
+      if (B.kind === 'shell') { explode(p, 0.55, wet); blast(p, hit === 'water' ? 8 : 14, 520); continue; } // 105 mm HE, ~2 kg of Comp B
       // Conventional bombs use their tuned blast profiles; CBU-87 spreads small impacts across an area.
       const fx = bombBlastProfile(B.kind);
-      bombExplosion(p, B.kind, hit === 'water');
+      bombExplosion(p, B.kind, wet);
       blast(p, hit === 'water' ? fx.radius * 0.55 : fx.radius, fx.power);
-      if (B.kind === 'cbu87' && hit !== 'water') {
+      if (B.kind === 'cbu87' && hit !== 'water' && hit !== 'ship') {
         // Keep the simplified submunition footprint over the target and make each impact
         // strong enough to break nearby building cells instead of leaving barely visible marks.
         for (let i = 0; i < 24; i++) {
@@ -4918,6 +5088,7 @@ function detonateNuke(p, wet, nk = NUKE_KINDS.b61, remote = false) {
   if (!remote) mpFx({ k: 'n', p: mpV(p), w: wet ? 1 : 0, id: nukeId(nk) });
   if (!wet) makeNukeCrater(p, nk);
   const gy = Math.max(0, heightAt(p.x, p.z)), sz = nukeScale(nk.kt);
+  damageNavalUnits(p, sz.killR, 1e9);
   const fx = { p: p.clone(), gy, ...sz, cloudDelay: Math.max(1.2, 0.8 + 1.1 * sz.tf), life: Math.max(110, 5 * sz.rise), t: 0, idx: 0, near: [], hitPlane: false, camHit: false };
   // buildings in reach, nearest first, so the blast wave can knock them down in order
   for (let i = 0; i < NB; i++) {
@@ -5132,6 +5303,8 @@ function reset(mode) {
   Object.assign(S, { crashed: false, time: 0, maxAlt: 0, maxSpd: 0, brake: false, hitBuilding: -1,
     ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: parts.nuke ? 1 : 0, firing: false });
   clearWeapons();
+  resetNaval();
+  S.carrierId = null;
   S.ang.set(0, 0, 0);
   inp.pitch = inp.roll = inp.yaw = 0;
   if (mode === 'runway') {
@@ -5324,6 +5497,23 @@ function waterPhysics(dt) {
 }
 function physics(dt) {
   if (S.ditched) { waterPhysics(dt); return; }
+  if (S.onGround && S.carrierId) {
+    const carrier = NAVAL_VESSELS.find(ship => ship.id === S.carrierId && !ship.sinking && !ship.sunk);
+    if (!carrier) S.carrierId = null;
+    else {
+      const oldYaw = S.carrierYaw, oldC = Math.cos(oldYaw), oldS = Math.sin(oldYaw);
+      const relX = S.pos.x - (S.carrierX ?? carrier.group.position.x), relZ = S.pos.z - (S.carrierZ ?? carrier.group.position.z);
+      S.carrierLocalX = oldC * relX - oldS * relZ;
+      S.carrierLocalZ = oldS * relX + oldC * relZ;
+      const yaw = carrier.group.rotation.y, c = Math.cos(yaw), sn = Math.sin(yaw);
+      S.pos.x = carrier.group.position.x + c * S.carrierLocalX + sn * S.carrierLocalZ;
+      S.pos.z = carrier.group.position.z - sn * S.carrierLocalX + c * S.carrierLocalZ;
+      let dyaw = yaw - oldYaw;
+      if (dyaw > Math.PI) dyaw -= 2 * Math.PI; else if (dyaw < -Math.PI) dyaw += 2 * Math.PI;
+      if (Math.abs(dyaw) > 1e-8) S.quat.premultiply(dq.setFromAxisAngle(AY, dyaw)).normalize();
+      S.carrierYaw = yaw; S.carrierX = carrier.group.position.x; S.carrierZ = carrier.group.position.z;
+    }
+  }
   const q = S.quat, v = S.vel;
   structurePrevPos.copy(S.pos); structurePrevQuat.copy(q);
   axes(q);
@@ -5500,13 +5690,19 @@ function physics(dt) {
         toast(`Touchdown ${fpm} ft/min · ${fpm < 200 ? 'Butter' : fpm < 450 ? 'Smooth' : fpm < 700 ? 'Firm' : 'Hard'}${g.runway ? '' : ' · off-runway'}`);
       }
       S.onGround = true;
+      if (g.carrier) {
+        const carrier = g.carrier.ship;
+        navalLocal(carrier, S.pos.x, S.pos.z, navalTmp);
+        S.carrierId = carrier.id; S.carrierLocalX = navalTmp.x; S.carrierLocalZ = navalTmp.y; S.carrierYaw = carrier.group.rotation.y; S.carrierX = carrier.group.position.x; S.carrierZ = carrier.group.position.z;
+      }
     }
+    if (!g.carrier && S.carrierId) S.carrierId = null;
     v.y += Math.max(0, springK * comp - damperC * v.y) / MASS * dt;
     if (comp > travel) { // bottomed out: the strut (or the belly) is solid
       S.pos.y = g.h + reach - travel;
       if (v.y < 0) v.y = 0;
     }
-  } else if (comp < -0.25) S.onGround = false;
+  } else if (comp < -0.25) { S.onGround = false; S.carrierId = null; }
   S.gearComp = gearOK && S.onGround ? clamp(comp, 0, A.travel) : 0;
 
   if (S.onGround) {
@@ -6962,6 +7158,7 @@ function hitAt(bi, p, r, pw) { damageAt(bi, p, r, pw); MP.hits.push(bi, r1(p.x),
 // the building damage of a nuclear blast, without the fireball and cloud (for catching up on the log)
 function nukeDamage(p, nk) {
   const killR = nukeScale(nk.kt).killR;
+  damageNavalUnits(p, killR, 1e9);
   for (let i = 0; i < NB; i++) {
     if (bState[i] !== 0) continue;
     const k = i * 5, d = Math.hypot(clamp(p.x, BLD[k], BLD[k + 2]) - p.x, clamp(p.z, BLD[k + 1], BLD[k + 3]) - p.z);
@@ -7534,7 +7731,7 @@ function frame(now) {
     S.time += dt;
   } else acc = 0;
   if (running && !paused && !S.ditched) updateWeapons(dt);
-  if (!paused) { updateCity(dt); updateCityTraffic(dt); updateNukes(dt); updateBombBursts(dt); }
+  if (!paused) { updateCity(dt); updateCityTraffic(dt); updateNaval(dt); updateNukes(dt); updateBombBursts(dt); }
   if (S.crashed && !paused) updateWreck(dt);
   updateParticles(glow, dt); updateParticles(haze, dt);
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
