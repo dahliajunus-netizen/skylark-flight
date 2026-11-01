@@ -3160,7 +3160,7 @@ if (THREE.GLTFLoader) {
     const axis = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
     const fuze = baked.find(b => b.fuze), fuzeAt = fuze ? fuze.geo.boundingBox.getCenter(new THREE.Vector3())[axis] - centre[axis] : -1;
     const toZ = new THREE.Matrix4();
-    if (axis === 'x') toZ.makeRotationY(Math.PI / 2); else if (axis === 'y') toZ.makeRotationX(-Math.PI / 2);
+    if (axis === 'x') toZ.makeRotationY(Math.PI / 2); else if (axis === 'y') toZ.makeRotationX(Math.PI / 2);
     // after aiming the long axis down Z, turn it round if the fuze ended up aft
     const probe = new THREE.Vector3().setComponent(['x', 'y', 'z'].indexOf(axis), fuzeAt).applyMatrix4(toZ);
     if (probe.z > 0) toZ.premultiply(new THREE.Matrix4().makeRotationY(Math.PI));
