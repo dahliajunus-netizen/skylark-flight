@@ -1504,7 +1504,7 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
   };
   const crown = (x0, z0, x1, z1, h, signature = false) => {
     const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-    if (w < 20 || d < 20 || h < 55) return;
+    if ((!signature && (w < 20 || d < 20)) || h < 55) return;
     const baseY = CITY_H + h, inset = signature ? 0.28 : 0.2;
     const pw = w * (1 - inset), pd = d * (1 - inset);
     roofPart(cx - pw / 2, cz - pd / 2, cx + pw / 2, cz + pd / 2, baseY, 1.4, '#53616a');
