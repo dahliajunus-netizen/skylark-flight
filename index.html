@@ -3245,9 +3245,20 @@ if (THREE.GLTFLoader) {
     const k = 2.77 / size[axis];
     const fit = new THREE.Matrix4().makeScale(k, k, k).multiply(toZ).multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
     const g = new THREE.Group();
+    const bombMat = new THREE.MeshStandardMaterial({ color: '#737866', roughness: 0.72, metalness: 0.08, side: THREE.DoubleSide });
     for (const b of baked) {
       b.geo.applyMatrix4(fit);
-      const m = new THREE.Mesh(b.geo, b.mat); m.castShadow = true; m.receiveShadow = true; g.add(m);
+      const pos = b.geo.attributes.position, colors = new Float32Array(pos.count * 3), tint = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const band = Math.abs(z + 0.66) < 0.055 || Math.abs(z - 0.34) < 0.055;
+        tint.set(band ? '#c8ad43' : z > 0.78 ? '#555a4d' : '#737866');
+        const grain = 0.96 + 0.04 * (0.5 + 0.5 * Math.sin(x * 97 + y * 53 + z * 71));
+        tint.multiplyScalar(grain);
+        colors[i * 3] = tint.r; colors[i * 3 + 1] = tint.g; colors[i * 3 + 2] = tint.b;
+      }
+      b.geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      const m = new THREE.Mesh(b.geo, bombMat); m.castShadow = true; m.receiveShadow = true; g.add(m);
     }
     bombTemplates.heavy = g;
     for (const b of parts.bombs) if (b.userData.kind === 'heavy') { b.clear(); g.children.forEach(m => b.add(m.clone())); }
