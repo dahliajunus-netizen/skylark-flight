@@ -1802,7 +1802,7 @@ const AC = {
     // Eurofighter Typhoon: ~17 t with bombs, 51.2 m² delta, two EJ200s (~60 kN dry, ~90 kN reheat each)
     id: 'typhoon', mass: 16000, wing: 51.2, thrust: 120000, thrustAB: 180000,
     CL0: 0.15, CLA: 3.2, stallA: 0.5, cd0: 0.02, k: 0.14, wave: [0.9, 1.1, 0.025],
-    gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 3.08, weapons: true, gearTime: 4, mainRetract: 'in', centreX: 0.5, travel: 0.3,
+    gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 3.08, weapons: true, gearTime: 4, mainRetract: 'out', centreX: 0.5, travel: 0.3,
     hiG: { g: 12, rate: 1.9, aoa: 1.75, cl: 1.2, cd: 3.2, cobraV: 180 }, // the unstable delta-canard pitches up even faster
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
     ammo: 150, roundDmg: 1.6, muzzle: [0.95, -0.91, 2.2], stabSign: -1, model: 'typhoon_split.glb', split: 15.96, // BK-27 port in the right wing root
@@ -2644,7 +2644,8 @@ function rigGear() {
     const b52Truck = A.id === 'b52' && /^[LR](14|28)$/.test(key);
     const ac130MainGear = A.id === 'ac130' && key[0] !== 'c' && key[1] !== 'o';
     const fwd = !ac130MainGear && (key[0] === 'c' || b52Truck || (A.mainRetract === 'fwd' && A.id !== 'b52') || (A.bodyFwd && Math.abs((bb.min.x + bb.max.x) / 2) < A.bodyFwd));
-    const sign = ac130MainGear ? 0 : b52Truck ? (key[0] === 'L' ? 1 : -1) : fwd ? 1 : key[0] === 'R' ? -1 : 1;
+    const outboardRetract = A.mainRetract === 'out' && key[0] !== 'c';
+    const sign = ac130MainGear ? 0 : b52Truck ? (key[0] === 'L' ? 1 : -1) : fwd ? 1 : (key[0] === 'R' ? -1 : 1) * (outboardRetract ? -1 : 1);
     const leg = { key, pivot, upper, lower, truck, truckHome, truckCorners, truckFootY: pivot.position.y + truckBounds.min.y, nose: key === centre[0], len: Math.max(0.3, -strutBottom), axis: ac130MainGear ? 'none' : fwd ? 'x' : 'z', sign, homeY: pivot.position.y, retractLift: ac130MainGear ? Math.max(1.5, Math.max(0.3, -strutBottom) + 0.3) : 0 };
     parts.gearLegs.push(leg);
     const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
