@@ -507,18 +507,11 @@ function craterOffsetAt(x, z) {
   return offset;
 }
 function heightAt(x, z) { return baseHeightAt(x, z) + craterOffsetAt(x, z); }
-function makeTerrainCrater(p, kind) {
+function deformTerrainForCrater(crater) {
   if (!terrainGeometry) return;
-  const kindInfo = BOMB_KINDS[kind] || BOMB_KINDS.mk82;
-  const relativeYield = kindInfo.tntKg / BOMB_KINDS.mk82.tntKg;
-  const scale = Math.cbrt(relativeYield);
-  const crater = kind === 'cbu87'
-    ? { x: p.x, z: p.z, radius: 38, depth: 4.5, rim: 1.2 }
-    : { x: p.x, z: p.z, radius: 52 * scale, depth: 12 * scale, rim: 2.2 * scale };
-  TERRAIN_CRATERS.push(crater);
   const pos = terrainGeometry.attributes.position;
   const step = terrainSize / terrainSegments, half = terrainSize * 0.5;
-  const cx = Math.round((p.x + half) / step), rz = Math.round((p.z - (MAP_CZ - half)) / step);
+  const cx = Math.round((crater.x + half) / step), rz = Math.round((crater.z - (MAP_CZ - half)) / step);
   const pad = Math.ceil(crater.radius * 1.18 / step) + 1, side = terrainSegments + 1;
   const c0 = Math.max(0, cx - pad), c1 = Math.min(terrainSegments, cx + pad);
   const r0 = Math.max(0, rz - pad), r1 = Math.min(terrainSegments, rz + pad);
@@ -532,6 +525,25 @@ function makeTerrainCrater(p, kind) {
   pos.needsUpdate = true;
   terrainGeometry.computeVertexNormals();
   terrainGeometry.computeBoundingSphere();
+}
+function makeTerrainCrater(p, kind) {
+  if (!terrainGeometry) return;
+  const kindInfo = BOMB_KINDS[kind] || BOMB_KINDS.mk82;
+  const relativeYield = kindInfo.tntKg / BOMB_KINDS.mk82.tntKg;
+  const scale = Math.cbrt(relativeYield);
+  const crater = kind === 'cbu87'
+    ? { x: p.x, z: p.z, radius: 38, depth: 4.5, rim: 1.2 }
+    : { x: p.x, z: p.z, radius: 52 * scale, depth: 12 * scale, rim: 2.2 * scale };
+  TERRAIN_CRATERS.push(crater);
+  deformTerrainForCrater(crater);
+}
+function makeNukeCrater(p, nk) {
+  if (!terrainGeometry) return;
+  const blastRadius = nukeScale(nk.kt).killR;
+  const radius = clamp(blastRadius * 0.065, 60, 1100);
+  const crater = { x: p.x, z: p.z, radius, depth: clamp(radius * 0.18, 12, 180), rim: clamp(radius * 0.025, 1.5, 22) };
+  TERRAIN_CRATERS.push(crater);
+  deformTerrainForCrater(crater);
 }
 function clearTerrainCraters() {
   if (!TERRAIN_CRATERS.length) return;
@@ -4776,6 +4788,7 @@ const cT = new THREE.Color(), nM = new THREE.Matrix4(), nQ = new THREE.Quaternio
 
 function detonateNuke(p, wet, nk = NUKE_KINDS.b61, remote = false) {
   if (!remote) mpFx({ k: 'n', p: mpV(p), w: wet ? 1 : 0, id: nukeId(nk) });
+  if (!wet) makeNukeCrater(p, nk);
   const gy = Math.max(0, heightAt(p.x, p.z)), sz = nukeScale(nk.kt);
   const fx = { p: p.clone(), gy, ...sz, cloudDelay: Math.max(1.2, 0.8 + 1.1 * sz.tf), life: Math.max(110, 5 * sz.rise), t: 0, idx: 0, near: [], hitPlane: false, camHit: false };
   // buildings in reach, nearest first, so the blast wave can knock them down in order
@@ -6844,8 +6857,10 @@ function applyFx(ev, P, replay) {
   }
   else if (ev.k === 'n' && p && NUKE_KINDS.hasOwnProperty(ev.id)) {
     const nk = NUKE_KINDS[ev.id];
-    if (replay) nukeDamage(p, nk);
-    else {
+    if (replay) {
+      nukeDamage(p, nk);
+      if (!ev.w) makeNukeCrater(p, nk);
+    } else {
       // a player can't set off the same bomb faster than its cooldown (less some slack for different fall times)
       const now = performance.now(), last = P && P.lastNuke[ev.id];
       if (last && now - last < (NUKE_COOLDOWN[ev.id] - 90) * 1000) return;
