@@ -5024,6 +5024,7 @@ function releaseStore(src, kind) {
   scene.add(obj);
   axes(S.quat);
   bombsFlying.push({ obj, kind, nk: src.userData.nk, t: 0, v: S.vel.clone().addScaledVector(U, -4) }); // ejector rack kicks it clear
+  soundFX('release');
 }
 function dropBomb() {
   if (parts.missiles.length) { fireMissile(); return; } // with the missile loadout, X fires a missile
@@ -5298,7 +5299,7 @@ function nukeBoom(dist, killR) {
   g.gain.exponentialRampToValueAtTime(k, t + 0.05);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 12);
   src.connect(f).connect(g).connect(ctx.destination);
-  src.start(t); src.stop(t + 12.2);
+  src.connect(audio.output); src.start(t); src.stop(t + 12.2);
 }
 
 // ---------------- bomb camera ----------------
@@ -6010,6 +6011,7 @@ function toggleGear() {
   if (S.belly) { toast('The landing gear is gone'); return; }
   if (S.onGround) { toast('The gear stays down on the ground'); return; }
   S.gearDown = !S.gearDown;
+  soundFX('gear');
   toast(S.gearDown ? 'Gear down' : 'Gear up');
 }
 
@@ -6134,39 +6136,48 @@ function toast(msg) {
 }
 
 // ---------------- audio ----------------
-let audio = null;
+let audio = null, sonicBoomArmed = true;
 function initAudio() {
   if (audio) { if (audio.ctx.state === 'suspended') audio.ctx.resume(); return; }
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const master = ctx.createDynamicsCompressor();
+    master.threshold.value = -16; master.knee.value = 12; master.ratio.value = 4;
+    master.attack.value = 0.004; master.release.value = 0.22;
+    const output = ctx.createGain(); output.gain.value = 0.72;
+    master.connect(output).connect(ctx.destination);
     const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = buf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
-    // low turbine roar
-    const roarF = ctx.createBiquadFilter(); roarF.type = 'lowpass'; roarF.frequency.value = 250;
+    // Layered intake, turbine and exhaust noise gives the engine body instead of a single white-noise hum.
+    const roarF = ctx.createBiquadFilter(); roarF.type = 'lowpass'; roarF.frequency.value = 260;
     const roarG = ctx.createGain(); roarG.gain.value = 0;
-    noise.connect(roarF).connect(roarG).connect(ctx.destination);
-    // airflow hiss
+    noise.connect(roarF).connect(roarG).connect(output);
+    const turbineF = ctx.createBiquadFilter(); turbineF.type = 'bandpass'; turbineF.frequency.value = 520; turbineF.Q.value = 0.65;
+    const turbineG = ctx.createGain(); turbineG.gain.value = 0;
+    noise.connect(turbineF).connect(turbineG).connect(output);
+    const exhaustF = ctx.createBiquadFilter(); exhaustF.type = 'highpass'; exhaustF.frequency.value = 850;
+    const exhaustG = ctx.createGain(); exhaustG.gain.value = 0;
+    noise.connect(exhaustF).connect(exhaustG).connect(output);
     const hissF = ctx.createBiquadFilter(); hissF.type = 'bandpass'; hissF.frequency.value = 1800; hissF.Q.value = 0.8;
     const hissG = ctx.createGain(); hissG.gain.value = 0;
-    noise.connect(hissF).connect(hissG).connect(ctx.destination);
-    // compressor whine
+    noise.connect(hissF).connect(hissG).connect(output);
     const whine = ctx.createOscillator(); whine.type = 'sine'; whine.frequency.value = 600;
     const whineG = ctx.createGain(); whineG.gain.value = 0;
-    whine.connect(whineG).connect(ctx.destination);
+    whine.connect(whineG).connect(output);
+    const turbineTone = ctx.createOscillator(); turbineTone.type = 'sawtooth'; turbineTone.frequency.value = 90;
+    const turbineToneF = ctx.createBiquadFilter(); turbineToneF.type = 'lowpass'; turbineToneF.frequency.value = 340;
+    const turbineToneG = ctx.createGain(); turbineToneG.gain.value = 0;
+    turbineTone.connect(turbineToneF).connect(turbineToneG).connect(output);
     const horn = ctx.createOscillator(); horn.type = 'triangle'; horn.frequency.value = 1450;
     const hg = ctx.createGain(); hg.gain.value = 0;
-    horn.connect(hg).connect(ctx.destination);
-    // M61 cannon: a 100 Hz buzz (100 rounds a second) over a burst of noise
+    horn.connect(hg).connect(output);
+    // Short, filtered cannon pulse; the dedicated attack comes from burst envelopes in soundFX.
     const gunG = ctx.createGain(); gunG.gain.value = 0;
     const gunOsc = ctx.createOscillator(); gunOsc.type = 'sawtooth'; gunOsc.frequency.value = 100;
     const gunOscG = ctx.createGain(); gunOscG.gain.value = 0.5;
     const gunF = ctx.createBiquadFilter(); gunF.type = 'bandpass'; gunF.frequency.value = 450; gunF.Q.value = 0.9;
-    gunOsc.connect(gunOscG).connect(gunG);
-    noise.connect(gunF).connect(gunG);
-    gunG.connect(ctx.destination);
-    // GAU-8 "BRRRT": 65 rounds a second fuse into one low, tearing buzz. A 65 Hz pulse train gates
-    // band-passed noise (each round a crack), over a clipped square-wave growl at the same rate.
+    gunOsc.connect(gunOscG).connect(gunG); noise.connect(gunF).connect(gunG); gunG.connect(output);
     const brrtG = ctx.createGain(); brrtG.gain.value = 0;
     const brrtOsc = ctx.createOscillator(); brrtOsc.type = 'square'; brrtOsc.frequency.value = 65;
     const clip = ctx.createWaveShaper(), curve = new Float32Array(256);
@@ -6178,43 +6189,99 @@ function initAudio() {
     const crackF = ctx.createBiquadFilter(); crackF.type = 'bandpass'; crackF.frequency.value = 320; crackF.Q.value = 0.7;
     const gate = ctx.createGain(); gate.gain.value = 0.5;
     const depth = ctx.createGain(); depth.gain.value = 0.5;
-    brrtOsc.connect(depth).connect(gate.gain); // 0..1 at 65 Hz
-    noise.connect(crackF).connect(gate).connect(brrtG);
+    brrtOsc.connect(depth).connect(gate.gain); noise.connect(crackF).connect(gate).connect(brrtG);
     const brrtLow = ctx.createBiquadFilter(); brrtLow.type = 'lowshelf'; brrtLow.frequency.value = 180; brrtLow.gain.value = 8;
-    brrtG.connect(brrtLow).connect(ctx.destination);
-    noise.start(); whine.start(); horn.start(); gunOsc.start(); brrtOsc.start();
-    audio = { ctx, buf, roarF, roarG, hissG, whine, whineG, hg, gunG, brrtG, brrtOsc };
+    brrtG.connect(brrtLow).connect(output);
+    noise.start(); whine.start(); turbineTone.start(); horn.start(); gunOsc.start(); brrtOsc.start();
+    audio = { ctx, buf, output, roarF, roarG, turbineF, turbineG, exhaustF, exhaustG, hissF, hissG, whine, whineG, turbineTone, turbineToneG, hg, gunG, brrtG, brrtOsc };
   } catch (e) { audio = null; }
 }
-// impact: a low, decaying rumble (higher and shorter for a splash)
+function soundFX(kind, strength = 1) {
+  if (!audio || muted) return;
+  const ctx = audio.ctx, t = ctx.currentTime, out = audio.output;
+  const noiseBurst = (start, length, peak, low, high, q = 0.7) => {
+    const src = ctx.createBufferSource(); src.buffer = audio.buf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.setValueAtTime(high, t + start); f.Q.value = q;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t + start);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, peak * strength), t + start + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + start + length);
+    src.connect(f).connect(g).connect(out); src.start(t + start); src.stop(t + start + length + 0.02);
+    if (low) { f.frequency.setValueAtTime(high, t + start); f.frequency.exponentialRampToValueAtTime(low, t + start + length); }
+  };
+  const tone = (freq, endFreq, length, peak, type = 'sine') => {
+    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type;
+    o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), t + length);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak * strength, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + length);
+    o.connect(g).connect(out); o.start(t); o.stop(t + length + 0.02);
+  };
+  if (kind === 'release' || kind === 'missile') {
+    noiseBurst(0, kind === 'missile' ? 0.5 : 0.16, kind === 'missile' ? 0.24 : 0.12, 180, kind === 'missile' ? 1000 : 500, 0.5);
+    tone(kind === 'missile' ? 180 : 95, 45, kind === 'missile' ? 0.38 : 0.22, 0.11, 'triangle');
+  } else if (kind === 'gear') {
+    noiseBurst(0, 0.34, 0.10, 220, 900, 1.4); tone(150, 70, 0.3, 0.035, 'sawtooth');
+  } else if (kind === 'countermeasure') {
+    noiseBurst(0, 0.12, 0.16, 700, 3200, 0.55); noiseBurst(0.055, 0.12, 0.12, 600, 2600, 0.55);
+  } else if (kind === 'lock') {
+    tone(980, 1120, 0.075, 0.06); tone(1320, 1450, 0.09, 0.045);
+  } else if (kind === 'boom') {
+    noiseBurst(0, 0.42, 0.7, 55, 2400, 0.42); noiseBurst(0.035, 1.1, 0.32, 35, 420, 0.5);
+    tone(78, 32, 1.2, 0.32, 'sine');
+  }
+}
+// Sonic boom is a one-shot pressure crack with a short low-frequency rolling tail.
+function sonicBoom() {
+  if (!audio || muted) return;
+  soundFX('boom', 0.8);
+  const ctx = audio.ctx, t = ctx.currentTime, src = ctx.createBufferSource();
+  src.buffer = audio.buf; src.loop = true;
+  const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(120, t + 0.16);
+  const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.62, t + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+  src.connect(f).connect(g).connect(audio.output); src.start(t); src.stop(t + 0.34);
+}
+// Impact: sharp debris-like attack followed by a low, decaying rumble.
 function boom(k, wet) {
   if (!audio || muted) return;
   const ctx = audio.ctx, t = ctx.currentTime;
   const src = ctx.createBufferSource(); src.buffer = audio.buf; src.loop = true;
   const f = ctx.createBiquadFilter(); f.type = 'lowpass';
-  f.frequency.setValueAtTime(wet ? 2200 : 1100, t);
-  f.frequency.exponentialRampToValueAtTime(wet ? 300 : 70, t + 2.5);
+  f.frequency.setValueAtTime(wet ? 3000 : 1800, t);
+  f.frequency.exponentialRampToValueAtTime(wet ? 240 : 55, t + 2.5);
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(Math.min(1, 0.7 * k), t + 0.03);
+  g.gain.exponentialRampToValueAtTime(Math.min(1, 0.72 * k), t + 0.025);
   g.gain.exponentialRampToValueAtTime(0.0001, t + (wet ? 2 : 3.5));
-  src.connect(f).connect(g).connect(ctx.destination);
+  src.connect(f).connect(g).connect(audio.output);
   src.start(t); src.stop(t + 3.6);
+  const crack = ctx.createBufferSource(); crack.buffer = audio.buf; crack.loop = true;
+  const cf = ctx.createBiquadFilter(); cf.type = 'highpass'; cf.frequency.value = 900;
+  const cg = ctx.createGain(); cg.gain.setValueAtTime(Math.min(0.45, 0.35 * k), t);
+  cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  crack.connect(cf).connect(cg).connect(audio.output); crack.start(t); crack.stop(t + 0.18);
 }
 function updateAudio(stall) {
   if (!audio) return;
   const t = audio.ctx.currentTime, live = running && !paused && !S.crashed && !muted;
   const n = S.throttle, ab = A.thrustAB ? Math.max(0, (n - AB_AT) / (1 - AB_AT)) : 0, s = A.sound;
+  const mach = Number.isFinite(S.mach) ? S.mach : 0;
+  if (mach < 0.96) sonicBoomArmed = true;
+  if (live && sonicBoomArmed && mach >= 1) { sonicBoomArmed = false; sonicBoom(); }
   audio.whine.frequency.setTargetAtTime(s.whine[0] + n * s.whine[1], t, 0.4);
-  audio.whineG.gain.setTargetAtTime(live ? (0.01 + n * 0.018) * s.whine[2] : 0, t, 0.2);
-  audio.roarF.frequency.setTargetAtTime(s.roar[0] + n * s.roar[1] + ab * 700, t, 0.25);
-  audio.roarG.gain.setTargetAtTime(live ? (0.1 + n * 0.22) * s.roar[2] + ab * 0.3 : 0, t, 0.25);
-  audio.hissG.gain.setTargetAtTime(live ? Math.min(0.08, S.V / 4000) + ab * 0.04 : 0, t, 0.2);
+  audio.whineG.gain.setTargetAtTime(live ? (0.008 + n * 0.014) * s.whine[2] : 0, t, 0.2);
+  audio.roarF.frequency.setTargetAtTime(s.roar[0] + n * s.roar[1] + ab * 950, t, 0.25);
+  audio.roarG.gain.setTargetAtTime(live ? (0.07 + n * 0.18) * s.roar[2] + ab * 0.18 : 0, t, 0.25);
+  audio.turbineF.frequency.setTargetAtTime(280 + n * 620 + ab * 800, t, 0.2);
+  audio.turbineG.gain.setTargetAtTime(live ? 0.035 + n * 0.055 + ab * 0.025 : 0, t, 0.2);
+  audio.exhaustG.gain.setTargetAtTime(live ? 0.006 + ab * 0.045 : 0, t, 0.18);
+  audio.hissF.frequency.setTargetAtTime(1000 + Math.min(3800, S.V * 1.2), t, 0.3);
+  audio.hissG.gain.setTargetAtTime(live ? Math.min(0.1, S.V / 36000) + ab * 0.025 : 0, t, 0.2);
+  audio.turbineTone.frequency.setTargetAtTime(70 + n * 115 + ab * 70, t, 0.2);
+  audio.turbineToneG.gain.setTargetAtTime(live ? 0.008 + n * 0.018 : 0, t, 0.2);
   audio.hg.gain.setTargetAtTime(live && stall ? 0.035 : 0, t, 0.03);
   const shooting = live && S.firing && S.ammo > 0;
-  audio.gunG.gain.setTargetAtTime(shooting && !A.brrt ? 0.3 : 0, t, 0.015);
-  // the Avenger spins up in a blink and its roar hangs a moment after the trigger is released
-  audio.brrtG.gain.setTargetAtTime(shooting && A.brrt ? 0.55 : 0, t, shooting ? 0.02 : 0.09);
+  audio.gunG.gain.setTargetAtTime(shooting && !A.brrt ? 0.24 : 0, t, 0.015);
+  audio.brrtG.gain.setTargetAtTime(shooting && A.brrt ? 0.45 : 0, t, shooting ? 0.02 : 0.09);
   audio.brrtOsc.frequency.setTargetAtTime(shooting && A.brrt ? 65 : 52, t, 0.05);
 }
 
@@ -6763,7 +6830,7 @@ function setLock(P, quiet) {
   if (RADAR.lock === P) return;
   if (RADAR.lock) mpSend('ms', { k: 'lock', on: 0 }, RADAR.lock.id);
   RADAR.lock = P;
-  if (P) { mpSend('ms', { k: 'lock', on: 1 }, P.id); if (!quiet) toast('Locked ' + P.name); }
+  if (P) { soundFX('lock'); mpSend('ms', { k: 'lock', on: 1 }, P.id); if (!quiet) toast('Locked ' + P.name); }
 }
 function cycleLock() {
   if (!running || paused || S.crashed) return;
@@ -6877,6 +6944,7 @@ function fireMissile() {
   src.getWorldPosition(obj.position); src.getWorldQuaternion(obj.quaternion);
   src.visible = false;
   scene.add(obj);
+  soundFX('missile');
   const m = { obj, kind, pos: obj.position, vel: S.vel.clone().addScaledVector(U, K.ir ? 0 : -4).addScaledVector(F, 15), t: 0, target: tgt, lastD: Infinity, id: MP.self + ':' + (++mslSeq), seen: new Set(), decoy: null, miss: null };
   // the chance of a hit falls off with launch range; a missile that is going to miss is steered at a point just
   // wide of the target, so it bursts close by (and the target sees the flash) without catching it
@@ -6920,6 +6988,7 @@ function releaseCM() {
   if (CM.cool > 0) return;
   if (CM.left <= 0) { toast('Countermeasures depleted'); return; }
   CM.left--; CM.cool = CM_GAP;
+  soundFX('countermeasure');
   axes(S.quat);
   const out = [], p = new THREE.Vector3().copy(S.pos).addScaledVector(F, -6 * A.scale).addScaledVector(U, -1);
   if (A.id === 'ac130') {
