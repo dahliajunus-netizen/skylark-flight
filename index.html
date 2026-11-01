@@ -408,6 +408,10 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script>
 (() => {
 const $ = s => document.querySelector(s);
@@ -554,6 +558,40 @@ renderer.toneMappingExposure = 0.78;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+// Atmosphere: the linear fog becomes exponential haze that thins with height (1.6 km scale height), so the
+// ground stays clear from altitude, and it brightens toward the sun (in-scattering). The sun direction and
+// colour are shared by reference with every built-in material through plain {x,y,z} objects, which
+// three.js passes through its uniform cloning untouched.
+const FOG_SUN = { dir: { x: 0, y: 1, z: 0 }, col: { x: 0, y: 0, z: 0 } };
+for (const lib of [...Object.values(THREE.ShaderLib), { uniforms: THREE.UniformsLib.fog }])
+  Object.assign(lib.uniforms, { fogSunDir: { value: FOG_SUN.dir }, fogSunColor: { value: FOG_SUN.col } });
+THREE.ShaderChunk.fog_pars_vertex = '#ifdef USE_FOG\n\tvarying float fogDepth;\n\tvarying vec3 vFogRay;\n#endif';
+THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tfogDepth = - mvPosition.z;\n\tvFogRay = ( vec4( mvPosition.xyz, 0.0 ) * viewMatrix ).xyz; // camera-to-vertex in world space\n#endif';
+THREE.ShaderChunk.fog_pars_fragment = `#ifdef USE_FOG
+	uniform vec3 fogColor, fogSunDir, fogSunColor;
+	varying float fogDepth;
+	varying vec3 vFogRay;
+	#ifdef FOG_EXP2
+		uniform float fogDensity;
+	#else
+		uniform float fogNear;
+		uniform float fogFar;
+	#endif
+#endif`;
+THREE.ShaderChunk.fog_fragment = `#ifdef USE_FOG
+	float fogDist = length( vFogRay );
+	#ifdef FOG_EXP2
+		float fogFactor = 1.0 - exp( - fogDensity * fogDensity * fogDepth * fogDepth );
+	#else
+		// mean haze density along the ray through an atmosphere whose density falls as exp(-h / 1600 m)
+		float fogH0 = max( cameraPosition.y, 0.0 ), fogH1 = max( cameraPosition.y + vFogRay.y, 0.0 ), fogDh = fogH1 - fogH0;
+		float fogMean = abs( fogDh ) > 1.0 ? ( exp( - fogH0 / 1600.0 ) - exp( - fogH1 / 1600.0 ) ) * 1600.0 / fogDh : exp( - fogH0 / 1600.0 );
+		float fogFactor = 1.0 - exp( - 2.1 * max( fogDist - fogNear, 0.0 ) / ( fogFar - fogNear ) * fogMean );
+		fogFactor = max( fogFactor, smoothstep( fogFar * 1.5, fogFar * 2.6, fogDist ) ); // the world's edge always melts away
+	#endif
+	float fogSun = pow( max( dot( vFogRay / max( fogDist, 1e-3 ), fogSunDir ), 0.0 ), 8.0 );
+	gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor + fogSunColor * fogSun * 0.45, fogFactor );
+#endif`;
 const scene = new THREE.Scene();
 
 // Four directional PAPI units at each runway end. Their individual beam cutoffs create
@@ -640,7 +678,8 @@ const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 12
 
 const DAY_SECONDS = 720; // one full day-night cycle takes twelve minutes of flight time
 const SUN_DIR = new THREE.Vector3();
-const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.52);
+const HEMI_BASE = 0.26; // most of the ambient now comes from the sky environment map
+const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', HEMI_BASE);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffe6c4', 0.92);
 sun.castShadow = true;
@@ -677,13 +716,31 @@ const sky = new THREE.Mesh(
         float sunAmount = max(dot(d, sunDir), 0.0);
         float halo = pow(sunAmount, 8.0) * 0.13 + pow(sunAmount, 32.0) * 0.28 + pow(sunAmount, 420.0) * 1.8;
         c += sunColor * halo;
-        gl_FragColor = vec4(c, 1.0);
+        // c is a display colour: decode it to linear and encode for the target. On screen that round-trips to
+        // the same colour; baked into the RGBE environment map it becomes proper linear sky radiance.
+        gl_FragColor = linearToOutputTexel(sRGBToLinear(vec4(c, 1.0)));
       }`
   })
 );
 sky.renderOrder = -1;
 sky.frustumCulled = false;
 scene.add(sky);
+
+// Image-based lighting: the sky dome alone is baked into a prefiltered environment map and refreshed as the
+// sun moves, so paint, metal, glass, clouds and water pick up sky light and reflect the sky and the sun.
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene();
+envScene.add(new THREE.Mesh(sky.geometry, sky.material));
+const envSun = new THREE.Vector3(9, 9, 9);
+let envTarget = null;
+function updateEnvironment() {
+  if (envTarget && envSun.distanceToSquared(SUN_DIR) < 4e-4) return; // re-bake every ~1° of sun travel
+  envSun.copy(SUN_DIR);
+  const next = pmrem.fromScene(envScene, 0, 1, 30000);
+  if (envTarget) envTarget.dispose();
+  envTarget = next;
+  scene.environment = next.texture;
+}
 
 // A sparse upper-sky star field fades in naturally through dusk and stays camera-centered.
 const STAR_COUNT = 1500, starGeo = new THREE.BufferGeometry();
@@ -718,29 +775,45 @@ function updateDayNight() {
   uniforms.sunColor.value.copy(SKY_DAY.sun).lerp(SKY_NIGHT.sun, night);
   sun.color.copy(SKY_DAY.sun).lerp(SUN_WARM, 1 - smooth(-0.02, 0.4, elevation));
   sun.intensity = 0.92 * daylight;
-  hemi.intensity = 0.52 * (0.2 + daylight * 0.8);
+  hemi.intensity = HEMI_BASE * (0.3 + daylight * 0.7);
   HORIZON.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
   scene.fog.color.copy(HORIZON);
   uniforms.sunDir.value.copy(SUN_DIR);
+  Object.assign(FOG_SUN.dir, { x: SUN_DIR.x, y: SUN_DIR.y, z: SUN_DIR.z });
+  Object.assign(FOG_SUN.col, { x: sun.color.r * daylight, y: sun.color.g * daylight, z: sun.color.b * daylight });
+  // clouds keep a faint sky-lit glow at night instead of turning into black holes in the star field
+  if (cloudField) cloudField.material.emissive.copy(HORIZON).multiplyScalar(0.5 * night);
+  updateEnvironment();
 }
 
-// Procedural, seamless wave relief gives the open water small moving highlights without extra geometry.
-let waterBumpMap = null, cloudField = null;
-function makeWaterBumpMap() {
-  const size = 128, canvas = document.createElement('canvas');
+// Procedural, seamless wave normals: two dozen wave trains with whole-number wavenumbers (so the tile wraps)
+// running in different directions, from long swell to short chop. With a glossy surface and the sky
+// environment map this gives Fresnel sky reflections and a glittering path under the sun.
+let waterWaves = null, cloudField = null;
+function makeWaterNormalMap() {
+  const size = 512, rnd = mulberry(4242), trains = [];
+  for (let i = 0; i < 24; i++) {
+    const k = 1 + Math.floor(Math.pow(rnd(), 1.4) * 40), a = rnd() * Math.PI * 2;
+    trains.push([Math.round(Math.cos(a) * k), Math.round(Math.sin(a) * k), 1 / (k + 2), rnd() * Math.PI * 2]);
+  }
+  const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d'), image = ctx.createImageData(size, size);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const u = x / size, v = y / size;
-    const wave = 0.68 * Math.sin(u * Math.PI * 8 + Math.sin(v * Math.PI * 6)) + 0.32 * Math.sin(v * Math.PI * 14 - u * Math.PI * 4);
-    const value = Math.round(128 + wave * 28), i = (y * size + x) * 4;
-    image.data[i] = image.data[i + 1] = image.data[i + 2] = value; image.data[i + 3] = 255;
+    const u = x / size * Math.PI * 2, v = y / size * Math.PI * 2;
+    let dx = 0, dy = 0;
+    for (const [kx, ky, amp, ph] of trains) { const c = Math.cos(kx * u + ky * v + ph) * amp; dx += c * kx; dy += c * ky; }
+    const nx = -dx * 0.16, ny = -dy * 0.16, inv = 1 / Math.hypot(nx, ny, 1), i = (y * size + x) * 4;
+    image.data[i] = Math.round((nx * inv * 0.5 + 0.5) * 255);
+    image.data[i + 1] = Math.round((ny * inv * 0.5 + 0.5) * 255);
+    image.data[i + 2] = Math.round((inv * 0.5 + 0.5) * 255);
+    image.data[i + 3] = 255;
   }
   ctx.putImageData(image, 0, 0);
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(580, 580);
-  texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  texture.repeat.set(480, 480); // 250 m tiles
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   return texture;
 }
 
@@ -771,12 +844,22 @@ function makeWaterBumpMap() {
     colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0 }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0, envMapIntensity: 0.35 }));
   mesh.receiveShadow = true;
   scene.add(mesh);
 
-  waterBumpMap = makeWaterBumpMap();
-  const waterMaterial = new THREE.MeshPhysicalMaterial({ color: '#2d687a', roughness: 0.27, metalness: 0.06, clearcoat: 0.62, clearcoatRoughness: 0.24, bumpMap: waterBumpMap, bumpScale: 0.16 });
+  waterWaves = makeWaterNormalMap();
+  const waterMaterial = new THREE.MeshPhysicalMaterial({ color: '#0a2c3b', roughness: 0.1, metalness: 0, reflectivity: 0.5, normalMap: waterWaves, normalScale: new THREE.Vector2(0.42, 0.42), envMapIntensity: 0.85 });
+  // Break up the tiling: blend the wave map with a second, rotated sample at ~3.4x the scale (long swell),
+  // and calm the chop with distance so it doesn't shimmer into a moiré grid toward the horizon.
+  waterMaterial.onBeforeCompile = shader => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', THREE.ShaderChunk.normal_fragment_maps.replace(
+      'vec3 mapN = texture2D( normalMap, vUv ).xyz * 2.0 - 1.0;\n\tmapN.xy *= normalScale;',
+      `vec3 waveA = texture2D( normalMap, vUv ).xyz * 2.0 - 1.0;
+	vec3 waveB = texture2D( normalMap, mat2( 0.8, -0.6, 0.6, 0.8 ) * vUv * 0.29 + vec2( 0.37, 0.11 ) ).xyz * 2.0 - 1.0;
+	vec3 mapN = normalize( vec3( waveA.xy * 0.8 + waveB.xy * 1.2, waveA.z * waveB.z ) );
+	mapN.xy *= normalScale * mix( 1.0, 0.22, smoothstep( 250.0, 7000.0, fogDepth ) );`));
+  };
   const water = new THREE.Mesh(new THREE.PlaneGeometry(120000, 120000), waterMaterial);
   water.rotation.x = -Math.PI / 2;
   water.position.y = 0;
@@ -787,7 +870,7 @@ function makeWaterBumpMap() {
 // lightweight while layered noise creates irregular clearings instead of an even tree grid.
 (function buildTrees() {
   const rnd = mulberry(1764), N = isTouch ? 8500 : 22000;
-  const mesh = new THREE.InstancedMesh(new THREE.ConeGeometry(3.6, 13, 6), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1 }), N);
+  const mesh = new THREE.InstancedMesh(new THREE.ConeGeometry(3.6, 13, 6), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, envMapIntensity: 0.45 }), N);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), c = new THREE.Color();
   let n = 0;
   for (let tries = 0; tries < N * 12 && n < N; tries++) {
@@ -812,7 +895,7 @@ function makeWaterBumpMap() {
 (function buildShrubland() {
   const rnd = mulberry(9271), N = isTouch ? 10000 : 26000;
   const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1),
-    new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1 }), N);
+    new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, envMapIntensity: 0.45 }), N);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), c = new THREE.Color();
   let n = 0;
   for (let tries = 0; tries < N * 10 && n < N; tries++) {
@@ -1193,11 +1276,15 @@ const BASE_BOXES = [];
   const surf = new THREE.Mesh(toGeo(flat), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
   surf.receiveShadow = true;
   scene.add(surf);
-  const marks = new THREE.Mesh(toGeo(paint), new THREE.MeshBasicMaterial({ vertexColors: true }));
+  // paint is lit like the pavement under it (and takes shadows), so it no longer glows at night
+  const marks = new THREE.Mesh(toGeo(paint), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, envMapIntensity: 0.6 }));
+  marks.receiveShadow = true;
   scene.add(marks);
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = 8;
-  scene.add(new THREE.Mesh(toGeo(labels), new THREE.MeshBasicMaterial({ map: tex, color: WHITE, transparent: true, depthWrite: false })));
+  const labelMesh = new THREE.Mesh(toGeo(labels), new THREE.MeshStandardMaterial({ map: tex, color: WHITE, roughness: 0.8, envMapIntensity: 0.6, transparent: true, depthWrite: false }));
+  labelMesh.receiveShadow = true;
+  scene.add(labelMesh);
 
   // ---- instanced pieces: lights, decorations, fuel tanks, fence ----
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), c = new THREE.Color();
@@ -4207,7 +4294,7 @@ function updateBombs(dt) {
       if (B.kind === 'cbu87' && hit !== 'water') {
         // Keep the simplified submunition footprint over the target and make each impact
         // strong enough to break nearby building cells instead of leaving barely visible marks.
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < 24; i++) {
           const angle = (i / 12) * Math.PI * 2 + (Math.random() - 0.5) * 0.32;
           const distance = Math.sqrt(Math.random()) * 100;
           const x = p.x + Math.cos(angle) * distance * 1.1;
@@ -5776,6 +5863,7 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
+  if (bloom) bloom.resize();
 });
 
 // ---------------- air-to-air missiles and radar ----------------
@@ -6815,6 +6903,52 @@ $('#pCallsign').onclick = () => askName(true);
 $('#mpBar').onclick = () => { if (running && !paused && !S.crashed) toast('Pause to change your callsign'); else askName(true); };
 if (MP.name) mpConnect(); else askName();
 
+// Bloom: the finished, antialiased frame is copied into a texture; its brightest parts are blurred over a
+// mip chain and added back over the screen, so the sun, afterburners, fireballs and lights glow.
+// Desktop only; touch devices keep the plain render.
+const bloom = !isTouch && THREE.UnrealBloomPass ? (() => {
+  const size = new THREE.Vector2(), origin = new THREE.Vector2();
+  const pass = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.26, 0.45, 0.94);
+  pass.renderToScreen = true;
+  // The pass redraws the copied (already tone-mapped) frame before adding the glow; that redraw also grades it:
+  // a gentle contrast curve, a little more saturation and a soft vignette.
+  const grade = new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null } }, depthTest: false, depthWrite: false,
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+      void main(){
+        vec3 c = texture2D(tDiffuse, vUv).rgb;
+        float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        c = mix(vec3(l), c, 1.14);
+        c = mix(c, c * c * (3.0 - 2.0 * c), 0.28);
+        vec2 q = vUv - 0.5;
+        c *= 1.0 - 0.32 * dot(q, q) * 1.6;
+        gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+      }`
+  });
+  Object.defineProperty(grade, 'map', { set(v) { grade.uniforms.tDiffuse.value = v; }, get() { return grade.uniforms.tDiffuse.value; } });
+  pass.basic = grade;
+  let frame = null;
+  const resize = () => {
+    renderer.getDrawingBufferSize(size);
+    if (frame) frame.dispose();
+    frame = new THREE.DataTexture(new Uint8Array(size.x * size.y * 3), size.x, size.y, THREE.RGBFormat);
+    frame.minFilter = frame.magFilter = THREE.LinearFilter;
+    frame.generateMipmaps = false;
+    frame.encoding = THREE.sRGBEncoding;
+    frame.needsUpdate = true;
+    pass.setSize(size.x, size.y);
+  };
+  resize();
+  return {
+    resize,
+    apply(dt) {
+      renderer.copyFramebufferToTexture(origin, frame);
+      pass.render(renderer, null, { texture: frame }, dt, false);
+    }
+  };
+})() : null;
+
 // ---------------- loop ----------------
 let last = performance.now(), acc = 0;
 function frame(now) {
@@ -6833,7 +6967,7 @@ function frame(now) {
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
   glow.mat.uniforms.uScale.value = haze.mat.uniforms.uScale.value = pScale;
   updateDayNight();
-  if (waterBumpMap) { waterBumpMap.offset.x = (waterBumpMap.offset.x + dt * 0.00002) % 1; waterBumpMap.offset.y = (waterBumpMap.offset.y + dt * 0.000008) % 1; }
+  if (waterWaves) { waterWaves.offset.x = (waterWaves.offset.x + dt * 0.012) % 1; waterWaves.offset.y = (waterWaves.offset.y + dt * 0.005) % 1; }
   if (cloudField) { cloudField.position.x += dt * 1.7; cloudField.position.z += dt * 0.65; }
   updateLowAltitudeOverspeed(dt);
   updateVisuals(dt);
@@ -6846,6 +6980,7 @@ function frame(now) {
   updateRadar(dt);
   updateRwr();
   renderer.render(scene, camera);
+  if (bloom) bloom.apply(dt);
 }
 
 // keep a flight going across page updates
