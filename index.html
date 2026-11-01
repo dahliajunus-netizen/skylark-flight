@@ -3800,11 +3800,14 @@ function addNavalVessel(id, type, angle, orbit, speed, hp) {
   placeNaval(ship);
   return ship;
 }
+// The island's terrain relief extends beyond the nominal MAP_R edge. Keep every patrol
+// several kilometres outside that radius so even the highest coastal terrain cannot overlap a hull.
+const NAVAL_OFFSHORE = 6200;
 for (let i = 0; i < 16; i++) {
   const angle = i / 16 * Math.PI * 2 + 0.18;
-  addNavalVessel('cruiser-' + (i + 1), 'cruiser', angle, MAP_R + 430 + (i % 4) * 65, 9 + (i % 5) * 1.2, 220);
+  addNavalVessel('cruiser-' + (i + 1), 'cruiser', angle, MAP_R + NAVAL_OFFSHORE + (i % 4) * 65, 9 + (i % 5) * 1.2, 220);
 }
-addNavalVessel('carrier-1', 'carrier', 1.4, MAP_R + 1050, 9, 520);
+addNavalVessel('carrier-1', 'carrier', 1.4, MAP_R + NAVAL_OFFSHORE + 1050, 9, 520);
 function resetNaval() {
   for (const ship of NAVAL_VESSELS) {
     ship.angle = ship.startAngle; ship.hp = ship.maxHp;
