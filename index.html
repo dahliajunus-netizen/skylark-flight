@@ -110,6 +110,7 @@ body.noui:not(.chatting) #chat { display: none; }
 #vote .pickb { padding: 5px 14px; }
 .mpTag { position: fixed; left: 0; top: 0; padding: 2px 7px; font-size: 11px; color: #fff; background: rgba(8,14,20,.55); border-radius: 5px; pointer-events: none; white-space: nowrap; will-change: transform; }
 .navalTag { position: fixed; left: 0; top: 0; z-index: 6; padding: 4px 8px; border: 1px solid rgba(255,181,71,.75); border-radius: 4px; background: rgba(8,14,20,.82); color: #ffd28a; font: 700 11px var(--font-num); letter-spacing: .1em; text-shadow: 0 1px 3px #000; pointer-events: none; white-space: nowrap; box-shadow: 0 0 10px rgba(255,160,50,.22); }
+.navalTag:not(.carrier) { padding: 2px 4px; font-size: 7px; letter-spacing: .04em; box-shadow: 0 0 4px rgba(255,160,50,.18); }
 .navalTag.carrier { border-color: rgba(79,216,234,.8); color: #8cecff; box-shadow: 0 0 10px rgba(79,216,234,.24); }
 body.noui .mpTag { display: none; }
 .pickb.busy { opacity: .45; text-decoration: line-through; }
@@ -3766,10 +3767,10 @@ function addNavalVessel(id, type, angle, orbit, speed, hp) {
   placeNaval(ship);
   return ship;
 }
-addNavalVessel('cruiser-1', 'cruiser', 0.35, MAP_R + 520, 12, 220);
-addNavalVessel('cruiser-2', 'cruiser', 2.4, MAP_R + 520, 10, 220);
-addNavalVessel('cruiser-3', 'cruiser', 4.55, MAP_R + 520, 11, 220);
-addNavalVessel('cruiser-4', 'cruiser', 5.7, MAP_R + 520, 13, 220);
+for (let i = 0; i < 16; i++) {
+  const angle = i / 16 * Math.PI * 2 + 0.18;
+  addNavalVessel('cruiser-' + (i + 1), 'cruiser', angle, MAP_R + 430 + (i % 4) * 65, 9 + (i % 5) * 1.2, 220);
+}
 addNavalVessel('carrier-1', 'carrier', 1.4, MAP_R + 1050, 9, 520);
 function resetNaval() {
   for (const ship of NAVAL_VESSELS) {
