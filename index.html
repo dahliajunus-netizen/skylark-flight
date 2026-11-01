@@ -4971,7 +4971,7 @@ function physics(dt) {
     let lowest = Infinity, reference = Infinity;
     for (const L of parts.gearLegs) {
       reference = Math.min(reference, L.truckFootY - 0.4 * A.travel);
-      const legAngle = gearA * L.sign * (A.id === 'typhoon' ? -1 : 1);
+      const legAngle = gearA * L.sign;
       const legAxis = L.axis === 'x' ? AX : AZ;
       const truckTilt = L.truck.rotation.x;
       for (const corner of L.truckCorners) {
@@ -5902,7 +5902,8 @@ function updateVisuals(dt) {
     const off = clamp(S.gearComp + (L.nose ? S.noseDip : 0), 0, A.travel) - 0.4 * A.travel; // + = pushed up from the parked pose
     L.lower.position.set(-L.truck.position.x, -L.truck.position.y + off, -L.truck.position.z);
     L.upper.scale.y = Math.max(0.2, (L.len - off) / L.len);
-    L.pivot.rotation.set(L.axis === 'x' ? ga * L.sign : 0, 0, L.axis === 'z' ? ga * L.sign : 0);
+    const retractSign = L.sign * (A.id === 'typhoon' ? -1 : 1);
+    L.pivot.rotation.set(L.axis === 'x' ? ga * retractSign : 0, 0, L.axis === 'z' ? ga * retractSign : 0);
     if (L.retractLift) L.pivot.position.y = L.homeY + L.retractLift * (1 - gk);
     const b52Truck = A.id === 'b52' && /^[LR](14|28)$/.test(L.key);
     const truckStow = (A.gearTruckStowTilt || 0) * (b52Truck ? L.sign : 1);
