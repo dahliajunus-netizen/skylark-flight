@@ -3656,7 +3656,7 @@ if (THREE.GLTFLoader) {
   }, undefined, err => console.warn('B28 nuclear-thunder GLB did not load; using the simple B28.', err));
   loader.load('kirov-class_cruiser.glb', gltf => installNavalModel('cruiser', prepareNavalModel(gltf, 252)), undefined,
     err => console.warn('Kirov cruiser model did not load; ships will remain hidden.', err));
-  loader.load('gerald_ford_aircraft_carrier.glb', gltf => installNavalModel('carrier', prepareNavalModel(gltf, 333)), undefined,
+  loader.load('gerald_ford_aircraft_carrier.glb?v=2', gltf => installNavalModel('carrier', prepareNavalModel(gltf, 333, 'carrier')), undefined,
     err => console.warn('Gerald Ford carrier model did not load; carrier landing deck unavailable.', err));
   for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
     loader.load(AC[id].model, gltf => {
@@ -3676,7 +3676,7 @@ if (THREE.GLTFLoader) {
 }
 
 // Naval traffic: Kirov cruisers patrol around the island; the carrier follows a wider route and is landable.
-function prepareNavalModel(gltf, targetLength) {
+function prepareNavalModel(gltf, targetLength, type = 'cruiser') {
   gltf.scene.updateMatrixWorld(true);
   const baked = [];
   gltf.scene.traverse(o => {
@@ -3724,13 +3724,46 @@ function prepareNavalModel(gltf, targetLength) {
   const root = new THREE.Group(), output = new THREE.Box3();
   for (const b of baked) {
     b.geo.applyMatrix4(fit); b.geo.computeBoundingBox(); output.union(b.geo.boundingBox);
-    const mesh = new THREE.Mesh(b.geo, b.mat); mesh.castShadow = true; mesh.receiveShadow = true; root.add(mesh);
   }
-  const outSize = output.getSize(new THREE.Vector3());
+  const outSize = output.getSize(new THREE.Vector3()), deckLocalY = output.min.y + outSize.y * 0.48;
+  let carrierPaint = null;
+  if (type === 'carrier') carrierPaint = new THREE.MeshStandardMaterial({
+    color: '#ffffff', vertexColors: true, roughness: 0.84, metalness: 0.06,
+    emissive: '#45494a', emissiveIntensity: 0.38, side: THREE.DoubleSide
+  });
+  const paint = new THREE.Color();
+  for (const b of baked) {
+    let mat = b.mat;
+    if (carrierPaint) {
+      const pos = b.geo.attributes.position, colors = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const deck = y >= deckLocalY - 3 && y <= deckLocalY + 3 && Math.abs(x) < outSize.x * 0.46;
+        paint.set(deck ? '#646b6e' : y > deckLocalY + 3 ? '#777d80' : '#4c555a');
+        const wear = 0.91 + 0.09 * (0.5 + 0.5 * Math.sin(x * 1.7 + y * 2.3 + z * 0.61));
+        paint.multiplyScalar(wear);
+        colors[i * 3] = paint.r; colors[i * 3 + 1] = paint.g; colors[i * 3 + 2] = paint.b;
+      }
+      b.geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      mat = carrierPaint;
+    }
+    const mesh = new THREE.Mesh(b.geo, mat); mesh.castShadow = true; mesh.receiveShadow = true; root.add(mesh);
+  }
+  if (type === 'carrier') {
+    const stripe = new THREE.MeshBasicMaterial({ color: '#d7d5c4' });
+    const yellow = new THREE.MeshBasicMaterial({ color: '#d1b34f' });
+    const deckW = outSize.x * 0.72, lineY = deckLocalY + 0.22;
+    const deckMark = (w, d, x, z, mat) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, d), mat);
+      m.position.set(x, lineY, z); m.renderOrder = 2; root.add(m);
+    };
+    deckMark(0.65, outSize.z * 0.68, 0, 0, stripe);
+    deckMark(0.45, outSize.z * 0.45, -deckW * 0.27, outSize.z * 0.04, yellow);
+    for (let i = 0; i < 4; i++) deckMark(deckW * 0.68, 0.28, 0, outSize.z * (0.2 + i * 0.025), stripe);
+  }
   return {
     root, length: outSize.z, width: outSize.x, height: outSize.y,
-    minY: output.min.y, maxY: output.max.y,
-    deckLocalY: output.min.y + outSize.y * 0.48
+    minY: output.min.y, maxY: output.max.y, deckLocalY
   };
 }
 function placeNaval(ship) {
