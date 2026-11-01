@@ -3245,7 +3245,7 @@ if (THREE.GLTFLoader) {
     const k = 2.77 / size[axis];
     const fit = new THREE.Matrix4().makeScale(k, k, k).multiply(toZ).multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
     const g = new THREE.Group();
-    const bombMat = new THREE.MeshStandardMaterial({ color: '#737866', roughness: 0.72, metalness: 0.08, side: THREE.DoubleSide });
+    const bombMat = new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.72, metalness: 0.08, side: THREE.DoubleSide });
     for (const b of baked) {
       b.geo.applyMatrix4(fit);
       const pos = b.geo.attributes.position, colors = new Float32Array(pos.count * 3), tint = new THREE.Color();
