@@ -2200,9 +2200,9 @@ function buildFromGltf(model) {
       }
       geometry.setIndex(body);
       if (/mesh_177/.test(n)) {
-        appendF15Part(geometry, src.material, noseGear, 'Nose Gear Assembly', 'gear');
-        appendF15Part(geometry, src.material, leftGear, 'Left Main Gear Assembly', 'gear');
-        appendF15Part(geometry, src.material, rightGear, 'Right Main Gear Assembly', 'gear');
+        appendF15Part(geometry, src.material, noseGear, 'Nose Gear Bogie Assembly', 'gear');
+        appendF15Part(geometry, src.material, leftGear, 'Left Main Gear Bogie Assembly', 'gear');
+        appendF15Part(geometry, src.material, rightGear, 'Right Main Gear Bogie Assembly', 'gear');
       } else {
         appendF15Part(geometry, src.material, stabL, 'F-15 stabilator left', 'stab', [-0.95, 0, 4.5]);
         appendF15Part(geometry, src.material, stabR, 'F-15 stabilator right', 'stab', [0.95, 0, 4.5]);
