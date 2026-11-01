@@ -2137,10 +2137,33 @@ function buildFromGltf(model) {
   const gear = new THREE.Group(); plane.add(gear);
   const meshes = [];
   model.traverse(o => { if (o.isMesh) meshes.push(o); });
+  const f15Model = A.id === 'f15';
+  parts.ailerons = [];
+  const appendF15Part = (sourceGeometry, material, indices, name, kind, origin) => {
+    if (!indices.length) return;
+    const geometry = sourceGeometry.clone();
+    geometry.setIndex(indices);
+    geometry.computeBoundingBox();
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.fromModel = true;
+    if (kind === 'gear') { gear.add(mesh); return; }
+    const pivot = new THREE.Group();
+    pivot.position.set(origin[0], origin[1], origin[2]);
+    mesh.position.set(-origin[0], -origin[1], -origin[2]);
+    pivot.add(mesh); plane.add(pivot);
+    if (kind === 'stab') parts[name.endsWith('left') ? 'stabL' : 'stabR'] = pivot;
+    else if (kind === 'rudder') parts.rudders.push(pivot);
+    else parts.ailerons.push(pivot);
+  };
   for (const src of meshes) {
-    const m = new THREE.Mesh(src.geometry, src.material);
+    const modelMatrix = m4.multiplyMatrices(turn, src.matrixWorld).clone();
+    const geometry = src.geometry.clone();
+    if (f15Model) geometry.applyMatrix4(modelMatrix); // baked into sim coordinates for spatial rigging
+    const m = new THREE.Mesh(geometry, src.material);
     m.name = src.name;
-    m4.multiplyMatrices(turn, src.matrixWorld).decompose(m.position, m.quaternion, m.scale);
+    if (f15Model) { m.position.set(0, 0, 0); m.quaternion.identity(); m.scale.set(1, 1, 1); }
+    else modelMatrix.decompose(m.position, m.quaternion, m.scale);
     m.castShadow = true; m.receiveShadow = true;
     m.userData.fromModel = true;
     const n = (src.name || '').toLowerCase();
@@ -2148,6 +2171,46 @@ function buildFromGltf(model) {
       const sourceMaterials = Array.isArray(src.material) ? src.material : [src.material];
       const paintedMaterials = sourceMaterials.map(material => aircraftPaintFor(A.id, n, material));
       m.material = Array.isArray(src.material) ? paintedMaterials : paintedMaterials[0];
+    }
+    if (f15Model && (/mesh_176/.test(n) || /mesh_177/.test(n))) {
+      const pos = geometry.attributes.position, idx = geometry.index;
+      const count = idx ? idx.count : pos.count, body = [], noseGear = [], leftGear = [], rightGear = [];
+      const stabL = [], stabR = [], aileronL = [], aileronR = [], rudderL = [], rudderR = [];
+      const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+      const ab = new THREE.Vector3(), ac = new THREE.Vector3();
+      for (let t = 0; t + 2 < count; t += 3) {
+        const i0 = idx ? idx.getX(t) : t, i1 = idx ? idx.getX(t + 1) : t + 1, i2 = idx ? idx.getX(t + 2) : t + 2;
+        a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1); c.fromBufferAttribute(pos, i2);
+        const x = (a.x + b.x + c.x) / 3, y = (a.y + b.y + c.y) / 3, z = (a.z + b.z + c.z) / 3;
+        let bucket = null;
+        if (/mesh_177/.test(n)) {
+          // This separate lower mesh contains the three gear assemblies in the uploaded export.
+          if (z < -1.65 && Math.abs(x) < 1.55) bucket = noseGear;
+          else if (z > 0.2 && Math.abs(x) > 1.25 && Math.abs(x) < 3.5) bucket = x < 0 ? leftGear : rightGear;
+        } else {
+          ab.subVectors(b, a); ac.subVectors(c, a);
+          const normal = ab.cross(ac), normalLength = normal.length();
+          const flat = normalLength > 1e-5 && Math.abs(normal.y) / normalLength > 0.6;
+          const vertical = normalLength > 1e-5 && Math.abs(normal.y) / normalLength < 0.4;
+          if (flat && z > 4.4 && z < 10 && Math.abs(x) > 0.8 && Math.abs(x) < 4.2 && Math.abs(y) < 1) bucket = x < 0 ? stabL : stabR;
+          else if (flat && z > 1.5 && z < 6 && Math.abs(x) > 3.7 && Math.abs(x) < 6.8 && Math.abs(y) < 0.6) bucket = x < 0 ? aileronL : aileronR;
+          else if (vertical && z > 7.2 && Math.abs(x) > 0.9 && Math.abs(x) < 2.8 && y > 0.45) bucket = x < 0 ? rudderL : rudderR;
+        }
+        (bucket || body).push(i0, i1, i2);
+      }
+      geometry.setIndex(body);
+      if (/mesh_177/.test(n)) {
+        appendF15Part(geometry, src.material, noseGear, 'Nose Gear Assembly', 'gear');
+        appendF15Part(geometry, src.material, leftGear, 'Left Main Gear Assembly', 'gear');
+        appendF15Part(geometry, src.material, rightGear, 'Right Main Gear Assembly', 'gear');
+      } else {
+        appendF15Part(geometry, src.material, stabL, 'F-15 stabilator left', 'stab', [-0.95, 0, 4.5]);
+        appendF15Part(geometry, src.material, stabR, 'F-15 stabilator right', 'stab', [0.95, 0, 4.5]);
+        appendF15Part(geometry, src.material, aileronL, 'wingL', 'aileron', [-3.9, -0.2, 1.7]);
+        appendF15Part(geometry, src.material, aileronR, 'wingR', 'aileron', [3.9, -0.2, 1.7]);
+        appendF15Part(geometry, src.material, rudderL, 'vertical_tail', 'rudder', [-1.0, 0.7, 7.2]);
+        appendF15Part(geometry, src.material, rudderR, 'vertical_tail', 'rudder', [1.0, 0.7, 7.2]);
+      }
     }
     if (/wheel|strut|bogie/.test(n)) gear.add(m);
     else if (/bomb_bay_door/.test(n)) {
@@ -2417,7 +2480,7 @@ function setAircraft(id) {
   for (const mark of parts.damageMarks || []) mark.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.droop = [];
+  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = [];
   ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
   buildExteriorLights();
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
@@ -5599,6 +5662,8 @@ function updateVisuals(dt) {
   }
   parts.stabL.rotation.x = -inp.pitch * 0.3 * A.stabSign + inp.roll * A.stabRoll;
   parts.stabR.rotation.x = -inp.pitch * 0.3 * A.stabSign - inp.roll * A.stabRoll;
+  for (const a of parts.ailerons) a.rotation.x = (a.position.x < 0 ? 1 : -1) * inp.roll * 0.28;
+  for (const r of parts.rudders) r.rotation.y = inp.yaw * 0.3;
   for (const c of parts.canards) c.rotation.x = inp.pitch * 0.35; // foreplanes lead the pitch the other way
   for (const z of parts.tvc) z.rotation.x = -inp.pitch * 0.26; // thrust vectoring: up to 15° with the stick
   for (const e of parts.elevons) e.rotation.x = -inp.pitch * 0.3 + (e.position.x < 0 ? 1 : -1) * inp.roll * 0.3; // pitch and roll together
