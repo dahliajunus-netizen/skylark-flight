@@ -4971,7 +4971,7 @@ function physics(dt) {
     let lowest = Infinity, reference = Infinity;
     for (const L of parts.gearLegs) {
       reference = Math.min(reference, L.truckFootY - 0.4 * A.travel);
-      const legAngle = gearA * L.sign;
+      const legAngle = gearA * L.sign * (A.id === 'typhoon' ? -1 : 1);
       const legAxis = L.axis === 'x' ? AX : AZ;
       const truckTilt = L.truck.rotation.x;
       for (const corner of L.truckCorners) {
