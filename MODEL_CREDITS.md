@@ -29,3 +29,10 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - Source: [B-61 бомба bomb](https://sketchfab.com/3d-models/b-61-bomb-c083f0d99a19445e8e3afb90d15857df) (`c083f0d99a19445e8e3afb90d15857df.glb`)
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: in Skylark Flight the meshes are baked out of a skewed node transform, aimed nose-forward, sized to the B61's 3.58 m, and drawn with lit instead of unlit materials.
+
+## Eurofighter Typhoon
+
+- Creator: [bohmerang](https://sketchfab.com/bohmerang)
+- Source: [Eurofighter Typhoon - Fighter Jet - Free](https://sketchfab.com/3d-models/eurofighter-typhoon-fighter-jet-free-992bcc8987964ca09d55410330aa8579)
+- License: [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+- Changes: `typhoon_split.glb` separates the canards, four flaperons, rudder, airbrake, canopy, landing gear struts and wheels, and open and closed gear doors into named parts, each with its origin on its hinge, and downsizes the textures to 2048 px. This adapted model is shared under the same license.

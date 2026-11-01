@@ -1777,7 +1777,7 @@ const AC = {
     gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 2.89, weapons: true, gearTime: 4, mainRetract: 'fwd', travel: 0.3,
     centreX: 0.6, // the main gear sits 1.3-1.6 m out, inside the default centreline band
     hiG: { g: 12, rate: 1.7, aoa: 1.75, cl: 1.15, cd: 3.2, cobraV: 175 }, // held Shift: see physics
-    ammo: 940, muzzle: [1.70, -0.23, 2.15], stabSign: 1, model: 'f-15c_eagle_split.glb', // M61 port in the right wing root
+    ammo: 940, muzzle: [1.70, -0.23, 2.15], stabSign: 1, model: 'f-15c_eagle_split.glb', split: 19.6, // M61 port in the right wing root
     mainTwist: Math.PI / 2, // main wheels turn flat as the legs fold forward
     loadouts: [{ id: 'mk82', name: '6 × MK-82', spec: '6 × MK-82' }, { id: 'b61', name: 'B61', nuke: 'b61', spec: 'B61 NUCLEAR · 0.3 KT' },
       { id: 'aam', name: 'AIM-120 · AIM-9', aam: true, spec: '4 × AIM-120C · 4 × AIM-9X' }],
@@ -1802,18 +1802,20 @@ const AC = {
     // Eurofighter Typhoon: ~17 t with bombs, 51.2 m² delta, two EJ200s (~60 kN dry, ~90 kN reheat each)
     id: 'typhoon', mass: 16000, wing: 51.2, thrust: 120000, thrustAB: 180000,
     CL0: 0.15, CLA: 3.2, stallA: 0.5, cd0: 0.02, k: 0.14, wave: [0.9, 1.1, 0.025],
-    gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'in', centreX: 0.5, travel: 0.3,
+    gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 3.08, weapons: true, gearTime: 4, mainRetract: 'in', centreX: 0.5, travel: 0.3,
     hiG: { g: 12, rate: 1.9, aoa: 1.75, cl: 1.2, cd: 3.2, cobraV: 180 }, // the unstable delta-canard pitches up even faster
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
-    ammo: 150, roundDmg: 1.6, muzzle: [0.75, -0.25, 2.0], stabSign: -1, model: 'Typhoon.gltf.json',
-    rig: { ab: [[-0.5, -0.16, 7.98], [0.5, -0.16, 7.98]], bombs: [[-3.9, -0.98, 2.62], [3.9, -0.98, 2.62], [-2.7, -0.98, 2.62], [2.7, -0.98, 2.62]], nuke: null,
-      // AIM-120s semi-recessed under the fuselage, IRIS-Ts on the outer wing
-      aam: [[-4.6, -0.85, 3.4, 'iris'], [4.6, -0.85, 3.4, 'iris'], [-0.85, -1.15, -0.8, 'aim120'], [0.85, -1.15, -0.8, 'aim120'], [-0.85, -1.15, 2.6, 'aim120'], [0.85, -1.15, 2.6, 'aim120']] },
+    ammo: 150, roundDmg: 1.6, muzzle: [0.95, -0.91, 2.2], stabSign: -1, model: 'typhoon_split.glb', split: 15.96, // BK-27 port in the right wing root
+    // Stations on the model: outer wing pylons at x ±3.65 (bottom y -1.47), inner pylons at x ±1.62 (bottom y -1.57);
+    // the belly is at y -1.3 to -1.48. The flames fit the 0.65 m nozzles.
+    rig: { ab: [[-0.49, -0.58, 6.86], [0.49, -0.58, 6.86]], abScale: 0.62, bombs: [[-3.65, -1.64, 3.0], [3.65, -1.64, 3.0], [-1.62, -1.74, 1.2], [1.62, -1.74, 1.2]], nuke: null,
+      // AIM-120s semi-recessed under the fuselage, IRIS-Ts on the outer wing pylons
+      aam: [[-3.65, -1.57, 3.0, 'iris'], [3.65, -1.57, 3.0, 'iris'], [-0.85, -1.55, -0.8, 'aim120'], [0.85, -1.55, -0.8, 'aim120'], [-0.85, -1.55, 2.6, 'aim120'], [0.85, -1.55, 2.6, 'aim120']] },
     loadouts: [{ id: 'mk82', name: '4 × MK-82', spec: '4 × MK-82' }, { id: 'aam', name: 'AIM-120 · IRIS-T', aam: true, spec: '4 × AIM-120C · 2 × IRIS-T' }],
     radar: { name: 'CAPTOR', range: 120000, cone: 1.05 },
-    box: new THREE.Box3(new THREE.Vector3(-5.5, -1.25, -8.0), new THREE.Vector3(5.5, 3.35, 8.0)), slideI: 45,
-    hitPts: [[7.98, 0, -0.1], [-7.98, 0, -0.16], [-5.4, 5.47, -0.46], [-5.4, -5.47, -0.46], [-6.2, 0, 3.33], [1.2, 2.15, -0.12], [1.2, -2.15, -0.12], [0, 0, -1.1]],
-    chase: [5, 30, 28], eye: [0.8, 3.05], scale: 0.9, shadow: 14, airStart: [165, 0.5], fireball: 0.95, crashBlast: [28, 450],
+    box: new THREE.Box3(new THREE.Vector3(-5.5, -1.68, -8.0), new THREE.Vector3(5.5, 2.96, 8.0)), slideI: 45,
+    hitPts: [[7.98, 0, -0.5], [-7.98, 0, -0.56], [-5.4, 5.41, -0.86], [-5.4, -5.41, -0.86], [-6.2, 0, 2.93], [1.2, 2.15, -0.52], [1.2, -2.15, -0.52], [0, 0, -1.5]],
+    chase: [5, 30, 28], eye: [0.6, 4.0], scale: 0.9, shadow: 14, airStart: [165, 0.5], fireball: 0.95, crashBlast: [28, 450],
     sound: { whine: [700, 1500, 1], roar: [170, 480, 1] },
     eyebrow: 'EUROFIGHTER TYPHOON · DELTA-CANARD FIGHTER',
     desc: 'Fly a Eurofighter Typhoon from a huge military airbase on the south coast, just outside the city, with its downtown towers, river, suburbs and hills. It is lighter and quicker to roll than the F-15, carries a 27 mm cannon and four bombs, and has no nuclear weapon.',
@@ -2054,6 +2056,8 @@ const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b748: null, b5
 const AB_MATS = [['#ff8c3a', 0.75], ['#fff1c4', 0.9]].map(([c, o]) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
+  ab.userData.s = A.rig.abScale || 1; // flame size to suit the nozzles
+  ab.scale.setScalar(ab.userData.s);
   [[0.52, 4.5], [0.3, 2.6]].forEach(([r, l], i) => {
     const g = new THREE.ConeGeometry(r, l, 14, 1, true); g.translate(0, l / 2, 0); g.rotateX(Math.PI / 2);
     ab.add(new THREE.Mesh(g, AB_MATS[i]));
@@ -2213,14 +2217,14 @@ function buildF15() {
 function buildFromGltf(model) {
   const turn = new THREE.Matrix4().makeRotationY(Math.PI), m4 = new THREE.Matrix4();
   model.updateMatrixWorld(true);
-  if (A.id === 'f15') {
-    // The Sketchfab export is in a different coordinate system and about 10x larger than the sim's F-15.
-    // Center its bounds, aim its longest axis down -Z, and fit its length to the 19.6 m F-15 airframe.
+  if (A.split) {
+    // Split Sketchfab exports (F-15C, Typhoon) are in their own coordinate system and scale.
+    // Center their bounds, aim the longest axis down -Z, and fit the length to the real airframe (A.split, m).
     const bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3());
     const center = bounds.getCenter(new THREE.Vector3());
     const axis = size.x >= size.z ? 'x' : 'z';
     const orient = new THREE.Matrix4().makeRotationY(axis === 'x' ? Math.PI / 2 : Math.PI);
-    const scale = 19.6 / Math.max(size[axis], 0.001);
+    const scale = A.split / Math.max(size[axis], 0.001);
     const centerAtOrigin = new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z);
     const uniformScale = new THREE.Matrix4().makeScale(scale, scale, scale);
     turn.multiplyMatrices(orient, uniformScale).multiply(centerAtOrigin);
@@ -2228,13 +2232,13 @@ function buildFromGltf(model) {
   const gear = new THREE.Group(); plane.add(gear);
   const meshes = [];
   model.traverse(o => { if (o.isMesh) meshes.push(o); });
-  const f15Model = A.id === 'f15';
+  const splitModel = !!A.split;
   for (const src of meshes) {
     const modelMatrix = m4.multiplyMatrices(turn, src.matrixWorld).clone();
     const geometry = src.geometry.clone();
-    if (f15Model) {
+    if (splitModel) {
       geometry.applyMatrix4(modelMatrix); // baked into sim coordinates for spatial rigging
-      // The Sketchfab node chain mirrors (Y/Z swap). The scene graph would compensate, but baking it in leaves
+      // A node chain that mirrors (the F-15's Y/Z swap) is compensated by the scene graph, but baking it in leaves
       // every face wound inward, and the double-sided material then lights the airframe from the wrong side.
       if (modelMatrix.determinant() < 0 && geometry.index) {
         const ix = geometry.index.array;
@@ -2244,19 +2248,21 @@ function buildFromGltf(model) {
     }
     const m = new THREE.Mesh(geometry, src.material);
     m.name = src.name;
-    if (f15Model) { m.position.set(0, 0, 0); m.quaternion.identity(); m.scale.set(1, 1, 1); }
+    if (splitModel) { m.position.set(0, 0, 0); m.quaternion.identity(); m.scale.set(1, 1, 1); }
     else modelMatrix.decompose(m.position, m.quaternion, m.scale);
     m.castShadow = true; m.receiveShadow = true;
     m.userData.fromModel = true;
-    const n = (src.name || '').toLowerCase();
-    if (AIRFRAME_PAINT[A.id]) {
+    // a part with several materials loads as a group of meshes named <part>_1, <part>_2...: use the part's name
+    const multi = src.parent && src.parent.isGroup && src.parent.name && src.name.startsWith(src.parent.name + '_');
+    const n = ((multi ? src.parent.name : src.name) || '').toLowerCase();
+    if (AIRFRAME_PAINT[A.id] && !splitModel) { // the split models carry their own painted textures
       const sourceMaterials = Array.isArray(src.material) ? src.material : [src.material];
       const paintedMaterials = sourceMaterials.map(material => aircraftPaintFor(A.id, n, material));
       m.material = Array.isArray(src.material) ? paintedMaterials : paintedMaterials[0];
     }
-    if (f15Model) {
-      // f-15c_eagle_split.glb has one node per moving part, each with its origin on the hinge.
-      // Moving parts take the names the damage zones and gear rig look for.
+    if (splitModel) {
+      // f-15c_eagle_split.glb and typhoon_split.glb have one node per moving part, each with its origin on the
+      // hinge. Moving parts take the names the damage zones and gear rig look for.
       const hinge = new THREE.Vector3().setFromMatrixPosition(modelMatrix), side = hinge.x < 0 ? 'L' : 'R';
       const hinged = () => {
         const pivot = new THREE.Group(); pivot.position.copy(hinge); plane.add(pivot);
@@ -2278,8 +2284,13 @@ function buildFromGltf(model) {
       else if (/^aileron_/.test(n)) { m.name = 'wing' + side; parts.ailerons.push(hinged()); }
       else if (/^flap_/.test(n)) { m.name = 'wing' + side + ' flap'; parts.flaps.push(hinged()); }
       else if (/^elevator_/.test(n)) { m.name = 'F-15 stabilator ' + (side === 'L' ? 'left' : 'right'); parts['stab' + side] = hinged(); }
-      else if (/^rudder_/.test(n)) { m.name = 'vertical_tail'; parts.rudders.push(hinged()); }
+      // the Typhoon's all-moving canards are its pitch surfaces (stabSign -1); its flaperons pitch and roll
+      else if (/^canard_/.test(n)) { m.name = 'canard ' + (side === 'L' ? 'left' : 'right'); parts['stab' + side] = hinged(); }
+      else if (/^elevon_/.test(n)) { m.name = 'wing' + side + ' elevon'; parts.elevons.push(hinged()); }
+      else if (/^rudder(_|$)/.test(n)) { m.name = 'vertical_tail'; parts.rudders.push(hinged()); }
       else if (n === 'airbrake') parts.spoilers.push(hinged());
+      // Typhoon gear doors: one set drawn open (gear down or moving), the other closed (gear up)
+      else if (/^geardoors(open|closed)$/.test(n)) { plane.add(m); parts.doorSets.push({ m, open: n.endsWith('open') }); }
       else if (/geardoor/.test(n)) parts.gearDoors.push({ pivot: hinged(), sign: Math.abs(hinge.x) < 0.3 ? 1 : Math.sign(hinge.x) });
       else plane.add(m);
       continue;
@@ -2552,7 +2563,7 @@ function setAircraft(id) {
   for (const mark of parts.damageMarks || []) mark.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = [];
+  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = [];
   ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
   buildExteriorLights();
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
@@ -5884,6 +5895,7 @@ function updateVisuals(dt) {
   const gk = S.gearT * S.gearT * (3 - 2 * S.gearT), ga = (1 - gk) * Math.PI / 2;
   for (const f of parts.flaps) f.rotation.x = 0.52 * gk; // F-15 flaps: 30° down with the gear, up with it
   for (const D of parts.gearDoors) D.pivot.rotation.z = D.sign * ga; // hanging open with the gear down, folded flat when up
+  for (const D of parts.doorSets) D.m.visible = D.open === S.gearT > 0.01;
   S.noseDip += ((S.onGround && S.brake && S.V > 1 ? 0.35 * A.travel : 0) - S.noseDip) * Math.min(1, dt * 4);
   for (const L of parts.gearLegs) {
     const off = clamp(S.gearComp + (L.nose ? S.noseDip : 0), 0, A.travel) - 0.4 * A.travel; // + = pushed up from the parked pose
@@ -5909,7 +5921,7 @@ function updateVisuals(dt) {
   const abOn = running && !S.crashed && !!A.thrustAB && S.throttle > AB_AT;
   for (const ab of [parts.abL, parts.abR, parts.abL2, parts.abR2].filter(Boolean)) {
     ab.visible = abOn;
-    if (abOn) { const k = 0.55 + (S.throttle - AB_AT) / (1 - AB_AT) * 0.45; ab.scale.set(1, 1, k * (0.9 + Math.random() * 0.2)); }
+    if (abOn) { const k = 0.55 + (S.throttle - AB_AT) / (1 - AB_AT) * 0.45; const s = ab.userData.s || 1; ab.scale.set(s, s, s * k * (0.9 + Math.random() * 0.2)); }
   }
   emitStumps(dt);
   S.bayOpen = Math.max(0, (S.bayOpen || 0) - dt);
