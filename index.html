@@ -2351,7 +2351,9 @@ function buildFromGltf(model) {
       if (gearPart) {
         // struts are the oleo cylinder, wheels ride on the piston; both keep the model's textures
         const leg = gearPart[1] === 'nose' ? 'Nose' : (side === 'L' ? 'Left' : 'Right') + ' main';
-        m.name = `${leg} gear ${gearPart[2]}`; m.userData.keepMaterial = true; gear.add(m);
+        m.name = `${leg} gear ${gearPart[2]}`; m.userData.keepMaterial = true;
+        if (A.id === 'typhoon') m.userData.gearHinge = hinge.clone();
+        gear.add(m);
         if (gearPart[2] === 'wheel') {
           // origin on the axle so the tire can roll in place
           geometry.translate(-hinge.x, -hinge.y, -hinge.z); m.position.copy(hinge);
@@ -2696,7 +2698,9 @@ function rigGear() {
     bb.makeEmpty();
     list.forEach(([, b]) => bb.union(b));
     const pivot = new THREE.Group(), upper = new THREE.Group(), lower = new THREE.Group();
-    pivot.position.set((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
+    const authoredHinge = A.id === 'typhoon' ? list.find(([m]) => /nose gear strut/i.test(m.name || '') && m.userData.gearHinge)?.[0].userData.gearHinge : null;
+    if (authoredHinge) pivot.position.copy(authoredHinge);
+    else pivot.position.set((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
     g.add(pivot);
     let strutBottom = 0;
     for (const [m, mb] of list) {
