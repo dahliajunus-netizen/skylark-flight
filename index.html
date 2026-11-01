@@ -3545,6 +3545,72 @@ if (THREE.GLTFLoader) {
     nukeTemplates.b61 = g;
     if (parts.nuke && parts.nuke.userData.id === 'b61') { parts.nuke.clear(); g.children.forEach(c => parts.nuke.add(c.clone())); }
   }, undefined, err => console.warn('The B61 model did not load; using the simple B61.', err));
+  // B28 (War Thunder nuclear-thunder model): bake the scene transforms, aim the warhead nose forward (-Z),
+  // and fit its base length so the B28's existing 1.2 axial store scale gives the correct 4.3 m length.
+  loader.load('nuke_bomb_b28_war_thunder_nuclear_thunder.glb', gltf => {
+    gltf.scene.updateMatrixWorld(true);
+    const baked = [];
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      const src = o.material, materials = Array.isArray(src) ? src : [src];
+      const mat = materials.map(m => {
+        const copy = m.clone();
+        if (copy.color) copy.color.convertLinearToSRGB();
+        copy.side = THREE.DoubleSide;
+        return copy;
+      });
+      const geo = bakeGltfMesh(o);
+      for (const attr of ['color', 'uv2']) if (o.geometry.attributes[attr]) geo.setAttribute(attr, o.geometry.attributes[attr].clone());
+      baked.push({ geo, mat: Array.isArray(src) ? mat : mat[0], name: o.name || '' });
+    });
+    const box = new THREE.Box3();
+    baked.forEach(b => { b.geo.computeBoundingBox(); box.union(b.geo.boundingBox); });
+    if (box.isEmpty()) { console.warn('B28 GLB contains no meshes; using the simple B28.'); return; }
+    const size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+    const axis = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
+    const ax = ['x', 'y', 'z'].indexOf(axis), ortho = [0, 1, 2].filter(i => i !== ax), toZ = new THREE.Matrix4();
+    if (axis === 'x') toZ.makeRotationY(Math.PI / 2);
+    else if (axis === 'y') toZ.makeRotationX(-Math.PI / 2);
+    const namedNose = baked.find(b => /nose|fuze|fuse|tip|warhead/i.test(b.name));
+    let noseSign = 0, noseRadius = Infinity;
+    if (namedNose) {
+      const p = namedNose.geo.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const v = new THREE.Vector3().fromBufferAttribute(p, i).sub(centre);
+        const r = Math.hypot(v.getComponent(ortho[0]), v.getComponent(ortho[1]));
+        if (r < noseRadius) { noseRadius = r; noseSign = Math.sign(v.getComponent(ax)); }
+      }
+    } else {
+      const endRadius = sign => {
+        let r = 0;
+        for (const b of baked) {
+          const p = b.geo.attributes.position;
+          for (let i = 0; i < p.count; i++) {
+            const v = new THREE.Vector3().fromBufferAttribute(p, i).sub(centre);
+            if (v.getComponent(ax) * sign > size.getComponent(ax) * 0.38)
+              r = Math.max(r, Math.hypot(v.getComponent(ortho[0]), v.getComponent(ortho[1])));
+          }
+        }
+        return r;
+      };
+      noseSign = endRadius(1) <= endRadius(-1) ? 1 : -1;
+    }
+    const probe = new THREE.Vector3().setComponent(ax, noseSign).applyMatrix4(toZ);
+    if (probe.z > 0) toZ.premultiply(new THREE.Matrix4().makeRotationY(Math.PI));
+    const k = 3.58 / size[axis];
+    const fit = new THREE.Matrix4().makeScale(k, k, k).multiply(toZ).multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
+    const g = new THREE.Group();
+    for (const b of baked) {
+      b.geo.applyMatrix4(fit);
+      const m = new THREE.Mesh(b.geo, b.mat); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    }
+    nukeTemplates.b28 = g;
+    if (parts.nuke && parts.nuke.userData.id === 'b28') {
+      const visible = parts.nuke.visible;
+      parts.nuke.clear(); g.children.forEach(c => parts.nuke.add(c.clone()));
+      parts.nuke.visible = visible;
+    }
+  }, undefined, err => console.warn('B28 nuclear-thunder GLB did not load; using the simple B28.', err));
   for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
