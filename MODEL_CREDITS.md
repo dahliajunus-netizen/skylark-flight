@@ -15,3 +15,10 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - Source: [MK82](https://sketchfab.com/3d-models/mk82-dc32a37d20cf41849d7021120095e1e0)
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: baked to a static mesh and scaled to the Mk-82's 2.21 m length for the Mk-82 stores in Skylark Flight.
+
+## AIM-120 and AIM-9X (US Weapon Pack)
+
+- Creator: [Rhine_Lab_Muelsyse](https://sketchfab.com/Rhine_Lab_Muelsyse)
+- Source: [US Weapon Pack](https://sketchfab.com/3d-models/us-weapon-pack-c0783151b0024554a97d8ed6e5082745)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: `aam.glb` holds only the AIM-120 and AIM-9X from the pack, with their transforms baked, noses turned toward -Z and centred, for the air-to-air missiles in Skylark Flight.

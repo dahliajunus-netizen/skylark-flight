@@ -1786,7 +1786,7 @@ const AC = {
     rig: { ab: [[-0.73, -0.57, 8.28], [0.73, -0.57, 8.28]], bombs: [[-3.04, -1.03, 2.15], [3.04, -1.03, 2.15], [-2.6, -1.03, 2.15], [2.6, -1.03, 2.15], [0, -1.65, -1.2], [0, -1.65, 1.2]], nuke: [0, -1.7, -0.885],
       // AIM-9s on the wing pylon side rails, AIM-120s on the lower corners of the intake trunks (aft pair behind the main gear)
       aam: [[-3.09, -0.72, 1.4, 'aim9'], [3.09, -0.72, 1.4, 'aim9'], [-2.55, -0.72, 1.4, 'aim9'], [2.55, -0.72, 1.4, 'aim9'],
-        [-1.55, -1.54, -1.4, 'aim120'], [1.55, -1.54, -1.4, 'aim120'], [-1.55, -1.54, 4.3, 'aim120'], [1.55, -1.54, 4.3, 'aim120']] },
+        [-1.55, -1.6, -1.4, 'aim120'], [1.55, -1.6, -1.4, 'aim120'], [-1.55, -1.6, 4.3, 'aim120'], [1.55, -1.6, 4.3, 'aim120']] },
     box: new THREE.Box3(new THREE.Vector3(-6.6, -0.75, -10.1), new THREE.Vector3(6.6, 3.8, 9.8)), slideI: 60,
     // nose, wingtips, tail, fin, belly (forward, right, up): touching a building with any of these is a crash
     hitPts: [[9.8, 0, 0], [0, 6.5, 0], [0, -6.5, 0], [-9.5, 0, 0], [-8, 0, 3.6], [0, 0, -0.8]],
@@ -3083,6 +3083,24 @@ if (THREE.GLTFLoader) {
     bombTemplates.mk82 = g;
     for (const b of parts.bombs) if (b.userData.kind === 'mk82') { b.clear(); g.children.forEach(c => b.add(c.clone())); }
   }, undefined, err => console.warn('mk82.glb did not load; using the simple Mk-82.', err));
+  // AIM-120C and AIM-9X (aam.glb, taken from the US Weapon Pack): already at real size, nose toward -Z and
+  // centred like the simple missiles. They replace the simple ones, including any already on the jet.
+  loader.load('aam.glb', gltf => {
+    gltf.scene.updateMatrixWorld(true);
+    for (const node of gltf.scene.children) {
+      const kind = node.name;
+      if (!MSL_KINDS[kind]) continue;
+      const g = new THREE.Group();
+      node.traverse(o => {
+        if (!o.isMesh) return;
+        const mat = o.material.clone();
+        if (mat.color) mat.color.convertLinearToSRGB();
+        const m = new THREE.Mesh(bakeGltfMesh(o), mat); m.castShadow = true; g.add(m);
+      });
+      mslTemplates[kind] = g;
+      for (const m of parts.missiles) if (m.userData.mkind === kind) { m.clear(); g.children.forEach(c => m.add(c.clone())); }
+    }
+  }, undefined, err => console.warn('aam.glb did not load; using the simple missiles.', err));
   for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
