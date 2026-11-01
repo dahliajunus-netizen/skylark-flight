@@ -1496,7 +1496,37 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
     house: ['#d8cfc0', '#c9b79c', '#e4ddd0', '#b9a68c'],
     bridge: ['#8e8c87']
   };
-  const boxes = [];
+  const boxes = [], roofBoxes = [];
+  // Rooftop structures are visual-only, so they add architectural silhouettes without changing collision boxes.
+  const roofPart = (x0, z0, x1, z1, baseY, h, color) => {
+    if (x1 - x0 < 1 || z1 - z0 < 1 || h < 0.5) return;
+    roofBoxes.push([x0, z0, x1, z1, baseY, h, color]);
+  };
+  const crown = (x0, z0, x1, z1, h, signature = false) => {
+    const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    if (w < 20 || d < 20 || h < 55) return;
+    const baseY = CITY_H + h, inset = signature ? 0.28 : 0.2;
+    const pw = w * (1 - inset), pd = d * (1 - inset);
+    roofPart(cx - pw / 2, cz - pd / 2, cx + pw / 2, cz + pd / 2, baseY, 1.4, '#53616a');
+    const coreW = Math.max(8, w * (signature ? 0.25 : 0.34)), coreD = Math.max(8, d * (signature ? 0.25 : 0.34));
+    const coreH = Math.min(signature ? 26 : 18, Math.max(7, h * 0.035));
+    roofPart(cx - coreW / 2, cz - coreD / 2, cx + coreW / 2, cz + coreD / 2, baseY + 1.4, coreH, '#65747c');
+    roofPart(cx - coreW * 0.3, cz - coreD * 0.3, cx + coreW * 0.3, cz + coreD * 0.3, baseY + 1.4 + coreH, 2, '#89969b');
+    if (signature || h > 240) {
+      const mastH = signature ? 26 + rnd() * 30 : 12 + rnd() * 18;
+      roofPart(cx - 0.8, cz - 0.8, cx + 0.8, cz + 0.8, baseY + 1.4 + coreH + 2, mastH, '#6d7b82');
+      if (signature) {
+        const crownW = coreW * 0.7, crownD = coreD * 0.7;
+        roofPart(cx - crownW / 2, cz - crownD / 2, cx + crownW / 2, cz + crownD / 2, baseY + 1.4 + coreH * 0.55, 2, '#a5afb0');
+      }
+    }
+    // rooftop plant rooms and lift overruns break up the repeated flat roofline.
+    if (!signature && rnd() < 0.65) {
+      const sw = Math.min(w * 0.18, 12 + rnd() * 12), sd = Math.min(d * 0.18, 10 + rnd() * 10);
+      const sx = x0 + rnd() * Math.max(1, w - sw), sz = z0 + rnd() * Math.max(1, d - sd);
+      roofPart(sx, sz, sx + sw, sz + sd, baseY + 1.4, 3 + rnd() * 4, '#879197');
+    }
+  };
   const put = (x0, z0, x1, z1, h, pal) => {
     if (x1 - x0 < 2 || z1 - z0 < 2 || h < 0.3) return -1;
     const i = BLD.length / 5;
@@ -1518,14 +1548,20 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
     const w = x1 - x0, d = z1 - z0;
     if (rnd() < 0.45 && w > 24 && d > 24) {
       const s = 0.55 + rnd() * 0.2, cx = x0 + w * (0.3 + rnd() * 0.4), cz = z0 + d * (0.3 + rnd() * 0.4);
-      put(Math.max(x0, cx - w * s / 2), Math.max(z0, cz - d * s / 2), Math.min(x1, cx + w * s / 2), Math.min(z1, cz + d * s / 2), h, pal);
+      const tx0 = Math.max(x0, cx - w * s / 2), tz0 = Math.max(z0, cz - d * s / 2), tx1 = Math.min(x1, cx + w * s / 2), tz1 = Math.min(z1, cz + d * s / 2);
+      put(tx0, tz0, tx1, tz1, h, pal);
       put(x0, z0, x1, z1, h * (0.35 + rnd() * 0.35), pal);
-    } else put(x0, z0, x1, z1, h, pal);
+      if (h > 70 && rnd() < 0.46) crown(tx0, tz0, tx1, tz1, h);
+    } else {
+      put(x0, z0, x1, z1, h, pal);
+      if (h > 70 && rnd() < 0.46) crown(x0, z0, x1, z1, h);
+    }
   };
   const supertall = (x0, z0, x1, z1, H) => {
     const side = Math.min(x1 - x0, z1 - z0) * 0.92, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
     const tiers = [[0.07, 1], [0.28, 0.93], [0.42, 0.82], [0.56, 0.66], [0.72, 0.42]]; // footprint fraction, height fraction
     for (const [fs, fh] of tiers) put(cx - side * fs / 2, cz - side * fs / 2, cx + side * fs / 2, cz + side * fs / 2, H * fh, PAL.super);
+    crown(cx - side * 0.07 / 2, cz - side * 0.07 / 2, cx + side * 0.07 / 2, cz + side * 0.07 / 2, H, true);
     put(x0, z0, x1, z1, 30 + rnd() * 25, PAL.tower); // podium
   };
   // cells holding a supertall
@@ -1689,6 +1725,15 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
   bridgePiers.forEach(([x, z, w, d], i) => { p.set(x, (CITY_H - 8) / 2, z); s.set(w, CITY_H + 8, d); piers.setMatrixAt(i, m.compose(p, q, s)); });
   piers.count = bridgePiers.length;
   scene.add(piers);
+  if (roofBoxes.length) {
+    const roofMesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.12 }), roofBoxes.length);
+    roofBoxes.forEach(([x0, z0, x1, z1, baseY, h, color], i) => {
+      p.set((x0 + x1) / 2, baseY, (z0 + z1) / 2); s.set(x1 - x0, h, z1 - z0);
+      roofMesh.setMatrixAt(i, m.compose(p, q, s)); roofMesh.setColorAt(i, c.set(color));
+    });
+    roofMesh.castShadow = true; roofMesh.receiveShadow = true;
+    scene.add(roofMesh);
+  }
 })();
 
 // ---------------- aircraft ----------------
