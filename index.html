@@ -550,7 +550,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio || 1, isTouch ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.78;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -640,9 +640,9 @@ const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 12
 
 const DAY_SECONDS = 720; // one full day-night cycle takes twelve minutes of flight time
 const SUN_DIR = new THREE.Vector3();
-const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.62);
+const hemi = new THREE.HemisphereLight('#c6ddf5', '#62604f', 0.52);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight('#ffe6c4', 1.05);
+const sun = new THREE.DirectionalLight('#ffe6c4', 0.92);
 sun.castShadow = true;
 sun.shadow.mapSize.set(isTouch ? 1024 : 2048, isTouch ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 3200 });
@@ -717,8 +717,8 @@ function updateDayNight() {
   uniforms.bottom.value.copy(SKY_DAY.bottom).lerp(SKY_NIGHT.bottom, night);
   uniforms.sunColor.value.copy(SKY_DAY.sun).lerp(SKY_NIGHT.sun, night);
   sun.color.copy(SKY_DAY.sun).lerp(SUN_WARM, 1 - smooth(-0.02, 0.4, elevation));
-  sun.intensity = 1.05 * daylight;
-  hemi.intensity = 0.62 * (0.2 + daylight * 0.8);
+  sun.intensity = 0.92 * daylight;
+  hemi.intensity = 0.52 * (0.2 + daylight * 0.8);
   HORIZON.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
   scene.fog.color.copy(HORIZON);
   uniforms.sunDir.value.copy(SUN_DIR);
