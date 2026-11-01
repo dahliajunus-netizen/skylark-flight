@@ -820,7 +820,7 @@ function makeWaterNormalMap() {
 
 // terrain mesh
 (function buildTerrain() {
-  const SIZE = 18000 * MAP_K, SEG = isTouch ? 340 : 560; // ~100 m cells (~170 m on touch)
+  const SIZE = 18000 * MAP_K, SEG = isTouch ? 400 : 720; // finer samples preserve ridges and valleys at flight altitude
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, 0, MAP_CZ);
@@ -835,17 +835,18 @@ function makeWaterNormalMap() {
   const col = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i), h = pos.getY(i), ny = nrm.getY(i);
-    const j = fbm(x * 0.01, z * 0.01, 2);
+    const j = fbm(x * 0.01, z * 0.01, 3), grain = fbm(x * 0.018 + 19, z * 0.018 - 31, 2);
     col.copy(C.grassA).lerp(C.grassB, smooth(0.38, 0.68, fbm(x * 0.0015 + 5, z * 0.0015, 3)));
     if (h < 12) col.lerp(C.sand, smooth(12, 5, h));
     col.lerp(j > 0.5 ? C.rock : C.rockD, Math.max(smooth(230, 380, h + j * 60), smooth(0.88, 0.72, ny)));
     col.lerp(C.snow, smooth(540, 620, h + j * 80) * smooth(0.68, 0.84, ny));
     if (h < 0) col.copy(C.sand).lerp(C.deep, smooth(0, -30, h));
     else col.lerp(C.mown, 0.55 * smooth(200, -100, airbaseSD(x, z)));
+    col.multiplyScalar(0.92 + grain * 0.14);
     colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0, envMapIntensity: 0.35 }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: false, roughness: 1, metalness: 0, envMapIntensity: 0.35 }));
   mesh.receiveShadow = true;
   scene.add(mesh);
 
@@ -1647,17 +1648,22 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
     float fu = fract(u / 2.8), fy = fract(vWPos.y / 3.4);
     float floorId = floor(vWPos.y / 3.4), columnId = floor(u / 2.8);
     float r = fract(sin(dot(vec2(columnId, floorId), vec2(12.9898, 78.233))) * 43758.5453);
+    float buildingTone = fract(sin(dot(floor(vWPos.xz / 48.0), vec2(27.1, 61.7))) * 43758.5453);
+    r = fract(r + buildingTone * 0.618);
     float facade = step(${CITY_H + 4}.0, vWPos.y) * step(vWPos.z, ${(AB.zN - 300).toFixed(1)});
     float frame = step(0.08, fu) * step(fu, 0.92) * step(0.16, fy) * step(fy, 0.86);
     float glass = step(0.15, fu) * step(fu, 0.85) * step(0.23, fy) * step(fy, 0.78);
     float window = frame * facade;
     float litWindow = glass * facade;
+    float mullion = (1.0 - smoothstep(0.025, 0.055, abs(fu - 0.5))) * litWindow;
     float slab = (1.0 - smoothstep(0.10, 0.17, fy)) * facade;
     float pier = (1.0 - smoothstep(0.035, 0.075, fu)) * facade;
     float storey = 1.0 - smoothstep(${CITY_H + 5}.0, ${CITY_H + 10}.0, vWPos.y);
     vec3 glassColor = mix(vec3(0.07, 0.11, 0.15), vec3(0.16, 0.21, 0.25), r);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.39, 0.40), window * (1.0 - glass) * 0.68 * fade);
     diffuseColor.rgb = mix(diffuseColor.rgb, glassColor, litWindow * 0.88 * fade);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025, 0.04, 0.055), mullion * 0.78 * fade);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * (0.92 + buildingTone * 0.16), facade * fade * 0.55);
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.82 + vec3(0.035), slab * 0.7 * fade);
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.12, pier * 0.42 * fade);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.22, 0.24, 0.25), storey * facade * 0.28 * fade);
