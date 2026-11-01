@@ -1736,6 +1736,89 @@ const bridgePiers = []; // [x, z, w, d] of each pier under a bridge deck (drawn,
   }
 })();
 
+// Small instanced traffic follows the same irregular street graph used by the city.
+const CITY_TRAFFIC = [];
+(function buildCityTraffic() {
+  const nodes = new Map(), edges = [], links = new Map();
+  const node = (i, j) => {
+    const key = i + ':' + j;
+    if (!nodes.has(key)) nodes.set(key, { key, x: NET.X[i].at, z: NET.Z[j].at });
+    return nodes.get(key);
+  };
+  const edge = (a, b) => {
+    const e = { a, b, len: Math.hypot(b.x - a.x, b.z - a.z) };
+    if (e.len < 80) return;
+    edges.push(e);
+    for (const n of [a, b]) { if (!links.has(n.key)) links.set(n.key, []); links.get(n.key).push(e); }
+  };
+  for (let i = 0; i <= NET.nx; i++) for (let j = 0; j < NET.nz; j++) if (NET.V(i, j)) edge(node(i, j), node(i, j + 1));
+  for (let j = 0; j <= NET.nz; j++) for (let i = 0; i < NET.nx; i++) if (NET.H(j, i)) edge(node(i, j), node(i + 1, j));
+  if (!edges.length) return;
+  const rnd = mulberry(86123), count = isTouch ? 260 : 900;
+  const bodyGeo = new THREE.BoxGeometry(1.85, 0.72, 4.2);
+  const cabGeo = new THREE.BoxGeometry(1.52, 0.55, 1.95);
+  const wheelGeo = new THREE.CylinderGeometry(0.31, 0.31, 0.22, 10);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.78, metalness: 0.05 });
+  const cabMat = new THREE.MeshStandardMaterial({ color: '#26313a', roughness: 0.38, metalness: 0.2 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: '#17191b', roughness: 0.92 });
+  const bodies = new THREE.InstancedMesh(bodyGeo, bodyMat, count);
+  const cabs = new THREE.InstancedMesh(cabGeo, cabMat, count);
+  const wheels = new THREE.InstancedMesh(wheelGeo, wheelMat, count * 4);
+  bodies.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  cabs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  wheels.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const colors = ['#a34832', '#7b827b', '#d0c6a7', '#3f5663', '#b3aa91', '#6a705a', '#c4c7c2', '#343a40'];
+  const carQ = new THREE.Quaternion(), wheelQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+  const p = new THREE.Vector3(), scale = new THREE.Vector3(1, 1, 1), matrix = new THREE.Matrix4(), local = new THREE.Vector3(), forward = new THREE.Vector3(), offsetQ = new THREE.Quaternion();
+  const cars = [];
+  for (let i = 0; i < count; i++) {
+    const e = edges[Math.floor(rnd() * edges.length)], direction = rnd() < 0.5 ? 1 : -1;
+    const car = { edge: e, t: rnd() * e.len, direction, speed: 7 + rnd() * 5, prev: null, phase: rnd() * Math.PI * 2 };
+    cars.push(car);
+    bodies.setColorAt(i, new THREE.Color(colors[Math.floor(rnd() * colors.length)]));
+  }
+  scene.add(bodies, cabs, wheels);
+  const update = dt => {
+    for (let i = 0; i < cars.length; i++) {
+      const car = cars[i];
+      car.t += car.speed * dt * car.direction;
+      let guard = 0;
+      while ((car.t > car.edge.len || car.t < 0) && guard++ < 4) {
+        const atEnd = car.t > car.edge.len, reached = atEnd ? car.edge.b : car.edge.a;
+        car.prev = car.edge;
+        const choices = (links.get(reached.key) || []).filter(e => e !== car.prev);
+        car.edge = choices.length ? choices[Math.floor(rnd() * choices.length)] : car.prev;
+        if (car.edge === car.prev) car.direction *= -1;
+        else car.direction = car.edge.a === reached ? 1 : -1;
+        car.t = atEnd ? car.t - car.prev.len : car.prev.len + car.t;
+      }
+      const e = car.edge, u = clamp(car.t / e.len, 0, 1);
+      const dx = (e.b.x - e.a.x) / e.len * car.direction, dz = (e.b.z - e.a.z) / e.len * car.direction;
+      const yaw = Math.atan2(-dx, -dz);
+      const x = e.a.x + (e.b.x - e.a.x) * u, z = e.a.z + (e.b.z - e.a.z) * u;
+      carQ.setFromAxisAngle(U.set(0, 1, 0), yaw);
+      p.set(x, CITY_H + 0.48, z);
+      matrix.compose(p, carQ, scale); bodies.setMatrixAt(i, matrix);
+      local.set(0, 0.88, -0.22).applyQuaternion(carQ);
+      p.set(x + local.x, CITY_H + 0.48 + local.y, z + local.z);
+      matrix.compose(p, carQ, scale); cabs.setMatrixAt(i, matrix);
+      forward.set(dx, 0, dz);
+      for (let w = 0; w < 4; w++) {
+        const sx = (w & 1) ? 0.82 : -0.82, sz = (w & 2) ? 1.35 : -1.35;
+        local.set(sx, -0.2, sz).applyQuaternion(carQ);
+        p.set(x + local.x, CITY_H + 0.31, z + local.z);
+        offsetQ.copy(carQ).multiply(wheelQ);
+        matrix.compose(p, offsetQ, scale); wheels.setMatrixAt(i * 4 + w, matrix);
+      }
+    }
+    bodies.instanceMatrix.needsUpdate = true; cabs.instanceMatrix.needsUpdate = true; wheels.instanceMatrix.needsUpdate = true;
+  };
+  update(0);
+  CITY_TRAFFIC.push(update);
+})();
+function updateCityTraffic(dt) { for (const update of CITY_TRAFFIC) update(dt); }
+
 // ---------------- aircraft ----------------
 // Each aircraft has its own model and numbers. Physics, cameras, crash size and sound all read from A.
 const BOMBS_MAX = 4, NUKES_MAX = 1, AMMO_MAX = 940;
@@ -7243,7 +7326,7 @@ function frame(now) {
     S.time += dt;
   } else acc = 0;
   if (running && !paused && !S.ditched) updateWeapons(dt);
-  if (!paused) { updateCity(dt); updateNukes(dt); updateBombBursts(dt); }
+  if (!paused) { updateCity(dt); updateCityTraffic(dt); updateNukes(dt); updateBombBursts(dt); }
   if (S.crashed && !paused) updateWreck(dt);
   updateParticles(glow, dt); updateParticles(haze, dt);
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
