@@ -1686,14 +1686,15 @@ const AC = {
   f15: {
     id: 'f15', mass: 20000, wing: 56.5, thrust: 130000, thrustAB: 210000,
     CL0: 0.175, CLA: 3.5, stallA: 0.45, cd0: 0.022, k: 0.12, wave: [0.85, 1.05, 0.03],
-    gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 1.95, weapons: true, gearTime: 4, mainRetract: 'fwd', travel: 0.3,
+    gLimit: 9, effV: 110, rates: [0.7, 0.3, 3.2], stabRoll: 0.18, tailStrike: 0.22, gear: 2.89, weapons: true, gearTime: 4, mainRetract: 'fwd', travel: 0.3,
+    centreX: 0.6, // the main gear sits 1.3-1.6 m out, inside the default centreline band
     hiG: { g: 12, rate: 1.7, aoa: 1.75, cl: 1.15, cd: 3.2, cobraV: 175 }, // held Shift: see physics
     ammo: 940, muzzle: [1.6, 0.8, 3.0], stabSign: 1, model: 'f-15c_eagle_split.glb',
     loadouts: [{ id: 'mk82', name: '6 × MK-82', spec: '6 × MK-82' }, { id: 'b61', name: 'B61', nuke: 'b61', spec: 'B61 NUCLEAR · 0.3 KT' },
       { id: 'aam', name: 'AIM-120 · AIM-9', aam: true, spec: '4 × AIM-120C · 4 × AIM-9X' }],
     radar: { name: 'APG-63', range: 120000, cone: 1.05 },
     // four under the wings, then two in tandem on the centerline
-    rig: { ab: [[-0.74, 0.02, 9.5], [0.74, 0.02, 9.5]], bombs: [[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2], [0, -1.10, -2.3], [0, -1.10, 0.5]], nuke: [0, -1.10, -0.885],
+    rig: { ab: [[-0.73, -0.57, 8.28], [0.73, -0.57, 8.28]], bombs: [[-3.94, -0.40, 2.2], [3.94, -0.40, 2.2], [-3.26, -0.40, 2.2], [3.26, -0.40, 2.2], [0, -1.10, -2.3], [0, -1.10, 0.5]], nuke: [0, -1.10, -0.885],
       // AIM-9s on the wing pylon rails, AIM-120s on the fuselage corners
       aam: [[-4.25, -0.5, 1.6, 'aim9'], [4.25, -0.5, 1.6, 'aim9'], [-2.95, -0.5, 1.6, 'aim9'], [2.95, -0.5, 1.6, 'aim9'],
         [-1.75, -0.95, -1.4, 'aim120'], [1.75, -0.95, -1.4, 'aim120'], [-1.75, -0.95, 2.8, 'aim120'], [1.75, -0.95, 2.8, 'aim120']] },
@@ -2163,8 +2164,12 @@ function buildFromGltf(model) {
         m.position.sub(hinge); pivot.add(m);
         return pivot;
       };
-      if (n === 'nosegear') { m.name = 'Nose Gear Bogie Assembly'; gear.add(m); }
-      else if (/^maingear_[lr]$/.test(n)) { m.name = (side === 'L' ? 'Left' : 'Right') + ' Main Gear Bogie Assembly'; gear.add(m); }
+      const gearPart = /^(nose|main)gear(?:_[lr])?_(strut|wheel)$/.exec(n);
+      if (gearPart) {
+        // struts are the oleo cylinder, wheels ride on the piston; both keep the model's textures
+        const leg = gearPart[1] === 'nose' ? 'Nose' : (side === 'L' ? 'Left' : 'Right') + ' main';
+        m.name = `${leg} gear ${gearPart[2]}`; m.userData.keepMaterial = true; gear.add(m);
+      }
       else if (/^aileron_/.test(n)) { m.name = 'wing' + side; parts.ailerons.push(hinged()); }
       else if (/^flap_/.test(n)) { m.name = 'wing' + side + ' flap'; parts.flaps.push(hinged()); }
       else if (/^elevator_/.test(n)) { m.name = 'F-15 stabilator ' + (side === 'L' ? 'left' : 'right'); parts['stab' + side] = hinged(); }
@@ -2449,7 +2454,7 @@ function setAircraft(id) {
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
   sun.shadow.camera.updateProjectionMatrix();
   if (parts.gear) parts.gear.traverse(o => {
-    if (!o.isMesh) return;
+    if (!o.isMesh || o.userData.keepMaterial) return;
     const nm = (o.name || '').toLowerCase();
     const namedTire = /tire|tyre|rubber/.test(nm) || (/wheel/.test(nm) && !/rim|hub|brake|axle|strut|bogie/.test(nm));
     const proceduralTire = !nm && o.geometry.type === 'CylinderGeometry';
