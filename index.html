@@ -3192,6 +3192,38 @@ if (THREE.GLTFLoader) {
       for (const m of parts.missiles) if (m.userData.mkind === kind) { m.clear(); g.children.forEach(c => m.add(c.clone())); }
     }
   }, undefined, err => console.warn('aam.glb did not load; using the simple missiles.', err));
+  // IRIS-T model: discard its display platform, aim the missile down -Z, and fit it to the sim's 2.94 m scale.
+  loader.load('iris-t%20(1).glb', gltf => {
+    gltf.scene.updateMatrixWorld(true);
+    const platforms = [];
+    gltf.scene.traverse(o => { if (/^plataforma$/i.test(o.name || '')) platforms.push(o); });
+    for (const o of platforms) if (o.parent) o.parent.remove(o);
+    gltf.scene.updateMatrixWorld(true);
+    const baked = [];
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      const src = o.material;
+      const mat = src.clone();
+      if (mat.color) mat.color.convertLinearToSRGB();
+      baked.push({ geo: bakeGltfMesh(o), mat });
+    });
+    const box = new THREE.Box3();
+    baked.forEach(b => { b.geo.computeBoundingBox(); box.union(b.geo.boundingBox); });
+    const size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+    const axis = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
+    const toZ = new THREE.Matrix4();
+    if (axis === 'x') toZ.makeRotationY(Math.PI / 2);
+    else if (axis === 'y') toZ.makeRotationX(-Math.PI / 2);
+    const fit = new THREE.Matrix4().makeScale(2.94 / size[axis], 2.94 / size[axis], 2.94 / size[axis])
+      .multiply(toZ).multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
+    const g = new THREE.Group();
+    for (const b of baked) {
+      b.geo.applyMatrix4(fit);
+      const m = new THREE.Mesh(b.geo, b.mat); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    }
+    mslTemplates.iris = g;
+    for (const m of parts.missiles) if (m.userData.mkind === 'iris') { m.clear(); g.children.forEach(c => m.add(c.clone())); }
+  }, undefined, err => console.warn('iris-t (1).glb did not load; using the simple IRIS-T.', err));
   // B61 (c083f0d99a19445e8e3afb90d15857df.glb, Sketchfab "B-61 bomb"): its node transform is skewed, so the
   // meshes are baked, then the long axis is aimed down -Z with the finned (wider) end aft, centred and sized
   // to the B61's 3.58 m. Its unlit materials become lit ones so it shades and darkens at night like the jet.
