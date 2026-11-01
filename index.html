@@ -4570,8 +4570,10 @@ function physics(dt) {
   // high-g turns pay through the induced drag of all that lift. Let go and the normal limiter brings the nose back.
   const hiG = !!A.hiG && !S.onGround && !S.crashed && V > 35 && !!(keys.shift || touchIn.hiG);
   S.hiG = hiG;
-  const post = hiG && alpha > A.stallA;
-  const CL = post ? Math.max(liftCoef(alpha), A.hiG.cl * Math.sin(2 * alpha)) : liftCoef(alpha);
+  const preStallCL = liftCoef(alpha);
+  const postStallCL = A.hiG ? A.hiG.cl * Math.sin(2 * alpha) : preStallCL;
+  const postStallBlend = hiG ? smooth(A.stallA * 0.9, A.stallA + 0.3, alpha) : 0;
+  const CL = preStallCL + (postStallCL - preStallCL) * postStallBlend;
   const MASS = A.mass + bombMass() + (S.nukes ? parts.nuke.userData.nk.kg : 0);
 
   const t = S.throttle;
@@ -4587,10 +4589,18 @@ function physics(dt) {
     vhat.copy(v).divideScalar(V);
     liftDir.crossVectors(R, vhat);
     const ll = liftDir.length();
-    if (ll > 1e-4) force.addScaledVector(liftDir, qS * CL / ll * (0.15 + 0.85 * (S.dmg.wingL + S.dmg.wingR) / 2)); // missing wing = missing lift
-    const CD = A.cd0 + A.k * CL * CL + (Math.abs(alpha) > A.stallA ? 0.15 : 0) + A.wave[2] * smooth(A.wave[0], A.wave[1], mach) // transonic drag rise
+    const wingFactor = 0.15 + 0.85 * (S.dmg.wingL + S.dmg.wingR) / 2;
+    let liftCL = CL;
+    if (ll > 1e-4) {
+      // The flight-control system limits aerodynamic load factor; HI-G raises the fighter limit but cannot create lift beyond the wing's CL.
+      const maxPositiveCL = MASS * G * (hiG ? A.hiG.g : A.gLimit) / Math.max(qS * wingFactor, 1);
+      const maxNegativeCL = MASS * G * (hiG ? 3 : 1.5) / Math.max(qS * wingFactor, 1);
+      liftCL = clamp(CL, -maxNegativeCL, maxPositiveCL);
+      force.addScaledVector(liftDir, qS * liftCL / ll * wingFactor); // a damaged wing carries less load
+    }
+    const CD = A.cd0 + A.k * liftCL * liftCL + (Math.abs(alpha) > A.stallA ? 0.15 : 0) + A.wave[2] * smooth(A.wave[0], A.wave[1], mach) // transonic drag rise
       + 0.015 * S.gearT + (S.brake ? 0.10 + 0.025 * smooth(0.75, 1.2, mach) : 0) + (S.belly && S.onGround ? 0.35 : 0) + (S.bombs * (A.bombCd || 0.0015) + S.nukes * 0.0015) + Math.abs(beta) * 0.2
-      + (post ? A.hiG.cd * Math.sin(alpha) ** 2 : 0); // post-stall: the whole airframe meets the air
+      + (hiG ? A.hiG.cd * postStallBlend * Math.sin(alpha) ** 2 : 0); // post-stall: the whole airframe meets the air
     force.addScaledVector(vhat, -qS * CD);
     force.addScaledVector(R, -qS * 0.5 * Math.sin(beta));
   }
