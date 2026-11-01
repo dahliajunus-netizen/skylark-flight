@@ -1861,7 +1861,7 @@ const AIRFRAME_PAINT = {
   f15: { base: M('#777c82', 0.58, 0.18), dark: M('#555b62', 0.6, 0.16) }, // Mod Eagle gray
   typhoon: { base: M('#737b81', 0.58, 0.18), dark: M('#626a71', 0.6, 0.16) },
   su30: { base: M('#718096', 0.58, 0.18), dark: M('#53647c', 0.6, 0.16) }, // blue-gray scheme
-  b52: { base: M('#666c71', 0.62, 0.14), dark: M('#666c71', 0.62, 0.14) }
+  b52: { base: M('#666c71', 0.45, 0.3), dark: M('#666c71', 0.45, 0.3) }
 };
 const isAirframeSurface = name => /fuselage|body|wing|stabil|fin|sponson|fairing|tank|nacelle|flap|aileron|rudder|elevator|canard|pylon|tail|engine.?cowling|airframe/.test(name);
 const isAircraftDetail = name => /glass|window|windscreen|canopy|radome|nose.?cone|tire|tyre|rubber|wheel|strut|bogie|rim|hub|brake|axle|propeller|spinner|exhaust|nozzle|engine.?face|intake.?lip|antenna|probe|gun|barrel|missile|bomb|weapon|light/.test(name);
@@ -2372,10 +2372,10 @@ function rigGear() {
     tmpB.copy(m.geometry.boundingBox).applyMatrix4(m.matrix);
     const cx = (tmpB.min.x + tmpB.max.x) / 2;
     const cz = (tmpB.min.z + tmpB.max.z) / 2;
-    const b52Station = A.id === 'b52' && /Main (?:Gear Strut|Wheel) (14|28)[LR]/.exec(m.name || '');
+    const b52Station = A.id === 'b52' && /Main (?:Gear Strut|Wheel) (14|28)([LR])/.exec(m.name || '');
     if (b52Station) {
       // The B-52 has four independent main trucks; keep each fore/aft and left/right assembly on its own pivot.
-      const key = (cx < 0 ? 'L' : 'R') + b52Station[1];
+      const key = b52Station[2] + b52Station[1];
       (legs[key] = legs[key] || []).push([m, tmpB.clone()]);
     } else if (Math.abs(cx) < (A.centreX || 1.5)) (legs['c' + Math.round(cz / 6)] = legs['c' + Math.round(cz / 6)] || []).push([m, tmpB.clone()]);
     else if (Math.abs(cx) > 10) (legs[(cx < 0 ? 'L' : 'R') + 'o'] = legs[(cx < 0 ? 'L' : 'R') + 'o'] || []).push([m, tmpB.clone()]);
