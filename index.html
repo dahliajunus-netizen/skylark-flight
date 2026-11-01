@@ -3547,35 +3547,14 @@ if (THREE.GLTFLoader) {
   }, undefined, err => console.warn('The B61 model did not load; using the simple B61.', err));
   // B28 (War Thunder nuclear-thunder model): bake the scene transforms, aim the warhead nose forward (-Z),
   // and fit its base length so the B28's existing 1.2 axial store scale gives the correct 4.3 m length.
-  loader.load('nuke_bomb_b28_war_thunder_nuclear_thunder.glb', gltf => {
+  loader.load('nuke_bomb_b28_war_thunder_nuclear_thunder.glb?v=3', gltf => {
     gltf.scene.updateMatrixWorld(true);
     const baked = [];
     gltf.scene.traverse(o => {
       if (!o.isMesh) return;
-      const src = o.material, materials = Array.isArray(src) ? src : [src];
-      const mat = materials.map(m => {
-        const copy = m.clone();
-        if (copy.color) {
-          const tooDark = copy.color.r + copy.color.g + copy.color.b < 0.12;
-          copy.color.convertLinearToSRGB();
-          // Some War Thunder exports use a black material tint beside a valid texture; in glTF that tint
-          // multiplies the texture to black. Clear the tint so the embedded paint map can show through.
-          if (tooDark) copy.color.set(copy.map ? '#ffffff' : '#747a68');
-        }
-        if (copy.map && THREE.SRGBColorSpace) copy.map.colorSpace = THREE.SRGBColorSpace;
-        if (copy.emissive) copy.emissive.set('#171a12');
-        copy.emissiveIntensity = Math.max(copy.emissiveIntensity || 0, 0.12);
-        copy.roughness = Math.max(copy.roughness ?? 0.7, 0.58);
-        copy.side = THREE.DoubleSide;
-        copy.needsUpdate = true;
-        return copy;
-      });
-      const geo = bakeGltfMesh(o);
-      for (const attr of ['color', 'uv2']) if (o.geometry.attributes[attr]) geo.setAttribute(attr, o.geometry.attributes[attr].clone());
-      // bakeGltfMesh preserves vertex data but not glTF material assignment ranges.
-      // Restore groups so each section receives its proper textured material instead of the first (often black) one.
-      if (Array.isArray(src)) for (const group of o.geometry.groups) geo.addGroup(group.start, group.count, group.materialIndex);
-      baked.push({ geo, mat: Array.isArray(src) ? mat : mat[0], name: o.name || '' });
+      // Use the GLB for its shape, then paint it ourselves so missing or black War Thunder materials
+      // cannot turn the whole store black.
+      baked.push({ geo: bakeGltfMesh(o), name: o.name || '' });
     });
     const box = new THREE.Box3();
     baked.forEach(b => { b.geo.computeBoundingBox(); box.union(b.geo.boundingBox); });
@@ -3613,10 +3592,43 @@ if (THREE.GLTFLoader) {
     if (probe.z > 0) toZ.premultiply(new THREE.Matrix4().makeRotationY(Math.PI));
     const k = 3.58 / size[axis];
     const fit = new THREE.Matrix4().makeScale(k, k, k).multiply(toZ).multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
-    const g = new THREE.Group();
+    const paintCanvas = document.createElement('canvas');
+    paintCanvas.width = paintCanvas.height = 512;
+    const paintCtx = paintCanvas.getContext('2d'), paintPixels = paintCtx.createImageData(512, 512);
+    let paintSeed = 28061;
+    const paintRand = () => { paintSeed = (paintSeed * 1664525 + 1013904223) >>> 0; return paintSeed / 4294967296; };
+    for (let i = 0; i < 512 * 512; i++) {
+      const n = (paintRand() - 0.5) * 38, j = i * 4;
+      paintPixels.data[j] = 190 + n; paintPixels.data[j + 1] = 194 + n; paintPixels.data[j + 2] = 174 + n; paintPixels.data[j + 3] = 255;
+    }
+    paintCtx.putImageData(paintPixels, 0, 0);
+    paintCtx.strokeStyle = 'rgba(45,49,39,.32)'; paintCtx.lineWidth = 2;
+    for (let y = 32; y < 512; y += 64) { paintCtx.beginPath(); paintCtx.moveTo(0, y); paintCtx.lineTo(512, y); paintCtx.stroke(); }
+    paintCtx.fillStyle = 'rgba(232,220,151,.5)';
+    for (let y = 20; y < 512; y += 128) paintCtx.fillRect(0, y, 512, 5);
+    const paintTexture = new THREE.CanvasTexture(paintCanvas);
+    if (THREE.SRGBColorSpace) paintTexture.colorSpace = THREE.SRGBColorSpace;
+    paintTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const b28Paint = new THREE.MeshStandardMaterial({
+      color: '#ffffff', map: paintTexture, vertexColors: true, roughness: 0.78, metalness: 0.08,
+      emissive: '#383d2c', emissiveIntensity: 0.42, side: THREE.DoubleSide
+    });
+    const g = new THREE.Group(), paint = new THREE.Color();
     for (const b of baked) {
       b.geo.applyMatrix4(fit);
-      const m = new THREE.Mesh(b.geo, b.mat); m.castShadow = true; m.receiveShadow = true; g.add(m);
+      const pos = b.geo.attributes.position, colors = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), radial = Math.hypot(x, y);
+        const band = Math.abs(z + 0.72) < 0.055 || Math.abs(z - 0.48) < 0.055;
+        paint.set(band ? '#a9913c' : (z > 1.24 ? '#515746' : z < -1.25 ? '#686e5d' : '#737a66'));
+        const grain = 0.88 + 0.12 * (0.5 + 0.5 * Math.sin(x * 83 + y * 47 + z * 61));
+        const panel = Math.sin((z + 1.78) * 18) * Math.sin(Math.atan2(y, x) * 8);
+        paint.multiplyScalar(grain * (1 + 0.035 * panel));
+        if (radial > 0.32 && z > 0.95) paint.multiplyScalar(0.78);
+        colors[i * 3] = paint.r; colors[i * 3 + 1] = paint.g; colors[i * 3 + 2] = paint.b;
+      }
+      b.geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      const m = new THREE.Mesh(b.geo, b28Paint); m.castShadow = true; m.receiveShadow = true; g.add(m);
     }
     nukeTemplates.b28 = g;
     if (parts.nuke && parts.nuke.userData.id === 'b28') {
