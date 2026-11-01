@@ -520,11 +520,11 @@ function pavedAt(x, z) {
 // Five runways in different directions. names[0] is the runway flown along hdg (its threshold is the start of the
 // strip), names[1] the reverse. 36 is the main runway: 5,000 m (16,400 ft) by 90 m, the take-off spot.
 const RUNWAYS = [
-  { names: ['36', '18'], x: 0, z: 400, hdg: 0, len: 5000, w: 90 },
-  { names: ['09L', '27R'], x: -4600, z: -1500, hdg: 90, len: 4600, w: 75 },
-  { names: ['09R', '27L'], x: -4600, z: 1300, hdg: 90, len: 4200, w: 60 },
-  { names: ['04', '22'], x: 5200, z: 500, hdg: 40, len: 4000, w: 60 },
-  { names: ['13', '31'], x: -11600, z: -900, hdg: 130, len: 3800, w: 60 }
+  { names: ['36', '18'], x: 0, z: 400, hdg: 0, len: 5000, w: 90, lighting: 'CAT_II_III' },
+  { names: ['09L', '27R'], x: -4600, z: -1500, hdg: 90, len: 4600, w: 75, lighting: 'CAT_I' },
+  { names: ['09R', '27L'], x: -4600, z: 1300, hdg: 90, len: 4200, w: 60, lighting: 'CAT_I' },
+  { names: ['04', '22'], x: 5200, z: 500, hdg: 40, len: 4000, w: 60, lighting: 'CAT_I' },
+  { names: ['13', '31'], x: -11600, z: -900, hdg: 130, len: 3800, w: 60, lighting: 'CAT_I' }
 ];
 const RWY_ENDS = [];
 for (const R of RUNWAYS) {
@@ -1047,6 +1047,7 @@ const BASE_BOXES = [];
   RUNWAYS.forEach((R, ri) => {
     const r = R.rect, hl = r.hl, w = R.w, y = Y + LAYER.rwy + 0.02;
     const mk = (t, s, len, wid) => { const [x, z] = at(R, t, s); quad(paint, x, z, r.ux, r.uz, len / 2, wid / 2, y, WHITE); };
+    const cat23 = R.lighting === 'CAT_II_III';
     quad(flat, r.cx, r.cz, r.ux, r.uz, hl + 60, w / 2 + 7.5, Y + LAYER.rwy - 0.02, '#585b5e'); // shoulders and blast pads
     for (let t = -hl + 140; t <= hl - 140; t += 60) mk(t, 0, 36, w >= 75 ? 1.2 : 0.9);
     for (const sd of [-1, 1]) mk(0, sd * (w / 2 - 1.5), 2 * hl - 20, 0.9);
@@ -1068,14 +1069,29 @@ const BASE_BOXES = [];
         approachPoles.push([ax, az, h]);
         approachHeads.push([ax, az, Y + h + 0.35]);
       }
-      // Yellow crossbar trusses at 300 m intervals carry their lamps above the grass.
-      for (const d of [300, 600, 900]) {
+      // CAT II/III uses closer 150 m crossbars; CAT I keeps the 300 m pattern.
+      for (const d of (cat23 ? [150, 300, 450, 600, 750, 900] : [300, 600, 900])) {
         const [cx, cz] = at(R, e * (hl + d), 0), h = 1.4 + 10.6 * d / 900;
         approachBars.push([cx, cz, h, -r.uz, r.ux]);
         for (const sd of [-30, -20, -10, 10, 20, 30]) {
           const [ax, az] = at(R, e * (hl + d), sd);
           approachHeads.push([ax, az, Y + h + 0.35]);
           if (Math.abs(sd) === 30) approachPoles.push([ax, az, h]);
+        }
+      }
+      if (cat23) {
+        // Red side-barrettes in the final 300 m of the main runway approach.
+        for (const d of [60, 120, 180, 240, 300]) {
+          const h = 1.4 + 10.6 * d / 900;
+          for (const sd of [-1, 1]) for (const across of [-3, -1.5, 0, 1.5, 3]) {
+            const [ax, az] = at(R, e * (hl + d), sd * (10 + across));
+            approachHeads.push([ax, az, Y + h + 0.35, '#ff3028']);
+          }
+        }
+        // Touchdown-zone barrettes: three white lamps on each side every 30 m.
+        for (let d = 60; d <= 900; d += 30) for (const sd of [-1, 1]) for (const across of [-2.4, 0, 2.4]) {
+          const [tx, tz] = at(R, e * (hl - d), sd * 9 + across);
+          lights.push([tx, tz, '#fff2dc']);
         }
       }
     }
@@ -1157,8 +1173,13 @@ const BASE_BOXES = [];
   barMesh.castShadow = barMesh.receiveShadow = true;
   scene.add(barMesh);
   const headMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.58, 8, 6),
-    new THREE.MeshBasicMaterial({ color: '#fff0ce', toneMapped: false }), approachHeads.length);
-  approachHeads.forEach(([x, z, y], i) => headMesh.setMatrixAt(i, m.makeScale(1, 1, 1).setPosition(x, y, z)));
+    new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), approachHeads.length);
+  approachHeads.forEach(([x, z, y, color], i) => {
+    headMesh.setMatrixAt(i, m.makeScale(1, 1, 1).setPosition(x, y, z));
+    headMesh.setColorAt(i, c.set(color || '#fff0ce'));
+  });
+  headMesh.instanceMatrix.needsUpdate = true;
+  if (headMesh.instanceColor) headMesh.instanceColor.needsUpdate = true;
   scene.add(headMesh);
   const dm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 }), deco.length);
   deco.forEach(([x, y, z, sx, sy, sz, col], i) => { dm.setMatrixAt(i, m.compose(p.set(x, y, z), q.identity(), sc.set(sx, sy, sz))); dm.setColorAt(i, c.set(col)); });
