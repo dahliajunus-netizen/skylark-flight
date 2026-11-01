@@ -1754,7 +1754,7 @@ const CITY_TRAFFIC = [];
   for (let i = 0; i <= NET.nx; i++) for (let j = 0; j < NET.nz; j++) if (NET.V(i, j)) edge(node(i, j), node(i, j + 1));
   for (let j = 0; j <= NET.nz; j++) for (let i = 0; i < NET.nx; i++) if (NET.H(j, i)) edge(node(i, j), node(i + 1, j));
   if (!edges.length) return;
-  const rnd = mulberry(86123), count = isTouch ? 1800 : 6500;
+  const rnd = mulberry(86123), count = isTouch ? 6000 : 18000;
   const bodyGeo = new THREE.BoxGeometry(2.05, 0.82, 4.8);
   const cabGeo = new THREE.BoxGeometry(1.62, 0.6, 2.15);
   const wheelGeo = new THREE.CylinderGeometry(0.31, 0.31, 0.22, 10);
@@ -1779,7 +1779,11 @@ const CITY_TRAFFIC = [];
     bodies.setColorAt(i, new THREE.Color(colors[Math.floor(rnd() * colors.length)]));
   }
   scene.add(bodies, cabs, wheels);
+  let trafficElapsed = 1 / 15;
   const update = dt => {
+    trafficElapsed += dt;
+    if (trafficElapsed < 1 / 15) return;
+    dt = trafficElapsed; trafficElapsed = 0;
     for (let i = 0; i < cars.length; i++) {
       const car = cars[i];
       car.t += car.speed * dt * car.direction;
