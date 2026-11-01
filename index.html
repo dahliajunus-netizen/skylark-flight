@@ -2698,9 +2698,12 @@ function rigGear() {
     bb.makeEmpty();
     list.forEach(([, b]) => bb.union(b));
     const pivot = new THREE.Group(), upper = new THREE.Group(), lower = new THREE.Group();
-    const authoredHinge = A.id === 'typhoon' ? list.find(([m]) => /nose gear strut/i.test(m.name || '') && m.userData.gearHinge)?.[0].userData.gearHinge : null;
-    if (authoredHinge) pivot.position.copy(authoredHinge);
-    else pivot.position.set((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
+    const noseStrut = A.id === 'typhoon' ? list.find(([m]) => /nose gear strut/i.test(m.name || '')) : null;
+    if (noseStrut) {
+      // Hinge at the top, forward end of the nose strut, as marked on the Eurofighter model.
+      const hingeBox = noseStrut[1];
+      pivot.position.set((hingeBox.min.x + hingeBox.max.x) / 2, hingeBox.max.y, hingeBox.min.z);
+    } else pivot.position.set((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
     g.add(pivot);
     let strutBottom = 0;
     for (const [m, mb] of list) {
