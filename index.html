@@ -1945,9 +1945,9 @@ const CITY_TRAFFIC = [];
   const cars = [];
   for (let i = 0; i < count; i++) {
     const e = edges[Math.floor(rnd() * edges.length)], direction = rnd() < 0.5 ? 1 : -1;
-    const car = { edge: e, t: rnd() * e.len, direction, speed: 7 + rnd() * 5, prev: null, phase: rnd() * Math.PI * 2 };
+    const car = { edge: e, t: rnd() * e.len, direction, speed: 7 + rnd() * 5, prev: null, phase: rnd() * Math.PI * 2, color: new THREE.Color(colors[Math.floor(rnd() * colors.length)]) };
     cars.push(car);
-    bodies.setColorAt(i, new THREE.Color(colors[Math.floor(rnd() * colors.length)]));
+    bodies.setColorAt(i, car.color);
   }
   scene.add(bodies, cabs, wheels);
   let trafficElapsed = 1 / 15;
@@ -1955,8 +1955,12 @@ const CITY_TRAFFIC = [];
     trafficElapsed += dt;
     if (trafficElapsed < 1 / 15) return;
     dt = trafficElapsed; trafficElapsed = 0;
+    let nb = 0, nw = 0;
+    const cx = camera.position.x, cz = camera.position.z;
     for (let i = 0; i < cars.length; i++) {
       const car = cars[i];
+      // cars more than 3 km away can't be seen: they wait where they are until the camera comes back
+      if (car.x !== undefined && (car.x - cx) ** 2 + (car.z - cz) ** 2 > 3000 * 3000) continue;
       car.t += car.speed * dt * car.direction;
       let guard = 0;
       while ((car.t > car.edge.len || car.t < 0) && guard++ < 4) {
@@ -1974,24 +1978,32 @@ const CITY_TRAFFIC = [];
         }
       }
       const e = car.edge, u = clamp(car.t / e.len, 0, 1);
+      const x = e.a.x + (e.b.x - e.a.x) * u, z = e.a.z + (e.b.z - e.a.z) * u;
+      car.x = x; car.z = z;
+      // only cars near the camera are drawn; a car is a few pixels at 2.5 km and its wheels vanish well before that
+      const d2 = (x - camera.position.x) ** 2 + (z - camera.position.z) ** 2 + (CITY_H - camera.position.y) ** 2;
+      if (d2 > 2500 * 2500) continue;
       const dx = (e.b.x - e.a.x) / e.len * car.direction, dz = (e.b.z - e.a.z) / e.len * car.direction;
       const yaw = Math.atan2(-dx, -dz);
-      const x = e.a.x + (e.b.x - e.a.x) * u, z = e.a.z + (e.b.z - e.a.z) * u;
       carQ.setFromAxisAngle(trafficUp, yaw);
       p.set(x, CITY_H + 0.48, z);
-      matrix.compose(p, carQ, scale); bodies.setMatrixAt(i, matrix);
+      matrix.compose(p, carQ, scale); bodies.setMatrixAt(nb, matrix); bodies.setColorAt(nb, car.color);
       local.set(0, 0.76, -0.22).applyQuaternion(carQ);
       p.set(x + local.x, CITY_H + 0.48 + local.y, z + local.z);
-      matrix.compose(p, carQ, scale); cabs.setMatrixAt(i, matrix);
+      matrix.compose(p, carQ, scale); cabs.setMatrixAt(nb, matrix);
+      nb++;
+      if (d2 > 400 * 400) continue;
       for (let w = 0; w < 4; w++) {
         const sx = (w & 1) ? 0.9 : -0.9, sz = (w & 2) ? 1.48 : -1.48;
         local.set(sx, -0.2, sz).applyQuaternion(carQ);
         p.set(x + local.x, CITY_H + 0.31, z + local.z);
         offsetQ.copy(carQ);
-        matrix.compose(p, offsetQ, scale); wheels.setMatrixAt(i * 4 + w, matrix);
+        matrix.compose(p, offsetQ, scale); wheels.setMatrixAt(nw++, matrix);
       }
     }
+    bodies.count = cabs.count = nb; wheels.count = nw;
     bodies.instanceMatrix.needsUpdate = true; cabs.instanceMatrix.needsUpdate = true; wheels.instanceMatrix.needsUpdate = true;
+    if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
   };
   update(0);
   CITY_TRAFFIC.push(update);
