@@ -470,26 +470,30 @@ function fbm(x, y, oct) {
 }
 // The city sits on a flat plain: a river cuts across it east-west, the sea is to the east and south,
 // and hills rise beyond the edge of town.
-// The main map is the original layout spread √10× wider (10× the area) away from its southern shore at
-// z = MAP_AZ, so the shore facing the airbase stays put and everything north of it spreads out; heights are
-// unchanged, so the hills are broader rather than taller.
-const MAP_K = Math.sqrt(10), MAP_AZ = 5800;
+// The main map is the original layout spread √5× wider (5× the area); heights are unchanged, so the hills are
+// broader rather than taller. The landmass is a circle whose south shore stays at z = 5800, facing the airbase.
+// The city and its hills are placed so the city's south edge sits at z = -3700, the same 1 km north of the airbase
+// as before (MAP_AZ is the point of the original layout that stays put).
+const MAP_K = Math.sqrt(5), MAP_AZ = (-3700 - 2800 * MAP_K) / (1 - MAP_K);
 const mapZ = z => MAP_AZ + (z - MAP_AZ) * MAP_K; // an original z in the scaled map
-const MAP_CZ = mapZ(-2200), MAP_R = 8000 * MAP_K;  // centre and radius of the main landmass
+const MAP_R = 8000 * MAP_K, MAP_CZ = 5800 - MAP_R;  // radius and centre of the main landmass
 const CITY_H = 24, BLOCK = 144, ROAD = 12;
 const CITY0 = { x0: -3400, x1: 3700, z0: -7200, z1: 2800 }; // the city's original bounds
 const CITY = { x0: CITY0.x0 * MAP_K, x1: CITY0.x1 * MAP_K, z0: mapZ(CITY0.z0), z1: mapZ(CITY0.z1) };
 // tower districts: the old downtown plus new centres across the larger city (r: how far its towers reach)
+// (the others were placed in the older √10 map, around its fixed south shore at z = 5800; fromOld carries them over
+// to the same spot in the city, and their reach shrinks with it)
+const fromOld = (x, z, r, w) => { const k = Math.sqrt(10); return { x: x / k * MAP_K, z: mapZ(5800 + (z - 5800) / k), r: r * MAP_K / k, w }; };
 const DISTRICTS = [
-  { x: 400 * MAP_K, z: mapZ(-4600), r: 1900, w: 1 },
-  { x: -6200, z: -13500, r: 1100, w: 0.8 },
-  { x: 6800, z: -26500, r: 1200, w: 0.85 },
-  { x: -5600, z: -30500, r: 950, w: 0.7 },
-  { x: 6200, z: -8200, r: 900, w: 0.68 },
-  { x: 2400, z: -17000, r: 1000, w: 0.75 },
-  { x: -8600, z: -23800, r: 850, w: 0.66 },
-  { x: 9600, z: -15200, r: 900, w: 0.7 },
-  { x: -2400, z: -6400, r: 800, w: 0.62 }
+  { x: 400 * MAP_K, z: mapZ(-4600), r: 1900 * MAP_K / Math.sqrt(10), w: 1 },
+  fromOld(-6200, -13500, 1100, 0.8),
+  fromOld(6800, -26500, 1200, 0.85),
+  fromOld(-5600, -30500, 950, 0.7),
+  fromOld(6200, -8200, 900, 0.68),
+  fromOld(2400, -17000, 1000, 0.75),
+  fromOld(-8600, -23800, 850, 0.66),
+  fromOld(9600, -15200, 900, 0.7),
+  fromOld(-2400, -6400, 800, 0.62)
 ];
 // the river keeps its width; its course is spread out with the map
 const RIVER = { z: mapZ(-2600), a1: 300 * MAP_K, w1: 1100 * MAP_K, a2: 120 * MAP_K, w2: 430 * MAP_K };
@@ -497,7 +501,7 @@ const riverZ = x => RIVER.z + RIVER.a1 * Math.sin(x / RIVER.w1) + RIVER.a2 * Mat
 // The airbase: the empty south coast between the city and the sea is levelled to the height of the city plain.
 // The level ground is a cap of the landmass: south of AB.zN, between AB.xW and AB.xE, and 700 m inside the shore.
 // Around it the hills are cut back and blended in; two access roads run north to the edge of town on level strips.
-const AB = { zN: -2700, xW: -15500, xE: 10500, r: MAP_R - 700, blend: 900 };
+const AB = { zN: -2700, xW: -14200, xE: 10500, r: MAP_R - 700, blend: 900 };
 const GATES = [-1500, 3000]; // x of the access roads and their gates
 const airbaseSD = (x, z) => Math.max(Math.hypot(x, z - MAP_CZ) - AB.r, AB.zN - z, x - AB.xE, AB.xW - x); // < 0 inside
 const TERRAIN_CRATERS = [];
@@ -549,7 +553,7 @@ function baseHeightAt(x, z) {
     h = Math.min(h, CITY_H + sd * (0.08 + sd * 0.00012)); // hills near the base cut back to a slope that steepens away from it
     h = CITY_H + (h - CITY_H) * Math.min(smooth(0, AB.blend, sd), smooth(0, 120, road));
   }
-  if (x > CITY.x1) h = Math.min(h, CITY_H - (x - CITY.x1) * 0.25); // eastern shoreline drops into the sea
+  if (x > CITY.x1) h += (Math.min(h, CITY_H - (x - CITY.x1) * 0.25) - h) * smooth(AB.zN + 500, AB.zN - 2500, z); // eastern shoreline beside the city drops into the sea
   h -= Math.max(0, Math.hypot(x, z - MAP_CZ) - MAP_R) * 0.25; // edge of the map falls into the sea
   return h;
 }
