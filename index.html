@@ -293,7 +293,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div class="tools" id="tools" hidden>
   <button class="tbtn" id="bBombCam" title="Hold to follow your last bomb or missile">BOMB CAM<kbd>Z</kbd></button>
   <button class="tbtn" id="bGs" hidden>GUNSHIP CAM<kbd>V</kbd></button>
-   <button class="tbtn" id="bGraphics">GRAPHICS</button>\n  <button class="tbtn" id="bVision">NVG<kbd>J</kbd></button>
+   <button class="tbtn" id="bGraphics">GRAPHICS</button>
+  <button class="tbtn" id="bVision">NVG<kbd>J</kbd></button>
   <button class="tbtn" id="bUi">HIDE UI<kbd>U</kbd></button>
   <button class="tbtn" id="bCam">CAM<kbd>C</kbd></button>
   <button class="tbtn touch-only" id="bBrkTool">BRAKE</button>
@@ -337,7 +338,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <div class="actions">
       <button class="btn primary" id="goRunway">Take off from runway</button>
-      <button class="btn" id="goAir">Start airborne</button>\n      <button class="btn" id="menuGraphics">Graphics</button>
+      <button class="btn" id="goAir">Start airborne</button>
+      <button class="btn" id="menuGraphics">Graphics</button>
     </div>
     <dl class="keys key-only" id="keyList">
       <dt>Mouse aim</dt><dd>Pick it in the controls picker (menu or pause): move the mouse and the nose follows the circle; left click fires the gun. W/S/A/D still override</dd>
@@ -407,7 +409,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <button class="btn" id="pRunway">Restart on runway</button>
       <button class="btn" id="pAir">Start airborne</button>
       <button class="btn" id="pApproach">Approach</button>
-      <button class="btn" id="pCallsign">Change callsign</button>\n      <button class="btn" id="pauseGraphics">Graphics</button>
+      <button class="btn" id="pCallsign">Change callsign</button>
+      <button class="btn" id="pauseGraphics">Graphics</button>
       <button class="btn" id="pRebuild">Rebuild city</button>
     </div>
   </div>
@@ -7934,6 +7937,7 @@ function applyGraphicsQuality(quality, save = true) {
   const deviceCap = isTouch ? 1 : Math.min(devicePixelRatio || 1, 2);
   renderer.setPixelRatio(Math.min(deviceCap, preset.pixelRatio));
   renderer.setSize(innerWidth, innerHeight);
+  if (bloom) bloom.resize();
   renderer.shadowMap.enabled = preset.shadows;
   sun.castShadow = preset.shadows;
   sun.shadow.mapSize.set(isTouch ? Math.min(512, preset.shadowSize) : preset.shadowSize,
