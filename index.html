@@ -3922,11 +3922,28 @@ function updateNaval(dt) {
   }
 }
 // ---------------- particles: fire, smoke, sparks, splash, dust ----------------
+// Smoke and flame puffs: a 2x2 atlas of billowy value-noise clouds with soft, ragged edges. Particles pick one at
+// random and spin slowly, so smoke and fire read as turbulent clouds instead of round blobs.
 const puffTex = (() => {
-  const c = document.createElement('canvas'); c.width = c.height = 64;
-  const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.45, 'rgba(255,255,255,.5)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  const N = 128, c = document.createElement('canvas'); c.width = c.height = N * 2;
+  const x = c.getContext('2d'), img = x.createImageData(N * 2, N * 2), rnd = mulberry(4711);
+  const lattice = () => { const g = []; for (let i = 0; i < 17 * 17; i++) g.push(rnd()); return g; };
+  for (let cell = 0; cell < 4; cell++) {
+    const L = [lattice(), lattice(), lattice(), lattice()], ox = (cell % 2) * N, oy = (cell >> 1) * N;
+    const val = (g, u, v, f) => { const X = u * f, Y = v * f, i = Math.floor(X), j = Math.floor(Y), fx = X - i, fy = Y - j, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+      const at = (a, b) => g[((b % 16 + 16) % 16) * 17 + ((a % 16 + 16) % 16)];
+      return (at(i, j) * (1 - sx) + at(i + 1, j) * sx) * (1 - sy) + (at(i, j + 1) * (1 - sx) + at(i + 1, j + 1) * sx) * sy; };
+    for (let py = 0; py < N; py++) for (let px = 0; px < N; px++) {
+      const u = px / N, v = py / N, dx = u - 0.5, dy = v - 0.5;
+      const n = 0.5 * val(L[0], u, v, 3) + 0.27 * val(L[1], u, v, 6) + 0.15 * val(L[2], u, v, 12) + 0.08 * val(L[3], u, v, 24);
+      const r = Math.hypot(dx, dy) * 2 + (n - 0.5) * 0.55;  // ragged edge
+      const r0 = Math.hypot(dx, dy) * 2, edge = Math.max(0, Math.min(1, (1 - r0) / 0.3)); // always fade out before the cell border
+      const a = Math.max(0, Math.min(1, (1 - r) * 1.6)) * (0.55 + 0.75 * n) * edge * edge * (3 - 2 * edge);
+      const k = ((oy + py) * N * 2 + ox + px) * 4;
+      img.data[k] = img.data[k + 1] = img.data[k + 2] = Math.round(180 + 75 * n); img.data[k + 3] = Math.round(255 * Math.min(1, a));
+    }
+  }
+  x.putImageData(img, 0, 0);
   return new THREE.CanvasTexture(c);
 })();
 function particleSystem(max, additive) {
@@ -3936,30 +3953,38 @@ function particleSystem(max, additive) {
     pos: new Float32Array(max * 3), col: new Float32Array(max * 4), size: new Float32Array(max),
     life: new Float32Array(max), maxLife: new Float32Array(max), vel: new Float32Array(max * 3),
     s0: new Float32Array(max), s1: new Float32Array(max), c0: new Float32Array(max * 3), c1: new Float32Array(max * 3),
-    a0: new Float32Array(max), drag: new Float32Array(max), grav: new Float32Array(max), next: 0
+    a0: new Float32Array(max), drag: new Float32Array(max), grav: new Float32Array(max), rot: new Float32Array(max), spin: new Float32Array(max), next: 0
   };
   geo.setAttribute('position', new THREE.BufferAttribute(P.pos, 3).setUsage(THREE.DynamicDrawUsage));
   geo.setAttribute('aCol', new THREE.BufferAttribute(P.col, 4).setUsage(THREE.DynamicDrawUsage));
   geo.setAttribute('aSize', new THREE.BufferAttribute(P.size, 1).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute('aRot', new THREE.BufferAttribute(P.rot, 1).setUsage(THREE.DynamicDrawUsage)); // atlas cell * 10 + angle
   P.mat = new THREE.ShaderMaterial({
     uniforms: { map: { value: puffTex }, uScale: { value: 1 } },
-    vertexShader: `attribute float aSize; attribute vec4 aCol; uniform float uScale; varying vec4 vCol;
+    vertexShader: `attribute float aSize; attribute vec4 aCol; attribute float aRot; uniform float uScale; varying vec4 vCol; varying vec3 vRot;
 #include <common>
 #include <logdepthbuf_pars_vertex>
 void main() {
   vCol = aCol;
+  float cell = floor(aRot / 10.0), ang = aRot - cell * 10.0;
+  vRot = vec3(cos(ang), sin(ang), cell);
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mv;
   gl_PointSize = min(aSize * uScale / max(-mv.z, 0.1), 600.0);
 #include <logdepthbuf_vertex>
 }`,
-    fragmentShader: `uniform sampler2D map; varying vec4 vCol;
+    fragmentShader: `uniform sampler2D map; varying vec4 vCol; varying vec3 vRot;
 #include <logdepthbuf_pars_fragment>
 void main() {
 #include <logdepthbuf_fragment>
-  float a = vCol.a * texture2D(map, gl_PointCoord).a;
+  vec2 q = gl_PointCoord - 0.5;
+  q = vec2(q.x * vRot.x - q.y * vRot.y, q.x * vRot.y + q.y * vRot.x) + 0.5;
+  if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) discard;
+  vec2 cell = vec2(mod(vRot.z, 2.0), floor(vRot.z / 2.0));
+  vec4 tx = texture2D(map, (q + cell) * 0.5);
+  float a = vCol.a * tx.a;
   if (a < 0.01) discard;
-  gl_FragColor = vec4(vCol.rgb, a);
+  gl_FragColor = vec4(vCol.rgb * (0.75 + 0.35 * tx.r), a);
 }`,
     transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending
   });
@@ -3978,7 +4003,12 @@ const FX = {
   smoke:  { sys: haze, life: [5, 9], s0: [3, 5], s1: [16, 30],         c0: C3('#26221f'), c1: C3('#85807a'), a: 0.5, drag: 0.35, grav: 2.2 },
   dust:   { sys: haze, life: [1.5, 3], s0: [2, 3], s1: [8, 14],        c0: C3('#8e7c60'), c1: C3('#b6a88f'), a: 0.45, drag: 1.5, grav: 0.5 },
   splash: { sys: haze, life: [1.4, 2.6], s0: [1.5, 3], s1: [6, 12],    c0: C3('#ffffff'), c1: C3('#cfe3ea'), a: 0.75, drag: 0.6, grav: -9.81 },
-  steam:  { sys: haze, life: [3, 5], s0: [3, 4], s1: [12, 20],         c0: C3('#eef2f3'), c1: C3('#c9d2d6'), a: 0.3, drag: 0.5, grav: 2 }
+  steam:  { sys: haze, life: [3, 5], s0: [3, 4], s1: [12, 20],         c0: C3('#eef2f3'), c1: C3('#c9d2d6'), a: 0.3, drag: 0.5, grav: 2 },
+  // explosion extras: dark TNT smoke, thrown dirt, ballistic clods and warhead fragments
+  soot:   { sys: haze, life: [6, 12], s0: [3, 6], s1: [20, 38],        c0: C3('#141210'), c1: C3('#5a5650'), a: 0.62, drag: 0.45, grav: 2.6 },
+  ejecta: { sys: haze, life: [2, 4], s0: [1.5, 3], s1: [6, 12],        c0: C3('#4a3c2c'), c1: C3('#9a8a70'), a: 0.7, drag: 0.35, grav: -9.81 },
+  clod:   { sys: haze, life: [1.6, 3.2], s0: [0.5, 1.1], s1: [0.4, 0.8], c0: C3('#2a2219'), c1: C3('#3a3026'), a: 0.95, drag: 0.08, grav: -9.81 },
+  frag:   { sys: glow, life: [0.3, 0.8], s0: [0.25, 0.4], s1: [0.05, 0.1], c0: C3('#fff6d0'), c1: C3('#ff6a1a'), a: 1, drag: 0.15, grav: -9.81 }
 };
 const rr = ([a, b]) => a + Math.random() * (b - a);
 function emit(type, p, vx = 0, vy = 0, vz = 0, k = 1) {
@@ -3990,6 +4020,8 @@ function emit(type, p, vx = 0, vy = 0, vz = 0, k = 1) {
   P.s0[i] = rr(o.s0) * k; P.s1[i] = rr(o.s1) * k;
   o.c0.toArray(P.c0, i * 3); o.c1.toArray(P.c1, i * 3);
   P.a0[i] = o.a; P.drag[i] = o.drag; P.grav[i] = o.grav;
+  P.spin[i] = (Math.random() - 0.5) * (P === glow ? 3 : 0.8);
+  P.rot[i] = Math.floor(Math.random() * 4) * 10 + Math.random() * 6.28;
   P.active = P.max;
 }
 // Poisson-ish: emit `rate` particles per second on average
@@ -4009,11 +4041,13 @@ function updateParticles(P, dt) {
     const e = 1 - (1 - t) * (1 - t);
     P.size[i] = P.s0[i] + (P.s1[i] - P.s0[i]) * e;
     for (let c = 0; c < 3; c++) P.col[i * 4 + c] = P.c0[j + c] + (P.c1[j + c] - P.c0[j + c]) * t;
+    const cell = Math.floor(P.rot[i] / 10); let ang = P.rot[i] - cell * 10 + P.spin[i] * dt;
+    ang = ((ang % 6.28) + 6.28) % 6.28; P.rot[i] = cell * 10 + ang;
     P.col[i * 4 + 3] = P.a0[i] * Math.min(1, t * 8) * (1 - t);
   }
   P.active = alive;
   const a = P.geo.attributes;
-  a.position.needsUpdate = a.aCol.needsUpdate = a.aSize.needsUpdate = true;
+  a.position.needsUpdate = a.aCol.needsUpdate = a.aSize.needsUpdate = a.aRot.needsUpdate = true;
 }
 function clearParticles(P) { P.life.fill(0); P.size.fill(0); P.col.fill(0); P.active = 1; }
 
@@ -4696,73 +4730,196 @@ function blastPlane(p, R, from) {
     } else if (bd < R) ripZone(z, best, tC.copy(best).applyQuaternion(S.quat).add(S.pos));
   }
 }
+// 3D simplex noise (Ashima / Stefan Gustavson) and fBm, shared by the fireball and nuclear cloud shaders
+const NOISE_GLSL = `
+vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
+vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+float snoise(vec3 v) {
+  const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0); const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i = floor(v + dot(v, C.yyy)), x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz), l = 1.0 - g, i1 = min(g.xyz, l.zxy), i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx, x2 = x0 - i2 + C.yyy, x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857; vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z), x_ = floor(j * ns.z), y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ * ns.x + ns.yyyy, y = y_ * ns.x + ns.yyyy, h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy), b1 = vec4(x.zw, y.zw), s0 = floor(b0) * 2.0 + 1.0, s1 = floor(b1) * 2.0 + 1.0, sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy, a1 = b1.xzyw + s1.xzyw * sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x), p1 = vec3(a0.zw, h.y), p2 = vec3(a1.xy, h.z), p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0); m = m * m;
+  return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+}
+float fbm3(vec3 p) { return 0.5 * snoise(p) + 0.25 * snoise(p * 2.03 + 7.1) + 0.125 * snoise(p * 4.07 + 3.3); }
+`;
+// Fireball: a sphere boiled out by animated noise, coloured by temperature. uHeat 1.4 is a white-hot flash,
+// ~1 bright yellow-orange flame, ~0.4 dull red, 0 black smoke. Edges are cooler than the core (limb darkening).
+const FIREBALL_GEO = new THREE.IcosahedronGeometry(1, 4);
+function makeFireballMaterial(seed) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uSeed: { value: seed }, uHeat: { value: 1.4 }, uOpacity: { value: 1 }, uRough: { value: 0.38 } },
+    vertexShader: `uniform float uTime, uSeed, uRough; varying vec3 vN, vV; varying float vNoise;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+${NOISE_GLSL}
+void main() {
+  float n = fbm3(position * 2.3 + vec3(uSeed, uSeed * 0.7 - uTime * 0.8, uSeed * 1.3));
+  vNoise = n;
+  vec3 p = position * (1.0 + uRough * n);
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+  gl_Position = projectionMatrix * mv;
+#include <logdepthbuf_vertex>
+}`,
+    fragmentShader: `uniform float uHeat, uOpacity; varying vec3 vN, vV; varying float vNoise;
+#include <logdepthbuf_pars_fragment>
+void main() {
+#include <logdepthbuf_fragment>
+  float facing = abs(dot(vN, vV)), rim = 1.0 - facing;
+  float temp = uHeat * (1.05 - 0.55 * rim) + vNoise * 0.45 * min(uHeat, 1.0);
+  vec3 soot = vec3(0.075, 0.07, 0.065) * (0.7 + 0.9 * (vNoise + 0.5));
+  vec3 c;
+  if (temp > 1.0) c = mix(vec3(1.4, 1.05, 0.55), vec3(2.2, 2.0, 1.7), clamp(temp - 1.0, 0.0, 1.0));
+  else if (temp > 0.55) c = mix(vec3(1.25, 0.42, 0.06), vec3(1.4, 1.05, 0.55), (temp - 0.55) / 0.45);
+  else if (temp > 0.2) c = mix(vec3(0.32, 0.06, 0.01), vec3(1.25, 0.42, 0.06), (temp - 0.2) / 0.35);
+  else c = mix(soot, vec3(0.32, 0.06, 0.01), max(temp, 0.0) / 0.2);
+  float a = uOpacity * clamp(0.45 + 1.1 * (vNoise + 0.3), 0.0, 1.0) * mix(1.0, smoothstep(0.05, 0.6, facing), 0.85);
+  gl_FragColor = vec4(c, a);
+}`,
+    transparent: true, depthWrite: false, fog: false
+  });
+}
+const SHOCK_MAT_SRC = {
+  vertexShader: `varying vec3 vN, vV;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv;
+#include <logdepthbuf_vertex>
+}`,
+  fragmentShader: `uniform float uOpacity; varying vec3 vN, vV;
+#include <logdepthbuf_pars_fragment>
+void main() {
+#include <logdepthbuf_fragment>
+  float rim = pow(1.0 - abs(dot(vN, vV)), 3.0); gl_FragColor = vec4(vec3(0.95), uOpacity * rim); }`
+};
+// Live fireballs and shock bubbles: radius R (m); the burn and rise times scale with the size.
+const FIREBALLS = [];
+function disposeFireball(fx) {
+  scene.remove(fx.mesh); fx.mesh.material.dispose();
+  if (fx.shock) { scene.remove(fx.shock); fx.shock.material.dispose(); fx.shock = null; }
+}
+function spawnFireball(p, R, ground) {
+  if (FIREBALLS.length > 14) disposeFireball(FIREBALLS.shift());
+  const mesh = new THREE.Mesh(FIREBALL_GEO, makeFireballMaterial(Math.random() * 50));
+  mesh.position.copy(p); mesh.scale.setScalar(R * 0.15); mesh.renderOrder = 4;
+  scene.add(mesh);
+  // the shock front: a faint, fast-growing condensation bubble on the bigger blasts
+  let shock = null;
+  if (R > 4) {
+    shock = new THREE.Mesh(FIREBALL_GEO, new THREE.ShaderMaterial({ uniforms: { uOpacity: { value: 0.35 } }, ...SHOCK_MAT_SRC, transparent: true, depthWrite: false, fog: false }));
+    shock.position.copy(p); shock.scale.setScalar(R * 0.3);
+    scene.add(shock);
+  }
+  // a big fireball takes longer: the flash and burn scale roughly with the cube root of size
+  const s = Math.cbrt(Math.max(1, R / 7));
+  FIREBALLS.push({ mesh, shock, p: p.clone(), R, ground, s, t: 0 });
+}
+function updateFireballs(dt) {
+  for (let i = FIREBALLS.length - 1; i >= 0; i--) {
+    const fx = FIREBALLS[i], t = (fx.t += dt), s = fx.s, R = fx.R, u = fx.mesh.material.uniforms;
+    // expand fast, keep burning a moment, then cool into a rising, spreading ball of soot that thins out
+    const grow = 1 - Math.exp(-t / (0.05 * s));
+    const late = Math.max(0, t - 0.35 * s);
+    const r = R * (0.15 + 0.85 * grow) * (1 + 0.55 * (1 - Math.exp(-late / (1.5 * s))));
+    fx.mesh.scale.set(r, r * (fx.ground ? 0.85 : 1), r);
+    fx.mesh.position.set(fx.p.x, fx.p.y + (fx.ground ? r * 0.55 : 0) + late * late * 0.9 / s + late * 2.5, fx.p.z);
+    u.uTime.value = t * (1.2 / s);
+    u.uHeat.value = 1.45 * Math.exp(-t / (0.18 * s)) + (t < 0.6 * s ? 0.5 * (1 - t / (0.6 * s)) : 0);
+    u.uRough.value = 0.42 + 0.3 * clamp(t / (0.8 * s), 0, 1);
+    u.uOpacity.value = clamp(1 - (t - 2.2 * s) / (2.5 * s), 0, 1);
+    if (fx.shock) {
+      const st = t / (0.22 * s);
+      fx.shock.scale.setScalar(R * (0.3 + 3.2 * Math.min(1, st)));
+      fx.shock.material.uniforms.uOpacity.value = 0.35 * clamp(1 - st, 0, 1);
+      if (st >= 1) { scene.remove(fx.shock); fx.shock.material.dispose(); fx.shock = null; }
+    }
+    if (t > 4.8 * s) { disposeFireball(fx); FIREBALLS.splice(i, 1); }
+  }
+}
+// Conventional explosion. k is the visual size (0.55 for a Mk-82). Near the ground: a fireball sitting on the
+// surface, a cone of thrown dirt and flying clods, a dust skirt and a thick column of black smoke. In the air
+// (missile warheads): a spherical fireball, a spray of glowing fragments and a black puff, with no dust.
 function explode(p, k, wet, remote = false, scaleSpread = false) {
   if (!remote) mpFx({ k: 'e', p: mpV(p), s: k, w: wet ? 1 : 0 });
-  const spread = scaleSpread ? k : 1;
+  const spread = scaleSpread ? k : 1, R = 12.7 * k;
+  const gy = Math.max(0, heightAt(p.x, p.z)), ground = p.y - gy < 4 + R * 0.6;
   if (wet) {
     for (let i = 0; i < 130 * k; i++) emit('splash', p, (Math.random() - 0.5) * 16 * spread, rr([15, 60]) * k, (Math.random() - 0.5) * 16 * spread, 1.3 * k);
     for (let i = 0; i < 20; i++) emit('steam', p, (Math.random() - 0.5) * 8 * spread, 3 * spread, (Math.random() - 0.5) * 8 * spread, k);
+    if (k >= 0.3) spawnFireball(tA.set(p.x, gy + R * 0.2, p.z), R * 0.6, true); // a short flash inside the spray
   } else {
-    for (let i = 0; i < 110 * k; i++) {
-      tA.set(Math.random() - 0.5, rr([0, 0.9]), Math.random() - 0.5).normalize().multiplyScalar(rr([6, 40]) * k);
+    if (k >= 0.12) spawnFireball(p, R, ground);
+    for (let i = 0; i < 60 * k; i++) {
+      tA.set(Math.random() - 0.5, ground ? rr([0, 0.9]) : Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(rr([6, 32]) * k);
       emit('fire', p, tA.x, tA.y, tA.z, 2 * k);
     }
-    for (let i = 0; i < 40; i++) emit('smoke', p, (Math.random() - 0.5) * 16 * spread, rr([4, 14]) * spread, (Math.random() - 0.5) * 16 * spread, 1.5 * k);
-    for (let i = 0; i < 50; i++) { const a = Math.random() * Math.PI * 2, s = rr([10, 35]) * spread; emit('dust', p, Math.cos(a) * s, rr([2, 8]) * spread, Math.sin(a) * s, 1.6 * k); }
-    for (let i = 0; i < 40; i++) emit('spark', p, (Math.random() - 0.5) * 60 * spread, rr([20, 60]) * spread, (Math.random() - 0.5) * 60 * spread, scaleSpread ? k : 1);
+    for (let i = 0; i < (ground ? 45 : 18); i++) emit('soot', p, (Math.random() - 0.5) * 10 * spread, rr([3, 12]) * spread, (Math.random() - 0.5) * 10 * spread, 1.4 * k);
+    for (let i = 0; i < 18; i++) emit('smoke', p, (Math.random() - 0.5) * 14 * spread, rr([4, 14]) * spread, (Math.random() - 0.5) * 14 * spread, 1.5 * k);
+    if (ground) {
+      for (let i = 0; i < 50; i++) { const a = Math.random() * Math.PI * 2, sp = rr([10, 35]) * spread; emit('dust', tA.set(p.x, gy + 1, p.z), Math.cos(a) * sp, rr([2, 6]) * spread, Math.sin(a) * sp, 1.6 * k); }
+      // the crater's dirt is thrown up in a cone, and clods arc out and fall
+      const n = Math.min(1.5, k + 0.3);
+      for (let i = 0; i < 70 * n; i++) { const a = Math.random() * Math.PI * 2, out = rr([4, 18]) * spread; emit('ejecta', p, Math.cos(a) * out, rr([18, 55]) * spread, Math.sin(a) * out, 1.3 * k); }
+      for (let i = 0; i < 60 * n; i++) { const a = Math.random() * Math.PI * 2, out = rr([8, 40]) * spread; emit('clod', p, Math.cos(a) * out, rr([12, 45]) * spread, Math.sin(a) * out, Math.max(0.6, k)); }
+    }
+    // fragments: a sphere of glowing shards for a warhead in the air, a low spray for a ground burst
+    for (let i = 0; i < (ground ? 35 : 90); i++) {
+      tA.set(Math.random() - 0.5, ground ? rr([0.05, 0.7]) : Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(rr([60, 160]) * Math.max(0.6, spread));
+      emit(ground ? 'spark' : 'frag', p, tA.x, tA.y, tA.z, scaleSpread ? Math.max(0.6, k) : 1);
+    }
   }
   boomLight.position.copy(p).y += 8;
-  boomLight.intensity = Math.max(boomLight.intensity, 10 * k);
+  boomLight.intensity = Math.max(boomLight.intensity, 14 * k);
   const dist = camera.position.distanceTo(p);
   W.shake = Math.max(W.shake, 2.5 * k * clamp(1 - dist / 1800, 0, 1));
   setTimeout(() => boom(k * 400 / (400 + dist), wet, dist), dist / 340 * 1000); // sound arrives late from far away
 }
 
-// Short-lived surface-burst visuals for conventional bombs: a compact fireball and a fast ground-level dust front.
-const bombBurstGeo = new THREE.SphereGeometry(1, 20, 14);
+// Bomb surface bursts add a fast ground-level dust front to the shared explosion.
 const bombDustRingGeo = new THREE.RingGeometry(0.9, 1, 64);
 const bombBursts = [];
 function clearBombBursts() {
-  for (const fx of bombBursts) {
-    scene.remove(fx.ball, fx.ring);
-    fx.ball.material.dispose();
-    fx.ring.material.dispose();
-  }
+  for (const fx of bombBursts) { scene.remove(fx.ring); fx.ring.material.dispose(); }
   bombBursts.length = 0;
+  for (const fx of FIREBALLS) disposeFireball(fx);
+  FIREBALLS.length = 0;
 }
 function bombExplosion(p, kind, wet, remote = false) {
   const profile = bombBlastProfile(kind);
   if (!wet) makeTerrainCrater(p, kind);
   if (!remote) mpFx({ k: 'e', p: mpV(p), s: profile.visual, w: wet ? 1 : 0, b: kind });
-  // The shared particle system supplies the debris, smoke, flash lighting, sound and camera shake.
+  // The shared explosion supplies the fireball, dirt, smoke, fragments, flash lighting, sound and camera shake.
   explode(p, profile.visual, wet, true, true);
-  if (wet) return; // water impacts use the scaled splash and steam plume instead of a land fireball.
-  const ballMat = new THREE.MeshBasicMaterial({ color: '#ffb34e', transparent: true, opacity: 1, depthWrite: false, fog: false });
-  const ringMat = new THREE.MeshBasicMaterial({ color: '#d2b08b', transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, fog: false });
-  const ball = new THREE.Mesh(bombBurstGeo, ballMat);
-  const ring = new THREE.Mesh(bombDustRingGeo, ringMat);
-  ball.position.copy(p);
+  if (wet) return;
+  const ring = new THREE.Mesh(bombDustRingGeo, new THREE.MeshBasicMaterial({ color: '#c7a988', transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, fog: false }));
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(p.x, Math.max(0, heightAt(p.x, p.z)) + 0.35, p.z);
-  scene.add(ball, ring);
-  bombBursts.push({ ball, ring, p: p.clone(), fireball: profile.fireball, radius: profile.radius, t: 0 });
+  scene.add(ring);
+  bombBursts.push({ ring, radius: profile.radius, t: 0 });
 }
 function updateBombBursts(dt) {
+  updateFireballs(dt);
   for (let i = bombBursts.length - 1; i >= 0; i--) {
     const fx = bombBursts[i], t = (fx.t += dt);
-    const grow = clamp(t / 0.16, 0, 1);
-    fx.ball.scale.setScalar(fx.fireball * (0.08 + 0.92 * grow));
-    fx.ball.position.y = fx.p.y + fx.fireball * 0.12 * grow;
-    fx.ball.material.opacity = clamp(1 - t / 0.58, 0, 1);
-    const front = clamp(t / 0.72, 0, 1);
+    // the dust front runs out at about the speed of sound and slows as it spreads
+    const front = 1 - Math.exp(-t / 0.35);
     fx.ring.scale.setScalar(Math.max(0.001, fx.radius * front));
-    fx.ring.material.opacity = 0.55 * clamp(1 - t / 1.05, 0, 1);
-    if (t >= 1.05) {
-      scene.remove(fx.ball, fx.ring);
-      fx.ball.material.dispose();
-      fx.ring.material.dispose();
-      bombBursts.splice(i, 1);
-    }
+    fx.ring.material.opacity = 0.5 * clamp(1 - t / 1.2, 0, 1);
+    if (t >= 1.2) { scene.remove(fx.ring); fx.ring.material.dispose(); bombBursts.splice(i, 1); }
   }
 }
 const navalMarkerPos = new THREE.Vector3(), navalMarkerDir = new THREE.Vector3();
@@ -5218,22 +5375,36 @@ function detonateNuke(p, wet, nk = NUKE_KINDS.b61, remote = false) {
     if (d < fx.killR) fx.near.push([d, i]);
   }
   fx.near.sort((a, b) => a[0] - b[0]);
-  fx.ball = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), new THREE.MeshBasicMaterial({ color: '#fff7dc', transparent: true, fog: false }));
-  fx.ball.position.copy(p);
+  // the fireball: the same boiling, temperature-coloured shader as conventional blasts, at nuclear scale
+  fx.ball = new THREE.Mesh(FIREBALL_GEO, makeFireballMaterial(Math.random() * 50));
+  fx.ball.position.copy(p); fx.ball.renderOrder = 4;
   scene.add(fx.ball);
-  fx.cloud = new THREE.InstancedMesh(PUFF_GEO, new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#8f5738', emissiveIntensity: 0.5, roughness: 1, transparent: true, fog: false }), NUKE.PUFFS);
+  // the cloud's puffs billow: each one's surface is pushed out by slowly churning noise, seeded per puff
+  const cloudMat = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#8f5738', emissiveIntensity: 0.5, roughness: 1, transparent: true, depthWrite: false, fog: false });
+  cloudMat.onBeforeCompile = sh => {
+    sh.uniforms.uTime = { value: 0 }; cloudMat.userData.shader = sh;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;\n' + NOISE_GLSL)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vec3 seed = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]) * 0.003;\n  transformed += normal * fbm3(position * 1.9 + seed + vec3(0.0, uTime * 0.06, 0.0)) * 0.35;');
+    // puffs fade toward their silhouettes, so overlapping ones merge into one soft cloud instead of a pile of balls
+    sh.fragmentShader = sh.fragmentShader.replace('gl_FragColor = vec4( outgoingLight, diffuseColor.a );', 'diffuseColor.a *= smoothstep(0.0, 0.85, abs(dot(normal, normalize(vViewPosition))));\n\tgl_FragColor = vec4( outgoingLight, diffuseColor.a );');
+  };
+  fx.cloud = new THREE.InstancedMesh(PUFF_GEO, cloudMat, NUKE.PUFFS);
   fx.cloud.frustumCulled = false;
   fx.seed = [];
   const col = new THREE.Color();
   for (let i = 0; i < NUKE.PUFFS; i++) {
     fx.seed.push([Math.random(), Math.random(), Math.random()]);
-    fx.cloud.setColorAt(i, col.set(i < 104 ? (wet ? '#e3ebed' : '#ddd6ce') : i < 146 ? (wet ? '#cbd6d9' : '#96897b') : (wet ? '#e8eef0' : '#b9a58f')));
+    fx.cloud.setColorAt(i, col.set(i < 104 ? (wet ? '#e3ebed' : '#cfc4b6') : i < 146 ? (wet ? '#cbd6d9' : '#96897b') : (wet ? '#e8eef0' : '#b9a58f')));
   }
   scene.add(fx.cloud);
   fx.ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 128), new THREE.MeshBasicMaterial({ color: '#fffaf0', transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
   fx.ring.rotation.x = -Math.PI / 2;
   fx.ring.position.set(p.x, gy + 3, p.z);
   scene.add(fx.ring);
+  // Wilson cloud: in humid air the negative phase behind the shock briefly condenses a white dome around the fireball
+  fx.wilson = new THREE.Mesh(FIREBALL_GEO, new THREE.ShaderMaterial({ uniforms: { uOpacity: { value: 0 } }, ...SHOCK_MAT_SRC, transparent: true, depthWrite: false, fog: false }));
+  fx.wilson.position.set(p.x, gy, p.z);
+  scene.add(fx.wilson);
   NUKE.list.push(fx);
   nukeLight.position.set(p.x, gy + Math.min(400, fx.H * 0.25), p.z);
   nukeLight.intensity = 20 + 10 * Math.log10(1 + nk.kt);
@@ -5259,10 +5430,18 @@ function updateNukes(dt) {
     fx.ball.scale.set(r, r * 0.78, r);
     const fireLift = fx.fireR * 3.2 * (1 - Math.exp(-t / (2.2 * tf)));
     fx.ball.position.set(p.x, gy + Math.max(r * 0.65, Math.min(fx.fireR * 3.2, fireLift)), p.z);
-    const hot = clamp(1 - t / (2.5 * tf), 0, 1);
-    fx.ball.material.color.setRGB(1, 0.24 + 0.68 * hot, 0.04 + 0.74 * hot);
-    fx.ball.material.opacity = clamp(1 - t / (5 * tf), 0, 1);
+    const bu = fx.ball.material.uniforms;
+    bu.uHeat.value = 1.5 * Math.exp(-t / (0.9 * tf)) + 0.55 * clamp(1 - t / (4 * tf), 0, 1);
+    bu.uTime.value = t * 0.35; bu.uRough.value = 0.22 + 0.2 * clamp(t / (3 * tf), 0, 1);
+    bu.uOpacity.value = clamp(1 - t / (5 * tf), 0, 1);
     fx.ball.visible = t < 5 * tf;
+    if (fx.wilson) {
+      const wr = Math.min(NUKE.SHOCK_V * t, 3.2 * fx.fireR), wo = t < 0.4 ? t / 0.4 : clamp(1 - (t - 0.4) / 2.6, 0, 1);
+      fx.wilson.scale.set(Math.max(1, wr), Math.max(1, wr * 0.75), Math.max(1, wr));
+      fx.wilson.material.uniforms.uOpacity.value = 0.55 * wo;
+      if (t > 3) { scene.remove(fx.wilson); fx.wilson.material.dispose(); fx.wilson = null; }
+    }
+    if (fx.cloud.material.userData.shader) fx.cloud.material.userData.shader.uniforms.uTime.value = t;
     // The cloud forms after the fireball, with a rolling cap, narrow stem and surface dust skirt.
     const cloudAge = Math.max(0, t - fx.cloudDelay);
     const cloudProgress = 1 - Math.exp(-cloudAge / fx.rise);
@@ -5291,7 +5470,7 @@ function updateNukes(dt) {
         ang = a * Math.PI * 2 + t * 0.1 + Math.sin(t * 0.18 + f * 3) * 0.16;
         rad = Rc * (0.08 + 0.11 * f) * Math.sqrt(b);
         y = gy + f * (capY - gy);
-        size = Rc * (0.07 + 0.045 * s) * (0.45 + 0.55 * f);
+        size = Rc * (0.11 + 0.06 * s) * (0.5 + 0.5 * f);
       } else {
         ang = Math.PI * 2 * (i - 146) / 24 + a * 0.5 + t * 0.035;
         rad = skirt * (0.86 + b * 0.14);
@@ -5333,13 +5512,13 @@ function updateNukes(dt) {
       W.shake = Math.max(W.shake, 5 * clamp(1 - camera.position.distanceTo(p) / (4 * fx.killR), 0.25, 1));
     }
     if (t > fx.life) {
-      for (const o of [fx.ball, fx.cloud, fx.ring]) { scene.remove(o); o.geometry !== PUFF_GEO && o.geometry.dispose(); o.material.dispose(); }
+      for (const o of [fx.ball, fx.cloud, fx.ring, fx.wilson]) { if (!o) continue; scene.remove(o); o.geometry !== PUFF_GEO && o.geometry !== FIREBALL_GEO && o.geometry.dispose(); o.material.dispose(); }
       NUKE.list.splice(n, 1);
     }
   }
 }
 function clearNukes() {
-  for (const fx of NUKE.list) for (const o of [fx.ball, fx.cloud, fx.ring]) scene.remove(o);
+  for (const fx of NUKE.list) for (const o of [fx.ball, fx.cloud, fx.ring, fx.wilson]) if (o) scene.remove(o);
   NUKE.list.length = 0;
   nukeLight.intensity = 0;
 }
