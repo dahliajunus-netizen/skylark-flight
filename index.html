@@ -2118,7 +2118,7 @@ const AC = {
     gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 3.08, weapons: true, gearTime: 4, mainRetract: 'out', centreX: 0.5, travel: 0.3,
     hiG: { g: 12, rate: 1.9, aoa: 1.75, cl: 1.2, cd: 3.2, cobraV: 180 }, // the unstable delta-canard pitches up even faster
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
-    ammo: 150, roundDmg: 1.6, muzzle: [0.95, -0.91, 2.2], stabSign: -1, model: 'typhoon_split.glb', split: 15.96, // BK-27 port in the right wing root
+    ammo: 150, gunHz: 28, roundDmg: 1.6, muzzle: [0.95, -0.91, 2.2], stabSign: -1, model: 'typhoon_split.glb', split: 15.96, // BK-27 port in the right wing root
     // Stations on the model: outer wing pylons at x ±3.65 (bottom y -1.47), inner pylons at x ±1.62 (bottom y -1.57);
     // the belly is at y -1.3 to -1.48. The flames fit the 0.65 m nozzles.
     rig: { ab: [[-0.49, -0.58, 6.86], [0.49, -0.58, 6.86]], abScale: 0.62, bombs: [[-3.65, -1.64, 3.0], [3.65, -1.64, 3.0], [-1.62, -1.74, 1.2], [1.62, -1.74, 1.2]], nuke: null,
@@ -4400,7 +4400,7 @@ function startCollapse(i, quiet = false) {
     spawnChunk(i, tC.x, CITY_H + h * Math.random(), tC.z, clamp(Math.min(w, d) * rr([0.08, 0.2]), 1.2, 8), ox / ol * sp, rr([0, 4]), oz / ol * sp);
   }
   const dist = camera.position.distanceTo(tC.set(cx, CITY_H, cz));
-  if (!quiet) setTimeout(() => boom(Math.min(0.8, h / 120 + 0.2) * 500 / (500 + dist), false), dist / 340 * 1000);
+  if (!quiet) setTimeout(() => boom(Math.min(0.8, h / 120 + 0.2) * 500 / (500 + dist), false, dist), dist / 340 * 1000);
 }
 function rebuildCity() {
   restoreCity();
@@ -4614,7 +4614,7 @@ function updateCells(dt) {
     }
     if (FB.cells.length > 20) {
       const dist = camera.position.distanceTo(cTmp);
-      setTimeout(() => boom(Math.min(0.8, FB.cells.length / 300) * 500 / (500 + dist), false), dist / 340 * 1000);
+      setTimeout(() => boom(Math.min(0.8, FB.cells.length / 300) * 500 / (500 + dist), false, dist), dist / 340 * 1000);
     }
     fallingBlocks.splice(f, 1);
     dirtyCells.add(B.i);
@@ -4715,7 +4715,7 @@ function explode(p, k, wet, remote = false, scaleSpread = false) {
   boomLight.intensity = Math.max(boomLight.intensity, 10 * k);
   const dist = camera.position.distanceTo(p);
   W.shake = Math.max(W.shake, 2.5 * k * clamp(1 - dist / 1800, 0, 1));
-  setTimeout(() => boom(k * 400 / (400 + dist), wet), dist / 340 * 1000); // sound arrives late from far away
+  setTimeout(() => boom(k * 400 / (400 + dist), wet, dist), dist / 340 * 1000); // sound arrives late from far away
 }
 
 // Short-lived surface-burst visuals for conventional bombs: a compact fireball and a fast ground-level dust front.
@@ -4917,17 +4917,15 @@ function gunshipSolution(c, target) {
 }
 function gunshipShot(big) {
   if (!audio || muted) return;
-  const ctx = audio.ctx, t = ctx.currentTime;
-  const src = ctx.createBufferSource(); src.buffer = audio.buf; src.loop = true;
-  const f = ctx.createBiquadFilter(); f.type = 'lowpass';
-  f.frequency.setValueAtTime(big ? 900 : 2400, t);
-  f.frequency.exponentialRampToValueAtTime(big ? 55 : 160, t + (big ? 1.4 : 0.16));
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(big ? 0.95 : 0.42, t + 0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + (big ? 1.8 : 0.22));
-  src.connect(f).connect(g).connect(ctx.destination);
-  src.start(t); src.stop(t + (big ? 1.9 : 0.25));
+  const t = audio.ctx.currentTime;
+  if (big) { // 105 mm howitzer: a heavy blast that rolls on
+    noiseShot(t, { len: 0.2, peak: 0.6, type: 'lowpass', f0: 3000, attack: 0.002, verb: 0.8 });
+    toneShot(t, { f0: 58, f1: 24, len: 0.9, peak: 0.7 });
+    noiseShot(t + 0.02, { len: 2.2, peak: 0.6, type: 'lowpass', f0: 700, f1: 55, src: 'brown', verb: 0.6 });
+  } else { // 30 mm: a sharp crack and a short thump
+    noiseShot(t, { len: 0.1, peak: 0.36, type: 'lowpass', f0: 4200, attack: 0.002, verb: 0.5 });
+    toneShot(t, { f0: 95, f1: 50, len: 0.14, peak: 0.3 });
+  }
 }
 function gunshipFire(w, sol) {
   const c = w.c, dir = sol.dir, m = sol.muzzle;
@@ -5348,17 +5346,12 @@ function clearNukes() {
 // a long, deep roll of thunder
 function nukeBoom(dist, killR) {
   if (!audio || muted) return;
-  const ctx = audio.ctx, t = ctx.currentTime, k = Math.max(0.25, 2.7 * killR / (2.7 * killR + dist));
-  const src = ctx.createBufferSource(); src.buffer = audio.buf; src.loop = true;
-  const f = ctx.createBiquadFilter(); f.type = 'lowpass';
-  f.frequency.setValueAtTime(700, t);
-  f.frequency.exponentialRampToValueAtTime(45, t + 9);
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(k, t + 0.05);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 12);
-  src.connect(f).connect(g).connect(ctx.destination);
-  src.connect(audio.output); src.start(t); src.stop(t + 12.2);
+  const t = audio.ctx.currentTime, k = Math.max(0.25, 2.7 * killR / (2.7 * killR + dist));
+  // the shock front: a crack (blunted by distance) and a huge sub-bass push, then thunder rolling for ten seconds
+  noiseShot(t, { len: 0.35, peak: Math.min(0.9, k), type: 'lowpass', f0: 220 + 6000 * Math.exp(-dist / 3000), attack: 0.003, verb: 0.8 });
+  toneShot(t, { f0: 40, f1: 18, len: 3, peak: Math.min(0.9, k), attack: 0.02 });
+  noiseShot(t + 0.05, { len: 11, peak: Math.min(0.9, k), type: 'lowpass', f0: 700, f1: 45, src: 'brown', attack: 0.08, verb: 0.6, curve: 0.5 });
+  for (let i = 0; i < 7; i++) noiseShot(t + 1 + i * 1.2 + Math.random() * 0.8, { len: 2.2, peak: Math.min(0.6, k * 0.5) * (1 - i / 9), type: 'lowpass', f0: 260, f1: 60, src: 'brown', attack: 0.3, verb: 0.5 });
 }
 
 // ---------------- bomb camera ----------------
@@ -6203,153 +6196,270 @@ function toast(msg) {
 }
 
 // ---------------- audio ----------------
+// Everything is synthesised with Web Audio. A jet is mostly broadband noise: a deep exhaust roar whose level
+// gusts with the turbulence, a mid-band jet rush, the whine of the fan and compressor blades (detuned harmonics
+// that shimmer) and a turbine hum, all following the engine's spool, which lags the throttle. Afterburner adds
+// low thunder and crackle. Air noise follows dynamic pressure, the airframe buffets near the stall and at high g,
+// and the gear rumbles on the runway. Guns are single rounds repeated at the gun's real rate. Gunfire and
+// explosions go through an outdoor reverb, and distant blasts lose their highs (callers delay them by distance).
+// In the cockpit the engines are muffled and the wind is louder; outside, the exhaust roar dominates.
 let audio = null, sonicBoomArmed = true;
+function makeNoise(ctx, seconds, kind) {
+  const n = Math.floor(ctx.sampleRate * seconds), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, last = 0;
+  for (let i = 0; i < n; i++) {
+    const w = Math.random() * 2 - 1;
+    if (kind === 'pink') { // Paul Kellet's pink filter
+      b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.969 * b2 + w * 0.153852;
+      b3 = 0.8665 * b3 + w * 0.3104856; b4 = 0.55 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.016898;
+      d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11; b6 = w * 0.115926;
+    } else if (kind === 'brown') { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+    else d[i] = w;
+  }
+  // remove the drift between the ends so the loop has no click (it matters for the low, brown noise)
+  const step = d[n - 1] - d[0];
+  for (let i = 0; i < n; i++) d[i] -= step * i / (n - 1);
+  return buf;
+}
+// Outdoor reverb: a short pre-delay, a few discrete echoes (ground, hangars, buildings) and a decaying diffuse tail.
+function makeReverb(ctx, seconds) {
+  const sr = ctx.sampleRate, n = Math.floor(sr * seconds), ir = ctx.createBuffer(2, n, sr);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = Math.floor(sr * 0.015); i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3.2) * 0.32;
+    for (const [at, amp] of [[0.031, 0.5], [0.068, 0.32], [0.112, 0.26], [0.19, 0.18], [0.29, 0.12]]) {
+      const j = Math.floor(sr * (at + (c ? 0.004 : 0) + Math.random() * 0.006));
+      for (let k = 0; k < 90 && j + k < n; k++) d[j + k] += (Math.random() * 2 - 1) * amp * (1 - k / 90);
+    }
+  }
+  return ir;
+}
+// one loopable stretch of gunfire: four rounds at the gun's rate, each a muzzle crack, a body thump and a rattle
+function gunBuffer(ctx, rate, heavy) {
+  const sr = ctx.sampleRate, period = Math.round(sr / rate), n = period * 4, buf = ctx.createBuffer(1, n, sr), d = buf.getChannelData(0);
+  for (let s = 0; s < 4; s++) {
+    const o = s * period, amp = 0.85 + Math.random() * 0.3, f0 = (heavy ? 52 : 88) * (0.95 + Math.random() * 0.1);
+    for (let i = 0; i < period; i++) {
+      const t = i / sr;
+      const crack = (Math.random() * 2 - 1) * Math.exp(-t / 0.0028);
+      const thump = Math.sin(2 * Math.PI * f0 * t) * Math.exp(-t / (heavy ? 0.022 : 0.013)) * (heavy ? 1.3 : 0.9);
+      const rattle = (Math.random() * 2 - 1) * Math.exp(-t / 0.009) * 0.25;
+      d[o + i] += amp * (crack * 0.9 + thump + rattle);
+    }
+  }
+  return buf;
+}
 function initAudio() {
   if (audio) { if (audio.ctx.state === 'suspended') audio.ctx.resume(); return; }
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const master = ctx.createDynamicsCompressor();
-    master.threshold.value = -16; master.knee.value = 12; master.ratio.value = 4;
-    master.attack.value = 0.004; master.release.value = 0.22;
-    const output = ctx.createGain(); output.gain.value = 0.72;
+    master.threshold.value = -14; master.knee.value = 10; master.ratio.value = 5;
+    master.attack.value = 0.003; master.release.value = 0.25;
+    const output = ctx.createGain(); output.gain.value = 0.8;
     master.connect(output).connect(ctx.destination);
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
-    // Layered intake, turbine and exhaust noise gives the engine body instead of a single white-noise hum.
-    const roarF = ctx.createBiquadFilter(); roarF.type = 'lowpass'; roarF.frequency.value = 260;
-    const roarG = ctx.createGain(); roarG.gain.value = 0;
-    noise.connect(roarF).connect(roarG).connect(output);
-    const turbineF = ctx.createBiquadFilter(); turbineF.type = 'bandpass'; turbineF.frequency.value = 520; turbineF.Q.value = 0.65;
-    const turbineG = ctx.createGain(); turbineG.gain.value = 0;
-    noise.connect(turbineF).connect(turbineG).connect(output);
-    const exhaustF = ctx.createBiquadFilter(); exhaustF.type = 'highpass'; exhaustF.frequency.value = 850;
-    const exhaustG = ctx.createGain(); exhaustG.gain.value = 0;
-    noise.connect(exhaustF).connect(exhaustG).connect(output);
-    const hissF = ctx.createBiquadFilter(); hissF.type = 'bandpass'; hissF.frequency.value = 1800; hissF.Q.value = 0.8;
-    const hissG = ctx.createGain(); hissG.gain.value = 0;
-    noise.connect(hissF).connect(hissG).connect(output);
-    const whine = ctx.createOscillator(); whine.type = 'sine'; whine.frequency.value = 600;
-    const whineG = ctx.createGain(); whineG.gain.value = 0;
-    whine.connect(whineG).connect(output);
-    const turbineTone = ctx.createOscillator(); turbineTone.type = 'sawtooth'; turbineTone.frequency.value = 90;
-    const turbineToneF = ctx.createBiquadFilter(); turbineToneF.type = 'lowpass'; turbineToneF.frequency.value = 340;
-    const turbineToneG = ctx.createGain(); turbineToneG.gain.value = 0;
-    turbineTone.connect(turbineToneF).connect(turbineToneG).connect(output);
+    const buf = makeNoise(ctx, 2, 'white'), pink = makeNoise(ctx, 4, 'pink'), brown = makeNoise(ctx, 4, 'brown');
+    const verb = ctx.createConvolver(); verb.buffer = makeReverb(ctx, 3.2);
+    const verbLP = ctx.createBiquadFilter(); verbLP.type = 'lowpass'; verbLP.frequency.value = 2600;
+    const verbIn = ctx.createGain(); verbIn.gain.value = 0.5;
+    verbIn.connect(verb).connect(verbLP).connect(master);
+    const loop = (b, rate = 1) => { const s = ctx.createBufferSource(); s.buffer = b; s.loop = true; s.playbackRate.value = rate; s.start(ctx.currentTime + Math.random() * 0.05); return s; };
+    const filt = (type, f, q) => { const x = ctx.createBiquadFilter(); x.type = type; x.frequency.value = f; if (q !== undefined) x.Q.value = q; return x; };
+    const gain = v => { const g = ctx.createGain(); g.gain.value = v; return g; };
+    // slow random modulation (turbulence) as an audio-rate signal
+    const wobble = hz => loop(buf, 1).connect(filt('lowpass', hz, 0.5));
+
+    // engine bus: the cabin filter muffles it in the cockpit
+    const engineIn = gain(1), cabin = filt('lowpass', 14000, 0.4), engineOut = gain(1);
+    engineIn.connect(cabin).connect(engineOut).connect(master);
+    const roarLP = filt('lowpass', 300, 0.6), roarG = gain(0), roarFlutter = gain(0);
+    loop(brown).connect(roarLP).connect(roarG).connect(engineIn);
+    wobble(7).connect(roarFlutter).connect(roarG.gain);
+    const rushBP = filt('bandpass', 700, 0.55), rushG = gain(0);
+    loop(pink, 0.97).connect(rushBP).connect(rushG).connect(engineIn);
+    const whineG = gain(0), whineHP = filt('highpass', 300, 0.7);
+    const whine = [1, 1.007, 2.02, 3.1].map((m, i) => {
+      const o = ctx.createOscillator(); o.type = i === 2 ? 'triangle' : 'sine'; o.frequency.value = 600 * m;
+      const g = gain([0.55, 0.45, 0.22, 0.08][i]); o.connect(g).connect(whineHP); o.start(); return { o, m };
+    });
+    whineHP.connect(whineG).connect(engineIn);
+    const hum = ctx.createOscillator(); hum.type = 'sawtooth'; hum.frequency.value = 90;
+    const humG = gain(0); hum.connect(filt('lowpass', 260, 0.8)).connect(humG).connect(engineIn); hum.start();
+    // afterburner: deep thunder and a crackle of sparse pops
+    const abG = gain(0), abFlutter = gain(0);
+    loop(brown, 0.8).connect(filt('lowpass', 140, 0.7)).connect(abG).connect(engineIn);
+    wobble(11).connect(abFlutter).connect(abG.gain);
+    const crackle = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), cd = crackle.getChannelData(0);
+    for (let p = 0; p < 140; p++) { const at = Math.floor(Math.random() * (cd.length - 400)), a = 0.4 + Math.random() * 0.6; for (let k = 0; k < 400; k++) cd[at + k] += (Math.random() * 2 - 1) * a * Math.exp(-k / 60); }
+    const crackleG = gain(0); loop(crackle).connect(filt('bandpass', 1700, 0.7)).connect(crackleG).connect(engineIn);
+
+    // air: wind over the airframe, buffet near the stall and at high g, gear-down airflow
+    const windBP = filt('bandpass', 800, 0.6), windG = gain(0);
+    loop(pink, 1.03).connect(windBP).connect(windG).connect(master);
+    const buffetG = gain(0), buffetAM = gain(0);
+    loop(brown, 1.2).connect(filt('lowpass', 75, 0.9)).connect(buffetG).connect(master);
+    const shake = ctx.createOscillator(); shake.frequency.value = 9; shake.connect(buffetAM).connect(buffetG.gain); shake.start();
+    const gearAirG = gain(0); loop(pink, 0.9).connect(filt('bandpass', 260, 1.1)).connect(gearAirG).connect(master);
+    // runway: tyre and strut rumble
+    const rollG = gain(0); loop(brown, 1.1).connect(filt('lowpass', 170, 0.7)).connect(rollG).connect(master);
+
     const horn = ctx.createOscillator(); horn.type = 'triangle'; horn.frequency.value = 1450;
-    const hg = ctx.createGain(); hg.gain.value = 0;
-    horn.connect(hg).connect(output);
-    // Short, filtered cannon pulse; the dedicated attack comes from burst envelopes in soundFX.
-    const gunG = ctx.createGain(); gunG.gain.value = 0;
-    const gunOsc = ctx.createOscillator(); gunOsc.type = 'sawtooth'; gunOsc.frequency.value = 100;
-    const gunOscG = ctx.createGain(); gunOscG.gain.value = 0.5;
-    const gunF = ctx.createBiquadFilter(); gunF.type = 'bandpass'; gunF.frequency.value = 450; gunF.Q.value = 0.9;
-    gunOsc.connect(gunOscG).connect(gunG); noise.connect(gunF).connect(gunG); gunG.connect(output);
-    const brrtG = ctx.createGain(); brrtG.gain.value = 0;
-    const brrtOsc = ctx.createOscillator(); brrtOsc.type = 'square'; brrtOsc.frequency.value = 65;
-    const clip = ctx.createWaveShaper(), curve = new Float32Array(256);
-    for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(x * 3); }
-    clip.curve = curve;
-    const growlF = ctx.createBiquadFilter(); growlF.type = 'lowpass'; growlF.frequency.value = 900;
-    const growlG = ctx.createGain(); growlG.gain.value = 0.35;
-    brrtOsc.connect(clip).connect(growlF).connect(growlG).connect(brrtG);
-    const crackF = ctx.createBiquadFilter(); crackF.type = 'bandpass'; crackF.frequency.value = 320; crackF.Q.value = 0.7;
-    const gate = ctx.createGain(); gate.gain.value = 0.5;
-    const depth = ctx.createGain(); depth.gain.value = 0.5;
-    brrtOsc.connect(depth).connect(gate.gain); noise.connect(crackF).connect(gate).connect(brrtG);
-    const brrtLow = ctx.createBiquadFilter(); brrtLow.type = 'lowshelf'; brrtLow.frequency.value = 180; brrtLow.gain.value = 8;
-    brrtG.connect(brrtLow).connect(output);
-    noise.start(); whine.start(); turbineTone.start(); horn.start(); gunOsc.start(); brrtOsc.start();
-    audio = { ctx, buf, output, roarF, roarG, turbineF, turbineG, exhaustF, exhaustG, hissF, hissG, whine, whineG, turbineTone, turbineToneG, hg, gunG, brrtG, brrtOsc };
+    const hg = gain(0); horn.connect(hg).connect(master); horn.start();
+
+    audio = { ctx, buf, pink, brown, master, output: master, verbIn, engineIn, cabin, engineOut, roarLP, roarG, roarFlutter, rushBP, rushG, whine, whineG,
+      hum, humG, abG, abFlutter, crackleG, windBP, windG, buffetG, buffetAM, shake, gearAirG, rollG, hg,
+      gun: null, gunBufs: {}, spool: 0, abLvl: 0, lastT: ctx.currentTime, wasGround: true, rollDist: 0 };
   } catch (e) { audio = null; }
+}
+// building blocks for one-shot sounds: a filtered noise burst and a falling tone, each with an optional reverb send
+function noiseShot(t, { len, peak, type = 'bandpass', f0, f1, q = 0.7, attack = 0.004, src = 'buf', verb = 0, curve = 1 }) {
+  const ctx = audio.ctx, s = ctx.createBufferSource(); s.buffer = audio[src]; s.loop = true;
+  const f = ctx.createBiquadFilter(); f.type = type; f.Q.value = q; f.frequency.setValueAtTime(f0, t);
+  if (f1) f.frequency.exponentialRampToValueAtTime(f1, t + len);
+  const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + attack);
+  g.gain.setTargetAtTime(0.0001, t + attack, len / (4 * curve));
+  s.connect(f).connect(g).connect(audio.master);
+  if (verb) { const v = ctx.createGain(); v.gain.value = verb; g.connect(v).connect(audio.verbIn); }
+  s.start(t, Math.random() * 1.5); s.stop(t + len + 0.1);
+}
+function toneShot(t, { f0, f1, len, peak, type = 'sine', attack = 0.004, verb = 0 }) {
+  const ctx = audio.ctx, o = ctx.createOscillator(), g = ctx.createGain(); o.type = type;
+  o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(15, f1), t + len);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + attack);
+  g.gain.setTargetAtTime(0.0001, t + attack, len / 4);
+  o.connect(g).connect(audio.master);
+  if (verb) { const v = ctx.createGain(); v.gain.value = verb; g.connect(v).connect(audio.verbIn); }
+  o.start(t); o.stop(t + len + 0.1);
 }
 function soundFX(kind, strength = 1) {
   if (!audio || muted) return;
-  const ctx = audio.ctx, t = ctx.currentTime, out = audio.output;
-  const noiseBurst = (start, length, peak, low, high, q = 0.7) => {
-    const src = ctx.createBufferSource(); src.buffer = audio.buf; src.loop = true;
-    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.setValueAtTime(high, t + start); f.Q.value = q;
-    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t + start);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.001, peak * strength), t + start + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + start + length);
-    src.connect(f).connect(g).connect(out); src.start(t + start); src.stop(t + start + length + 0.02);
-    if (low) { f.frequency.setValueAtTime(high, t + start); f.frequency.exponentialRampToValueAtTime(low, t + start + length); }
-  };
-  const tone = (freq, endFreq, length, peak, type = 'sine') => {
-    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type;
-    o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), t + length);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak * strength, t + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + length);
-    o.connect(g).connect(out); o.start(t); o.stop(t + length + 0.02);
-  };
-  if (kind === 'release' || kind === 'missile') {
-    noiseBurst(0, kind === 'missile' ? 0.5 : 0.16, kind === 'missile' ? 0.24 : 0.12, 180, kind === 'missile' ? 1000 : 500, 0.5);
-    tone(kind === 'missile' ? 180 : 95, 45, kind === 'missile' ? 0.38 : 0.22, 0.11, 'triangle');
+  const t = audio.ctx.currentTime, k = strength;
+  if (kind === 'release') {
+    // ejector cartridges fire, the rack clunks open
+    noiseShot(t, { len: 0.07, peak: 0.2 * k, type: 'highpass', f0: 400, verb: 0.3 });
+    toneShot(t, { f0: 140, f1: 55, len: 0.12, peak: 0.25 * k });
+    noiseShot(t + 0.02, { len: 0.18, peak: 0.07 * k, f0: 2300, q: 7 });
+  } else if (kind === 'missile') {
+    // motor ignition, then the rocket roars away and fades as it pulls ahead
+    noiseShot(t, { len: 0.05, peak: 0.35 * k, type: 'highpass', f0: 700 });
+    noiseShot(t + 0.02, { len: 2.6, peak: 0.3 * k, f0: 1500, f1: 380, q: 0.6, attack: 0.06, src: 'pink', verb: 0.45, curve: 0.8 });
+    noiseShot(t + 0.02, { len: 1.6, peak: 0.22 * k, type: 'lowpass', f0: 260, f1: 90, attack: 0.05, src: 'brown' });
   } else if (kind === 'gear') {
-    noiseBurst(0, 0.34, 0.10, 220, 900, 1.4); tone(150, 70, 0.3, 0.035, 'sawtooth');
+    // uplocks release with a clunk, hydraulics whine while the legs travel, then the downlocks thud home
+    const travel = A.gearTime || 4;
+    noiseShot(t, { len: 0.12, peak: 0.16 * k, type: 'lowpass', f0: 500, src: 'brown' });
+    const ctx = audio.ctx, o = ctx.createOscillator(), g = ctx.createGain(), bp = ctx.createBiquadFilter();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(330, t); o.frequency.linearRampToValueAtTime(410, t + travel * 0.4); o.frequency.linearRampToValueAtTime(360, t + travel);
+    bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 2.5;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.018 * k, t + 0.3); g.gain.setValueAtTime(0.018 * k, t + travel - 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + travel);
+    o.connect(bp).connect(g).connect(audio.master); o.start(t); o.stop(t + travel + 0.1);
+    noiseShot(t + travel, { len: 0.16, peak: 0.24 * k, type: 'lowpass', f0: 380, src: 'brown' });
+    toneShot(t + travel, { f0: 90, f1: 45, len: 0.14, peak: 0.12 * k });
   } else if (kind === 'countermeasure') {
-    noiseBurst(0, 0.12, 0.16, 700, 3200, 0.55); noiseBurst(0.055, 0.12, 0.12, 600, 2600, 0.55);
+    // squib pops, then the flares fizz away
+    for (const dt of [0, 0.07]) { noiseShot(t + dt, { len: 0.06, peak: 0.24 * k, type: 'highpass', f0: 900, verb: 0.2 }); noiseShot(t + dt + 0.01, { len: 0.5, peak: 0.05 * k, type: 'highpass', f0: 3200, src: 'pink' }); }
   } else if (kind === 'lock') {
-    tone(980, 1120, 0.075, 0.06); tone(1320, 1450, 0.09, 0.045);
+    toneShot(t, { f0: 980, f1: 990, len: 0.08, peak: 0.06 }); toneShot(t + 0.1, { f0: 1320, f1: 1330, len: 0.1, peak: 0.05 });
+  } else if (kind === 'ablight') {
+    // reheat lights with a deep whump
+    noiseShot(t, { len: 0.7, peak: 0.4 * k, type: 'lowpass', f0: 240, f1: 70, attack: 0.02, src: 'brown' });
+    toneShot(t, { f0: 60, f1: 32, len: 0.5, peak: 0.25 * k });
+  } else if (kind === 'touchdown') {
+    // tyres spin up with a short squeal, the struts take the load
+    noiseShot(t, { len: 0.22, peak: 0.1 * k, f0: 1300, f1: 900, q: 4 });
+    noiseShot(t, { len: 0.25, peak: 0.3 * k, type: 'lowpass', f0: 220, src: 'brown' });
   } else if (kind === 'boom') {
-    noiseBurst(0, 0.42, 0.7, 55, 2400, 0.42); noiseBurst(0.035, 1.1, 0.32, 35, 420, 0.5);
-    tone(78, 32, 1.2, 0.32, 'sine');
+    noiseShot(t, { len: 0.42, peak: 0.6 * k, f0: 2400, f1: 55, q: 0.42, verb: 0.5 });
+    noiseShot(t + 0.035, { len: 1.1, peak: 0.3 * k, f0: 420, f1: 35, q: 0.5, src: 'brown' });
+    toneShot(t, { f0: 78, f1: 32, len: 1.2, peak: 0.3 * k });
   }
 }
-// Sonic boom is a one-shot pressure crack with a short low-frequency rolling tail.
+// Sonic boom: the N-wave reaches the ear as two sharp cracks about a tenth of a second apart, then a short roll.
 function sonicBoom() {
   if (!audio || muted) return;
-  soundFX('boom', 0.8);
-  const ctx = audio.ctx, t = ctx.currentTime, src = ctx.createBufferSource();
-  src.buffer = audio.buf; src.loop = true;
-  const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(120, t + 0.16);
-  const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.62, t + 0.006);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
-  src.connect(f).connect(g).connect(audio.output); src.start(t); src.stop(t + 0.34);
+  const t = audio.ctx.currentTime;
+  for (const dt of [0, 0.11]) {
+    noiseShot(t + dt, { len: 0.09, peak: 0.6, type: 'highpass', f0: 300, attack: 0.002, verb: 0.6 });
+    toneShot(t + dt, { f0: 70, f1: 30, len: 0.3, peak: 0.45, attack: 0.002 });
+  }
+  noiseShot(t + 0.12, { len: 1.6, peak: 0.25, type: 'lowpass', f0: 300, f1: 60, src: 'brown', verb: 0.5 });
 }
-// Impact: sharp debris-like attack followed by a low, decaying rumble.
-function boom(k, wet) {
+// Explosion: a crack whose highs fade with distance, a body, a sub-bass thump and a rolling rumble, plus debris
+// rattle when close. Water impacts trade the thump for a heavy splash. k is the loudness, dist the range in m.
+function boom(k, wet, dist = 0) {
   if (!audio || muted) return;
-  const ctx = audio.ctx, t = ctx.currentTime;
-  const src = ctx.createBufferSource(); src.buffer = audio.buf; src.loop = true;
-  const f = ctx.createBiquadFilter(); f.type = 'lowpass';
-  f.frequency.setValueAtTime(wet ? 3000 : 1800, t);
-  f.frequency.exponentialRampToValueAtTime(wet ? 240 : 55, t + 2.5);
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(Math.min(1, 0.72 * k), t + 0.025);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + (wet ? 2 : 3.5));
-  src.connect(f).connect(g).connect(audio.output);
-  src.start(t); src.stop(t + 3.6);
-  const crack = ctx.createBufferSource(); crack.buffer = audio.buf; crack.loop = true;
-  const cf = ctx.createBiquadFilter(); cf.type = 'highpass'; cf.frequency.value = 900;
-  const cg = ctx.createGain(); cg.gain.setValueAtTime(Math.min(0.45, 0.35 * k), t);
-  cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-  crack.connect(cf).connect(cg).connect(audio.output); crack.start(t); crack.stop(t + 0.18);
+  const t = audio.ctx.currentTime, hf = 220 + 8500 * Math.exp(-dist / 900), near = Math.exp(-dist / 600);
+  noiseShot(t, { len: 0.16, peak: Math.min(0.7, 0.55 * k) * (0.3 + 0.7 * near), type: 'lowpass', f0: hf, attack: 0.002, verb: 0.7 });
+  noiseShot(t + 0.01, { len: wet ? 1.6 : 2.4, peak: Math.min(0.9, 0.75 * k), type: 'lowpass', f0: Math.min(hf, 1800), f1: wet ? 300 : 70, src: 'brown', verb: 0.6 });
+  toneShot(t, { f0: wet ? 70 : 55, f1: 26, len: 0.8, peak: Math.min(0.7, (wet ? 0.3 : 0.6) * k), attack: 0.006 });
+  noiseShot(t + 0.18, { len: 4.5, peak: Math.min(0.5, 0.32 * k), type: 'lowpass', f0: 140, f1: 45, src: 'brown', attack: 0.25, verb: 0.4, curve: 0.6 });
+  if (wet) noiseShot(t + 0.05, { len: 2.2, peak: Math.min(0.5, 0.35 * k), f0: 1200, f1: 400, q: 0.5, src: 'pink', attack: 0.05, verb: 0.3 });
+  else if (dist < 900) for (let i = 0; i < 14; i++) noiseShot(t + 0.25 + Math.random() * 1.6, { len: 0.05 + Math.random() * 0.08, peak: 0.04 * k * near * Math.random(), f0: 1200 + Math.random() * 2400, q: 2 });
 }
 function updateAudio(stall) {
   if (!audio) return;
-  const t = audio.ctx.currentTime, live = running && !paused && !S.crashed && !muted;
-  const n = S.throttle, ab = A.thrustAB ? Math.max(0, (n - AB_AT) / (1 - AB_AT)) : 0, s = A.sound;
+  const ctx = audio.ctx, t = ctx.currentTime, dt = Math.min(0.1, Math.max(0, t - audio.lastT)); audio.lastT = t;
+  const live = running && !paused && !S.crashed && !muted, s = A.sound;
+  // the engines spool up over about a second and a half and wind down more slowly
+  const target = live ? S.throttle : 0, up = target > audio.spool;
+  audio.spool += (target - audio.spool) * (1 - Math.exp(-dt / (up ? 1.4 : 2.2)));
+  const n = audio.spool, abT = A.thrustAB && live ? Math.max(0, (S.throttle - AB_AT) / (1 - AB_AT)) : 0;
+  if (abT > 0.02 && audio.abLvl < 0.02 && n > AB_AT - 0.05) soundFX('ablight');
+  audio.abLvl += (abT - audio.abLvl) * (1 - Math.exp(-dt / 0.25));
+  const ab = audio.abLvl, on = live ? 1 : 0;
   const mach = Number.isFinite(S.mach) ? S.mach : 0;
   if (mach < 0.96) sonicBoomArmed = true;
   if (live && sonicBoomArmed && mach >= 1) { sonicBoomArmed = false; sonicBoom(); }
-  audio.whine.frequency.setTargetAtTime(s.whine[0] + n * s.whine[1], t, 0.4);
-  audio.whineG.gain.setTargetAtTime(live ? (0.008 + n * 0.014) * s.whine[2] : 0, t, 0.2);
-  audio.roarF.frequency.setTargetAtTime(s.roar[0] + n * s.roar[1] + ab * 950, t, 0.25);
-  audio.roarG.gain.setTargetAtTime(live ? (0.07 + n * 0.18) * s.roar[2] + ab * 0.18 : 0, t, 0.25);
-  audio.turbineF.frequency.setTargetAtTime(280 + n * 620 + ab * 800, t, 0.2);
-  audio.turbineG.gain.setTargetAtTime(live ? 0.035 + n * 0.055 + ab * 0.025 : 0, t, 0.2);
-  audio.exhaustG.gain.setTargetAtTime(live ? 0.006 + ab * 0.045 : 0, t, 0.18);
-  audio.hissF.frequency.setTargetAtTime(1000 + Math.min(3800, S.V * 1.2), t, 0.3);
-  audio.hissG.gain.setTargetAtTime(live ? Math.min(0.1, S.V / 36000) + ab * 0.025 : 0, t, 0.2);
-  audio.turbineTone.frequency.setTargetAtTime(70 + n * 115 + ab * 70, t, 0.2);
-  audio.turbineToneG.gain.setTargetAtTime(live ? 0.008 + n * 0.018 : 0, t, 0.2);
+  // cockpit: canopy and helmet take the edge off the engines, the intake whine carries; outside: the exhaust roars
+  const cockpit = camMode === 'cockpit', roarMix = cockpit ? 0.45 : 1, whineMix = cockpit ? 1.3 : 0.75;
+  audio.cabin.frequency.setTargetAtTime(cockpit ? 1500 : 14000, t, 0.1);
+  const T = 0.12;
+  audio.roarLP.frequency.setTargetAtTime(s.roar[0] + n * s.roar[1] + ab * 500, t, T);
+  const roar = on * ((0.05 + n * 0.22) * s.roar[2] + ab * 0.12) * roarMix;
+  audio.roarG.gain.setTargetAtTime(roar, t, T); audio.roarFlutter.gain.setTargetAtTime(roar * 0.6, t, T);
+  audio.rushBP.frequency.setTargetAtTime(350 + n * 900 + ab * 500, t, T);
+  audio.rushG.gain.setTargetAtTime(on * (0.012 + n * 0.08 + ab * 0.05) * roarMix, t, T);
+  const wf = s.whine[0] + n * s.whine[1];
+  for (const w of audio.whine) w.o.frequency.setTargetAtTime(wf * w.m, t, T);
+  audio.whineG.gain.setTargetAtTime(on * (0.012 + n * 0.02) * s.whine[2] * whineMix, t, T);
+  audio.hum.frequency.setTargetAtTime(55 + n * 120, t, T);
+  audio.humG.gain.setTargetAtTime(on * (0.01 + n * 0.022), t, T);
+  audio.abG.gain.setTargetAtTime(on * ab * 0.3 * roarMix, t, T); audio.abFlutter.gain.setTargetAtTime(on * ab * 0.2 * roarMix, t, T);
+  audio.crackleG.gain.setTargetAtTime(on * ab * 0.05 * roarMix, t, T);
+  // air noise follows dynamic pressure; the band rises with airspeed
+  const q = 0.5 * (S.rho || 1.225) * S.V * S.V, qn = Math.min(1.4, q / 45000);
+  audio.windBP.frequency.setTargetAtTime(250 + Math.min(3200, S.V * 5), t, 0.2);
+  audio.windG.gain.setTargetAtTime(on * qn * (cockpit ? 0.16 : 0.09), t, 0.15);
+  const buffet = on * (!S.onGround ? Math.max(clamp((S.alpha - (A.stallA - 0.12)) / 0.15, 0, 1), clamp((S.g - 7) / 4, 0, 1)) * Math.min(1, S.V / 80) : 0);
+  audio.buffetG.gain.setTargetAtTime(buffet * 0.22, t, 0.08); audio.buffetAM.gain.setTargetAtTime(buffet * 0.18, t, 0.08);
+  audio.shake.frequency.setTargetAtTime(7 + Math.random() * 6, t, 0.2);
+  audio.gearAirG.gain.setTargetAtTime(on * (!S.onGround ? S.gearT * Math.min(1, qn * 2) * 0.06 : 0), t, 0.2);
+  // runway: rumble with speed, a thump at every expansion joint, a chirp at touchdown
+  const rolling = live && S.onGround && S.V > 1;
+  audio.rollG.gain.setTargetAtTime(rolling ? Math.min(0.2, S.V / 400) : 0, t, 0.1);
+  if (rolling) { audio.rollDist += S.V * dt; if (audio.rollDist > 18) { audio.rollDist = 0; toneShot(t, { f0: 80, f1: 45, len: 0.08, peak: Math.min(0.12, S.V / 600) }); } }
+  if (live && S.onGround && !audio.wasGround && S.V > 30) soundFX('touchdown', Math.min(1.2, S.V / 80));
+  audio.wasGround = S.onGround;
   audio.hg.gain.setTargetAtTime(live && stall ? 0.035 : 0, t, 0.03);
+  // guns: rounds at the real rate; rotary cannons take a moment to spin up and run down
   const shooting = live && S.firing && S.ammo > 0;
-  audio.gunG.gain.setTargetAtTime(shooting && !A.brrt ? 0.24 : 0, t, 0.015);
-  audio.brrtG.gain.setTargetAtTime(shooting && A.brrt ? 0.45 : 0, t, shooting ? 0.02 : 0.09);
-  audio.brrtOsc.frequency.setTargetAtTime(shooting && A.brrt ? 65 : 52, t, 0.05);
+  if (shooting && !audio.gun) {
+    const rate = A.gunHz || A.gunRate || 100, heavy = !!A.brrt || rate < 40, key = rate + (heavy ? 'h' : '');
+    const b = audio.gunBufs[key] || (audio.gunBufs[key] = gunBuffer(ctx, rate, heavy));
+    const src = ctx.createBufferSource(); src.buffer = b; src.loop = true;
+    const rotary = rate >= 60;
+    src.playbackRate.setValueAtTime(rotary ? 0.7 : 1, t); if (rotary) src.playbackRate.linearRampToValueAtTime(1, t + 0.2);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cockpit ? 2200 : 5200;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(heavy ? 0.5 : 0.34, t + 0.01);
+    const v = ctx.createGain(); v.gain.value = 0.5;
+    src.connect(lp).connect(g).connect(audio.master); g.connect(v).connect(audio.verbIn); src.start(t);
+    audio.gun = { src, g, rotary };
+  } else if (!shooting && audio.gun) {
+    const G = audio.gun; audio.gun = null;
+    if (G.rotary) G.src.playbackRate.setTargetAtTime(0.6, t, 0.05);
+    G.g.gain.setTargetAtTime(0.0001, t, G.rotary ? 0.04 : 0.015); G.src.stop(t + 0.3);
+  }
 }
 
 // ---------------- instruments ----------------
