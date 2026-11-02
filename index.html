@@ -660,13 +660,13 @@ function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Ma
 // ---------------- renderer & scene ----------------
 const canvas = $('#gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio || 1, isTouch ? 1.5 : 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, isTouch ? 1 : 1.25));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.54;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 
 // Atmosphere: the linear fog becomes exponential haze that thins with height (1.6 km scale height), so the
 // ground stays clear from altitude, and it brightens toward the sun (in-scattering). The sun direction and
@@ -784,7 +784,7 @@ function updatePapi() {
 }
 const HORIZON = new THREE.Color('#788997');
 scene.fog = new THREE.Fog(HORIZON, 2600, 23000);
-const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 120000); // far enough to see a 44 km mushroom cloud
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 60000); // far enough to see a 44 km mushroom cloud
 
 const DAY_SECONDS = 720; // one full day-night cycle takes twelve minutes of flight time
 const SUN_DIR = new THREE.Vector3();
@@ -794,7 +794,7 @@ scene.add(hemi);
 const SUN_BASE = 0.98; // restrained, warm daylight over darker ambient
 const sun = new THREE.DirectionalLight('#e9ddca', SUN_BASE);
 sun.castShadow = true;
-sun.shadow.mapSize.set(isTouch ? 1024 : 2048, isTouch ? 1024 : 2048);
+sun.shadow.mapSize.set(isTouch ? 512 : 1024, isTouch ? 512 : 1024);
 Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 3200 });
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.04;
@@ -930,7 +930,7 @@ function makeWaterNormalMap() {
 
 // terrain mesh
 (function buildTerrain() {
-  const SIZE = 18000 * MAP_K, SEG = isTouch ? 400 : 720; // finer samples preserve ridges and valleys at flight altitude
+  const SIZE = 18000 * MAP_K, SEG = isTouch ? 300 : 480; // finer samples preserve ridges and valleys at flight altitude
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
   terrainGeometry = geo; terrainSegments = SEG; terrainSize = SIZE;
   geo.rotateX(-Math.PI / 2);
@@ -979,37 +979,68 @@ function makeWaterNormalMap() {
   scene.add(water);
 })();
 
-// Forest and scrubland around the built-up area. Instancing keeps the added ground cover
-// lightweight while layered noise creates irregular clearings instead of an even tree grid.
+// Forest and scrubland are split into spatial chunks. Only chunks near the camera are
+// submitted to the GPU, rather than drawing every instance across the entire island.
+const SCENERY_CELL = 2200, SCENERY_RENDER_DISTANCE = 12500;
+const sceneryChunks = [];
+let sceneryCullAt = 0;
+function addSceneryInstance(buckets, x, z, matrix, color) {
+  const ix = Math.floor(x / SCENERY_CELL), iz = Math.floor(z / SCENERY_CELL), key = ix + ':' + iz;
+  let bucket = buckets.get(key);
+  if (!bucket) { bucket = { ix, iz, matrices: [], colors: [] }; buckets.set(key, bucket); }
+  bucket.matrices.push(matrix.clone());
+  bucket.colors.push(color.clone());
+}
+function flushSceneryChunks(buckets, geometry, material) {
+  for (const bucket of buckets.values()) {
+    const mesh = new THREE.InstancedMesh(geometry, material, bucket.matrices.length);
+    for (let i = 0; i < bucket.matrices.length; i++) {
+      mesh.setMatrixAt(i, bucket.matrices[i]);
+      mesh.setColorAt(i, bucket.colors[i]);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    scene.add(mesh);
+    sceneryChunks.push({ mesh, x: (bucket.ix + 0.5) * SCENERY_CELL, z: (bucket.iz + 0.5) * SCENERY_CELL });
+  }
+}
+function updateSceneryVisibility(now) {
+  if (now - sceneryCullAt < 450) return;
+  sceneryCullAt = now;
+  const x = camera.position.x, z = camera.position.z, limit2 = (SCENERY_RENDER_DISTANCE + SCENERY_CELL) ** 2;
+  for (const chunk of sceneryChunks) {
+    const dx = chunk.x - x, dz = chunk.z - z;
+    chunk.mesh.visible = dx * dx + dz * dz <= limit2;
+  }
+}
+
 (function buildTrees() {
-  const rnd = mulberry(1764), N = isTouch ? 8500 : 22000;
-  const mesh = new THREE.InstancedMesh(new THREE.ConeGeometry(3.6, 13, 6), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, envMapIntensity: 0.45 }), N);
-  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), c = new THREE.Color();
+  const rnd = mulberry(1764), N = isTouch ? 5000 : 11000;
+  const buckets = new Map(), geometry = new THREE.ConeGeometry(3.6, 13, 6);
+  const material = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, envMapIntensity: 0.45 });
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), scale = new THREE.Vector3(), c = new THREE.Color();
   let n = 0;
   for (let tries = 0; tries < N * 12 && n < N; tries++) {
     const x = (rnd() - 0.5) * 18000 * MAP_K, z = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ;
     if (x > CITY.x0 - 150 && x < CITY.x1 + 150 && z > CITY.z0 - 150 && z < CITY.z1 + 150) continue;
     if (airbaseSD(x, z) < 300 || (z > CITY.z1 && z < AB.zN + 300 && GATES.some(gx => Math.abs(x - gx) < 70))) continue;
-    const cover = fbm(x * 0.002 + 3, z * 0.002, 3);
-    if (cover < 0.48) continue;
+    if (fbm(x * 0.002 + 3, z * 0.002, 3) < 0.48) continue;
     const h = heightAt(x, z);
     if (h < 10 || h > 330 || slopeAt(x, z) > 0.4) continue;
     const k = 0.7 + rnd() * 0.8;
-    p.set(x, h + 6 * k, z); s.set(k, k * (0.8 + rnd() * 0.5), k);
-    m.compose(p, q, s);
-    mesh.setMatrixAt(n, m);
-    mesh.setColorAt(n, c.setHSL(0.25 + rnd() * 0.09, 0.38 + rnd() * 0.16, 0.16 + rnd() * 0.13));
-    n++;
+    p.set(x, h + 6 * k, z); scale.set(k, k * (0.8 + rnd() * 0.5), k);
+    m.compose(p, q, scale);
+    c.setHSL(0.25 + rnd() * 0.09, 0.38 + rnd() * 0.16, 0.16 + rnd() * 0.13);
+    addSceneryInstance(buckets, x, z, m, c); n++;
   }
-  mesh.count = n;
-  scene.add(mesh);
+  flushSceneryChunks(buckets, geometry, material);
 })();
 
 (function buildShrubland() {
-  const rnd = mulberry(9271), N = isTouch ? 10000 : 26000;
-  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1),
-    new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, envMapIntensity: 0.45 }), N);
-  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), c = new THREE.Color();
+  const rnd = mulberry(9271), N = isTouch ? 6000 : 13000;
+  const buckets = new Map(), geometry = new THREE.IcosahedronGeometry(1, 1);
+  const material = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, envMapIntensity: 0.45 });
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), scale = new THREE.Vector3(), c = new THREE.Color();
   let n = 0;
   for (let tries = 0; tries < N * 10 && n < N; tries++) {
     const x = (rnd() - 0.5) * 18000 * MAP_K, z = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ;
@@ -1020,20 +1051,18 @@ function makeWaterNormalMap() {
     if (h < 6 || h > 300 || slopeAt(x, z) > 0.48) continue;
     const k = 1.2 + rnd() * 1.8;
     p.set(x, h + k * 0.42, z);
-    s.set(k * (0.8 + rnd() * 0.8), k * (0.45 + rnd() * 0.35), k * (0.8 + rnd() * 0.8));
-    m.compose(p, q, s);
-    mesh.setMatrixAt(n, m);
-    mesh.setColorAt(n, c.setHSL(0.23 + rnd() * 0.11, 0.36 + rnd() * 0.22, 0.14 + rnd() * 0.14));
-    n++;
+    scale.set(k * (0.8 + rnd() * 0.8), k * (0.45 + rnd() * 0.35), k * (0.8 + rnd() * 0.8));
+    m.compose(p, q, scale);
+    c.setHSL(0.23 + rnd() * 0.11, 0.36 + rnd() * 0.22, 0.14 + rnd() * 0.14);
+    addSceneryInstance(buckets, x, z, m, c); n++;
   }
-  mesh.count = n;
-  scene.add(mesh);
+  flushSceneryChunks(buckets, geometry, material);
 })();
 
-// Scattered cumulus: rounded lobes at varied heights and sizes, shaded by the sun.
+// Scattered cumulus: fewer, lower-poly cloud lobes reduce transparent overdraw.
 (function buildClouds() {
   const rnd = mulberry(99), PUFFS = [];
-  for (let i = 0; i < 560; i++) {
+  for (let i = 0; i < 320; i++) {
     const cx = (rnd() - 0.5) * 18000 * MAP_K, cz = (rnd() - 0.5) * 18000 * MAP_K + MAP_CZ;
     const base = 760 + rnd() * 680, k = 5 + Math.floor(rnd() * 6);
     const spanX = 150 + rnd() * 180, spanZ = 100 + rnd() * 150;
@@ -1042,20 +1071,19 @@ function makeWaterNormalMap() {
       PUFFS.push([cx + (rnd() - 0.5) * spanX, base + (rnd() - 0.25) * 70, cz + (rnd() - 0.5) * spanZ, size]);
     }
   }
-  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12),
+  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 8),
     new THREE.MeshStandardMaterial({ color: '#f9fbff', roughness: 1, transparent: true, opacity: 0.9, depthWrite: false }), PUFFS.length);
   cloudField = mesh;
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), tint = new THREE.Color();
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), scale = new THREE.Vector3(), tint = new THREE.Color();
   PUFFS.forEach((pf, i) => {
     p.set(pf[0], pf[1], pf[2]);
     const size = pf[3], broadness = 0.85 + rnd() * 0.55;
-    s.set(size * broadness, size * (0.48 + rnd() * 0.28), size * (0.82 + rnd() * 0.4));
-    m.compose(p, q, s); mesh.setMatrixAt(i, m);
+    scale.set(size * broadness, size * (0.48 + rnd() * 0.28), size * (0.82 + rnd() * 0.4));
+    m.compose(p, q, scale); mesh.setMatrixAt(i, m);
     mesh.setColorAt(i, tint.setHSL(0.58, 0.06, 0.78 + rnd() * 0.17));
   });
   scene.add(mesh);
 })();
-
 // ---------------- airbase ----------------
 // A military airbase on the levelled south coast. Runway 36 is the 5 km main runway. The 09L/27R and 09R/27L
 // parallels have the main and heavy aprons between them. Crosswind runways 04/22 and 13/31 serve the fighter
@@ -7886,6 +7914,7 @@ function frame(now) {
   updateVisuals(dt);
   updateGearOverspeed(dt);
   updateCamera(dt, now);
+  updateSceneryVisibility(now);
   updatePapi();
   const stall = running ? updateHUD() : false;
   updateAudio(stall);
