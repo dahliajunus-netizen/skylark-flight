@@ -105,6 +105,7 @@ body.noui:not(.chatting) #chat { display: none; }
 #mpBar { cursor: pointer; }
 #mpBar { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); padding: 6px 10px; font-size: 11px; letter-spacing: .08em; color: var(--dim); cursor: default; }
 #mpBar.live { color: #7ee2a8; }
+#fpsCounter { position: fixed; top: calc(48px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); z-index: 8; padding: 6px 9px; font: 700 12px var(--font-num); letter-spacing: .04em; color: var(--go); pointer-events: none; font-variant-numeric: tabular-nums; }
 #mpBar::before { content: '●'; margin-right: 6px; }
 #vote { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; font-size: 13px; max-width: calc(100vw - 32px); flex-wrap: wrap; justify-content: center; }
 #vote .pickb { padding: 5px 14px; }
@@ -278,6 +279,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="warn" hidden></div>
 <div id="toast" class="glass" style="opacity:0"></div>
 <div id="mpBar" class="glass" title="Change your callsign">CONNECTING…</div>
+<div id="fpsCounter" class="glass" aria-live="off">FPS --</div>
 <div id="chat"><div id="chatLog" aria-live="polite"></div><form id="chatForm" hidden><input id="chatIn" maxlength="160" autocomplete="off" spellcheck="false" placeholder="Message everyone · Enter sends · Esc closes" aria-label="Chat message"></form></div>
 <div id="vote" class="glass" hidden><span id="voteText"></span><button class="pickb" id="voteYes" aria-pressed="false">Yes <kbd>Y</kbd></button><button class="pickb" id="voteNo" aria-pressed="false">No</button></div>
 
@@ -7892,8 +7894,21 @@ const bloom = !isTouch && THREE.UnrealBloomPass ? (() => {
 
 // ---------------- loop ----------------
 let last = performance.now(), acc = 0;
+let fpsFrames = 0, fpsLast = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
+  fpsFrames++;
+  const fpsElapsed = now - fpsLast;
+  if (fpsElapsed >= 500) {
+    const fps = Math.round(fpsFrames * 1000 / fpsElapsed);
+    const fpsEl = $('#fpsCounter');
+    if (fpsEl) {
+      fpsEl.textContent = 'FPS ' + fps;
+      fpsEl.style.color = fps >= 50 ? 'var(--go)' : fps >= 30 ? 'var(--amber)' : 'var(--red)';
+    }
+    fpsFrames = 0;
+    fpsLast = now;
+  }
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (running && !paused && !S.crashed) {
     updateInputs(dt);
