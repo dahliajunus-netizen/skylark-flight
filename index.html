@@ -118,6 +118,13 @@ body.noui .mpTag { display: none; }
 .tools { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); display: flex; gap: 6px; }
 .tbtn { font: 700 11px var(--font-ui); letter-spacing: .1em; color: var(--fg); background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 8px; padding: 9px 11px; cursor: pointer; touch-action: manipulation; }
 .tbtn:hover { border-color: var(--cyan); }
+#graphicsPanel { z-index: 40; background: rgba(4,8,13,.82); }
+#graphicsPanel .card { width: min(480px, 100%); }
+.graphics-options { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.graphics-option { min-height: 68px; text-align: left; padding: 12px; border: 1px solid var(--glass-edge); border-radius: 8px; background: rgba(255,255,255,.045); color: var(--fg); cursor: pointer; font: 700 14px var(--font-ui); }
+.graphics-option span { display: block; margin-top: 5px; color: var(--dim); font: 11px var(--font-ui); }
+.graphics-option[aria-pressed="true"] { border-color: var(--cyan); background: rgba(79,216,234,.12); color: var(--cyan); }
+#graphicsStatus { color: var(--dim); font-size: 12px; }
 .tbtn kbd { font-family: var(--font-num); color: var(--dim); margin-left: 4px; font-size: 10px; }
 button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
@@ -286,7 +293,8 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div class="tools" id="tools" hidden>
   <button class="tbtn" id="bBombCam" title="Hold to follow your last bomb or missile">BOMB CAM<kbd>Z</kbd></button>
   <button class="tbtn" id="bGs" hidden>GUNSHIP CAM<kbd>V</kbd></button>
-   <button class="tbtn" id="bVision">NVG<kbd>J</kbd></button>
+   <button class="tbtn" id="bGraphics">GRAPHICS</button>
+  <button class="tbtn" id="bVision">NVG<kbd>J</kbd></button>
   <button class="tbtn" id="bUi">HIDE UI<kbd>U</kbd></button>
   <button class="tbtn" id="bCam">CAM<kbd>C</kbd></button>
   <button class="tbtn touch-only" id="bBrkTool">BRAKE</button>
@@ -295,6 +303,22 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <button class="tbtn" id="bSnd">SOUND<kbd>M</kbd></button>
   <button class="tbtn" id="bPause">PAUSE<kbd>P</kbd></button>
   <button class="tbtn key-only" id="bHelp">KEYS<kbd>H</kbd></button>
+</div>
+
+<div id="graphicsPanel" class="overlay" hidden>
+  <div class="card glass">
+    <div class="eyebrow">DISPLAY CONFIGURATION</div>
+    <h2>Graphics</h2>
+    <p>Choose a preset. Changes apply immediately and are saved on this device.</p>
+    <div class="graphics-options" role="group" aria-label="Graphics quality">
+      <button class="graphics-option" data-quality="low" aria-pressed="false">Low<span>Maximum performance · reduced detail</span></button>
+      <button class="graphics-option" data-quality="medium" aria-pressed="false">Medium<span>Balanced performance and visuals</span></button>
+      <button class="graphics-option" data-quality="high" aria-pressed="true">High<span>Sharper image · shadows and bloom</span></button>
+      <button class="graphics-option" data-quality="ultra" aria-pressed="false">Ultra<span>Highest resolution and shadow quality</span></button>
+    </div>
+    <div id="graphicsStatus" aria-live="polite"></div>
+    <div class="actions"><button class="btn primary" id="closeGraphics">Done</button></div>
+  </div>
 </div>
 
 <div id="touch" hidden>
@@ -315,6 +339,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <div class="actions">
       <button class="btn primary" id="goRunway">Take off from runway</button>
       <button class="btn" id="goAir">Start airborne</button>
+      <button class="btn" id="menuGraphics">Graphics</button>
     </div>
     <dl class="keys key-only" id="keyList">
       <dt>Mouse aim</dt><dd>Pick it in the controls picker (menu or pause): move the mouse and the nose follows the circle; left click fires the gun. W/S/A/D still override</dd>
@@ -385,6 +410,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <button class="btn" id="pAir">Start airborne</button>
       <button class="btn" id="pApproach">Approach</button>
       <button class="btn" id="pCallsign">Change callsign</button>
+      <button class="btn" id="pauseGraphics">Graphics</button>
       <button class="btn" id="pRebuild">Rebuild city</button>
     </div>
   </div>
@@ -7849,7 +7875,7 @@ if (MP.name) mpConnect(); else askName();
 // Bloom: the finished, antialiased frame is copied into a texture; its brightest parts are blurred over a
 // mip chain and added back over the screen, so the sun, afterburners, fireballs and lights glow.
 // Desktop only; touch devices keep the plain render.
-const bloom = !isTouch && THREE.UnrealBloomPass ? (() => {
+let bloom = !isTouch && THREE.UnrealBloomPass ? (() => {
   const size = new THREE.Vector2(), origin = new THREE.Vector2();
   const pass = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.26, 0.45, 0.94);
   pass.renderToScreen = true;
@@ -7891,6 +7917,69 @@ const bloom = !isTouch && THREE.UnrealBloomPass ? (() => {
     }
   };
 })() : null;
+
+// ---- graphics presets ----
+const GRAPHICS_PRESETS = {
+  low:    { pixelRatio: 0.75, shadows: false, shadowSize: 256, bloom: false },
+  medium: { pixelRatio: 1.00, shadows: true,  shadowSize: 512, bloom: false },
+  high:   { pixelRatio: 1.25, shadows: true,  shadowSize: 1024, bloom: true },
+  ultra:  { pixelRatio: 1.50, shadows: true,  shadowSize: 2048, bloom: true }
+};
+let graphicsQuality = 'high';
+let graphicsResumeAfterClose = false;
+try {
+  const saved = localStorage.getItem('skylark.graphics');
+  if (saved && GRAPHICS_PRESETS[saved]) graphicsQuality = saved;
+} catch (e) {}
+function applyGraphicsQuality(quality, save = true) {
+  const preset = GRAPHICS_PRESETS[quality] || GRAPHICS_PRESETS.high;
+  graphicsQuality = GRAPHICS_PRESETS[quality] ? quality : 'high';
+  const deviceCap = isTouch ? 1 : Math.min(devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(Math.min(deviceCap, preset.pixelRatio));
+  renderer.setSize(innerWidth, innerHeight);
+  if (bloom) bloom.resize();
+  renderer.shadowMap.enabled = preset.shadows;
+  sun.castShadow = preset.shadows;
+  sun.shadow.mapSize.set(isTouch ? Math.min(512, preset.shadowSize) : preset.shadowSize,
+                         isTouch ? Math.min(512, preset.shadowSize) : preset.shadowSize);
+  if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  renderer.shadowMap.needsUpdate = true;
+  const bloomEnabled = preset.bloom && !!bloom;
+  document.body.dataset.bloom = String(bloomEnabled);
+  document.querySelectorAll('[data-quality]').forEach(button =>
+    button.setAttribute('aria-pressed', String(button.dataset.quality === graphicsQuality)));
+  const status = $('#graphicsStatus');
+  if (status) {
+    const actualRatio = Math.min(deviceCap, preset.pixelRatio);
+    status.textContent = graphicsQuality.toUpperCase() + ' · render scale ' +
+      Math.round(actualRatio * 100) + '% · shadows ' + (preset.shadows ? 'ON' : 'OFF') +
+      ' · bloom ' + (bloomEnabled ? 'ON' : 'OFF') +
+      (isTouch && preset.shadowSize > 512 ? ' · mobile shadow cap 512' : '');
+  }
+  if (save) { try { localStorage.setItem('skylark.graphics', graphicsQuality); } catch (e) {} }
+}
+function openGraphics() {
+  graphicsResumeAfterClose = !!(running && !paused && !S.crashed);
+  if (graphicsResumeAfterClose) {
+    togglePause(true);
+    $('#pause').hidden = true;
+  }
+  $('#graphicsPanel').hidden = false;
+  applyGraphicsQuality(graphicsQuality, false);
+}
+function closeGraphics() {
+  $('#graphicsPanel').hidden = true;
+  if (graphicsResumeAfterClose) togglePause(false);
+  graphicsResumeAfterClose = false;
+}
+$('#bGraphics').onclick = openGraphics;
+$('#menuGraphics').onclick = openGraphics;
+$('#pauseGraphics').onclick = openGraphics;
+$('#closeGraphics').onclick = closeGraphics;
+document.querySelectorAll('[data-quality]').forEach(button => {
+  button.addEventListener('click', () => applyGraphicsQuality(button.dataset.quality));
+});
+applyGraphicsQuality(graphicsQuality, false);
 
 // ---------------- loop ----------------
 let last = performance.now(), acc = 0;
@@ -7938,7 +8027,7 @@ function frame(now) {
   updateNavalMarkers();
   updateRwr();
   renderer.render(scene, camera);
-  if (bloom) bloom.apply(dt);
+  if (bloom && document.body.dataset.bloom === "true") bloom.apply(dt);
 }
 
 // keep a flight going across page updates
