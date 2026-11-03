@@ -7448,7 +7448,20 @@ function applyFx(ev, P, replay) {
 // ---- other players' aircraft ----
 function ghostModel(ac) {
   const g = new THREE.Group();
-  if (MODELS[ac]) {
+  if (MODELS[ac] && AC[ac].split) {
+    // the split exports (F-15C, Typhoon) get the same fit as the player's own aircraft in buildFromGltf: centred,
+    // longest axis turned down -z, and scaled to the real length (AC[ac].split, m)
+    const src = MODELS[ac];
+    src.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(src), size = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
+    const axis = size.x >= size.z ? 'x' : 'z';
+    const fit = new THREE.Group(), shift = new THREE.Group();
+    fit.rotation.y = axis === 'x' ? Math.PI / 2 : Math.PI;
+    fit.scale.setScalar(AC[ac].split / Math.max(size[axis], 0.001));
+    shift.position.copy(center).negate();
+    shift.add(src.clone(true)); fit.add(shift); g.add(fit);
+    g.userData.real = true;
+  } else if (MODELS[ac]) {
     const m = MODELS[ac].clone(true);
     m.rotation.y = Math.PI; // the Blender models face +z; the sim's aircraft face -z
     g.add(m);
