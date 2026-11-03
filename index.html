@@ -2461,7 +2461,7 @@ void main() {
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
   const size = A.rig.abScale || 1, seed = Object.keys(parts).filter(k => /^ab/.test(k)).length * 1.7;
-  ab.userData.s = size; ab.userData.k = 0;
+  ab.userData.s = size; ab.userData.k = 0; ab.userData.afterburner = true;
   ab.scale.setScalar(size);
   const mat = (frag, extra) => new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uK: { value: 0 }, uSeed: { value: seed }, uCore: { value: 0 }, uLen: { value: AB_LEN }, uHeat: { value: 0 }, ...extra },
@@ -2793,6 +2793,11 @@ function buildFromGltf(model) {
   parts.gear = gear;
   const r = A.rig;
   r.ab.forEach(([x, y, z], i) => addAfterburner(['abL', 'abR', 'abL2', 'abR2'][i], x, y, z));
+  // thrust-vectoring nozzles carry their flames, so the plume leaves the exit wherever the nozzle points
+  for (const k of ['abL', 'abR', 'abL2', 'abR2']) {
+    const ab = parts[k], noz = ab && parts.tvc.find(p => Math.sign(p.position.x) === Math.sign(ab.position.x));
+    if (noz) noz.attach(ab);
+  }
   addStores(r.bombs, r.bombScale || 1, r.internalFrom);
   buildZones();
 }
@@ -4133,11 +4138,11 @@ function buildWreck(mode, wet, n, building) {
   const impactDir = S.vel.clone();
   if (impactDir.lengthSq() < 1) impactDir.copy(F);
   impactDir.normalize();
-  const iGear = plane.children.indexOf(parts.gear), iAb = [parts.abL, parts.abR, parts.abL2, parts.abR2].filter(Boolean).map(o => plane.children.indexOf(o));
+  const iGear = plane.children.indexOf(parts.gear);
   plane.updateMatrixWorld(true);
   const wreck = plane.clone();
   wreck.visible = true;
-  iAb.forEach(i => { wreck.children[i].visible = false; });
+  wreck.traverse(o => { if (o.userData.afterburner) o.visible = false; }); // flames may hang off a vectoring nozzle
   debris.add(wreck);
   wreck.updateMatrixWorld(true);
   const gearMeshes = [];
@@ -6984,7 +6989,6 @@ function updateVisuals(dt) {
   for (const r of parts.rudders) r.rotation.y = inp.yaw * 0.3;
   for (const c of parts.canards) c.rotation.x = inp.pitch * 0.35; // foreplanes lead the pitch the other way
   for (const z of parts.tvc) z.rotation.x = -inp.pitch * 0.26; // thrust vectoring: up to 15° with the stick
-  if (parts.tvc.length) for (const ab of [parts.abL, parts.abR]) if (ab) ab.rotation.x = -inp.pitch * 0.26; // the flame follows
   for (const e of parts.elevons) e.rotation.x = -inp.pitch * 0.3 + (e.position.x < 0 ? 1 : -1) * inp.roll * 0.3; // pitch and roll together
   for (const d of parts.droop) d.rotation.x += (-A.droop * S.gearT - d.rotation.x) * Math.min(1, dt * 0.8);
   // propellers: a visible turn rate (the real ones run ~1,000 rpm, far past what a frame can show) and a blur disc
