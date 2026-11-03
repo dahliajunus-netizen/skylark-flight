@@ -98,7 +98,7 @@ body.chatting .cl.old { opacity: 1; }
 #chatIn { width: 100%; box-sizing: border-box; padding: 8px 10px; font: 13px var(--font-ui); color: #eef2f5; background: rgba(8,14,20,.78); border: 1px solid var(--cyan); border-radius: 6px; outline: none; }
 body.touch #chat { top: auto; bottom: calc(260px + env(safe-area-inset-bottom, 0px)); }
 body.noui:not(.chatting) #chat { display: none; }
-#nameGate { z-index: 20; }
+#nameGate { z-index: 50; }
 #nameForm { display: flex; gap: 8px; margin-top: 14px; }
 #nameIn { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 12px; color: inherit; background: rgba(255,255,255,.08); border: 1px solid var(--glass-edge); border-radius: 8px; }
 #nameIn:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
@@ -130,6 +130,8 @@ body.noui .mpTag { display: none; }
 #roomIn:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
 .room-hide { display: flex; gap: 8px; align-items: center; margin-top: 10px; color: var(--dim); font-size: 13px; }
 #roomErr { margin: 8px 0 0; }
+#roomsPanel.gate { background: rgba(4,8,13,.94); }
+#roomInviteNote { color: var(--amber); font-size: 13px; }
 #graphicsPanel .card { width: min(480px, 100%); }
 .graphics-options { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
 .graphics-option { min-height: 68px; text-align: left; padding: 12px; border: 1px solid var(--glass-edge); border-radius: 8px; background: rgba(255,255,255,.045); color: var(--fg); cursor: pointer; font: 700 14px var(--font-ui); }
@@ -337,11 +339,12 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <div class="eyebrow">MULTIPLAYER</div>
     <h2>Rooms</h2>
     <p id="roomNow"></p>
+    <p id="roomInviteNote" hidden></p>
     <div id="roomList" class="room-list" role="list"></div>
     <form id="roomForm"><input id="roomIn" maxlength="24" autocomplete="off" spellcheck="false" placeholder="Room name" aria-label="Room name"><button class="btn primary" type="submit">Create or join</button></form>
     <label class="room-hide"><input type="checkbox" id="roomHidden"> Hidden: not in this list, join by name or invite link</label>
     <p id="roomErr" class="reason" hidden>Use 2 to 24 letters, numbers, spaces, - or _.</p>
-    <div class="actions"><button class="btn" id="roomInvite">Copy invite link</button><button class="btn primary" id="closeRooms">Done</button></div>
+    <div class="actions"><button class="btn" id="roomInvite">Copy invite link</button><button class="btn" id="roomSolo" hidden>Fly offline</button><button class="btn primary" id="closeRooms">Done</button></div>
   </div>
 </div>
 
@@ -437,6 +440,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <button class="btn" id="pCallsign">Change callsign</button>
       <button class="btn" id="pauseGraphics">Graphics</button>
       <button class="btn" id="pauseRooms">Rooms</button>
+      <button class="btn" id="pLeave">Leave room</button>
       <button class="btn" id="pRebuild">Rebuild city</button>
     </div>
   </div>
@@ -6103,6 +6107,7 @@ function setThrottleUI() {
 // ---------------- UI wiring ----------------
 const hud = $('#hud'), tools = $('#tools'), touchUI = $('#touch');
 function start(mode) {
+  if (!MP.room && !MP.solo) { showLobby(); return; } // pick a room in the lobby first
   initAudio();
   reset(mode);
   running = true; paused = false;
@@ -7846,7 +7851,7 @@ $('#bChat').onclick = () => { if (CHAT.open) closeChat(); else openChat(); };
 function updateMpBar() {
   const el = $('#mpBar'), n = MP.peers.size + 1;
   if (n !== MP.lastN) { MP.lastN = n; announceRoom(); renderRooms(); }
-  if (!MP.room) { setText(el, MP.failed ? 'OFFLINE' : 'CONNECTING…'); return; }
+  if (!MP.room) { setText(el, MP.failed ? 'OFFLINE' : MP.lib ? `${MP.name.toUpperCase()} · LOBBY` : 'CONNECTING…'); return; }
   setText(el, `${MP.name.toUpperCase()} · ${MP.roomName.toUpperCase()}${MP.roomHidden ? ' (HIDDEN)' : ''} · ${n} ONLINE`);
   el.title = [MP.name + ' (you)', ...[...MP.peers.values()].map(P => P.name + ' · ' + acShort(P.ac))].join('\n');
   el.classList.toggle('live', n > 1);
@@ -7954,7 +7959,7 @@ MP.roomName = 'Public'; MP.roomHidden = false; MP.lobbyRooms = new Map(); MP.ann
   const q = new URLSearchParams(location.search), inv = (q.get('room') || '').trim();
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('skylark.room') || 'null'); } catch (e) {}
-  if (ROOM_OK.test(inv)) { MP.roomName = inv; MP.roomHidden = q.get('h') === '1'; }
+  if (ROOM_OK.test(inv)) { MP.invite = { name: inv, hidden: q.get('h') === '1' }; }
   else if (saved && ROOM_OK.test(saved.name || '')) { MP.roomName = saved.name; MP.roomHidden = !!saved.hidden; }
 }
 function joinGameRoom(name, hidden) {
@@ -7985,7 +7990,7 @@ function leaveGameRoom() {
 function announceRoom(target) {
   MP.annT = performance.now();
   if (!MP.lobbyAnn) return;
-  try { MP.lobbyAnn.send({ room: MP.roomHidden ? '' : MP.roomName, n: MP.peers.size + 1 }, target ? { target } : undefined); } catch (e) {}
+  try { MP.lobbyAnn.send({ room: MP.room && !MP.roomHidden ? MP.roomName : '', n: MP.peers.size + 1 }, target ? { target } : undefined); } catch (e) {}
 }
 function listRooms() {
   const now = performance.now(), rooms = new Map();
@@ -7995,24 +8000,34 @@ function listRooms() {
     const k = r.room.toLowerCase(), e = rooms.get(k) || { name: r.room, n: 0, max: 0 };
     e.n++; e.max = Math.max(e.max, r.n); rooms.set(k, e);
   }
-  if (!MP.roomHidden) { const k = MP.roomName.toLowerCase(), e = rooms.get(k) || { name: MP.roomName, n: 0, max: 0 }; e.n++; e.max = Math.max(e.max, MP.peers.size + 1); rooms.set(k, e); }
+  if (MP.room && !MP.roomHidden) { const k = MP.roomName.toLowerCase(), e = rooms.get(k) || { name: MP.roomName, n: 0, max: 0 }; e.n++; e.max = Math.max(e.max, MP.peers.size + 1); rooms.set(k, e); }
   if (!rooms.has('public')) rooms.set('public', { name: 'Public', n: 0, max: 0 });
   return [...rooms.values()].map(e => ({ name: e.name, players: Math.max(e.n, e.max) })).sort((a, b) => b.players - a.players || a.name.localeCompare(b.name));
 }
 function renderRooms() {
   if ($('#roomsPanel').hidden) return;
+  const gate = !MP.room && !MP.solo;
+  $('#roomsPanel').classList.toggle('gate', gate);
+  $('#closeRooms').hidden = gate; $('#roomInvite').hidden = !MP.room;
+  $('#roomSolo').hidden = !(gate && MP.failed);
+  setText($('#roomsPanel').querySelector('h2'), MP.room ? 'Rooms' : 'Lobby');
+  const note = $('#roomInviteNote');
+  note.hidden = !(gate && MP.invite);
+  if (MP.invite) setText(note, `You were invited to ${MP.invite.name}${MP.invite.hidden ? ' (hidden)' : ''}. Press Create or join to go in.`);
   $('#roomNow').innerHTML = '';
   const now = $('#roomNow');
-  now.append('You are in ');
-  const b = document.createElement('b'); b.textContent = MP.roomName; now.append(b);
-  now.append(MP.roomHidden ? ' (hidden). ' : '. ', MP.room ? (MP.peers.size + 1) + ' online here.' : 'Connecting…');
+  if (MP.room) {
+    now.append('You are in ');
+    const b = document.createElement('b'); b.textContent = MP.roomName; now.append(b);
+    now.append(MP.roomHidden ? ' (hidden). ' : '. ', (MP.peers.size + 1) + ' online here.');
+  } else now.append(MP.failed ? 'Multiplayer could not connect. You can still fly on your own.' : MP.lib ? 'Join a room to start flying, or create your own.' : 'Connecting to the lobby…');
   const list = $('#roomList');
   list.textContent = '';
   const rooms = listRooms();
   for (const r of rooms) {
     const row = document.createElement('button');
     row.type = 'button'; row.className = 'room-row'; row.setAttribute('role', 'listitem');
-    const here = r.name.toLowerCase() === MP.roomName.toLowerCase();
+    const here = !!MP.room && r.name.toLowerCase() === MP.roomName.toLowerCase();
     row.setAttribute('aria-current', String(here));
     row.textContent = r.name;
     const c = document.createElement('span'); c.textContent = r.players ? r.players + (r.players === 1 ? ' player' : ' players') : 'empty'; row.append(c);
@@ -8023,10 +8038,33 @@ function renderRooms() {
 }
 function switchRoom(name, hidden) {
   if (!MP.lib) { toast('Multiplayer is still connecting'); return; }
+  const fromLobby = !MP.room;
   joinGameRoom(name, hidden);
+  MP.invite = null;
   try { history.replaceState(null, '', location.pathname); } catch (e) {} // an invite link applies once
-  toast('Joined room ' + name + (hidden ? ' (hidden)' : '') + '. The city starts fresh here');
+  toast('Joined room ' + name + (hidden ? ' (hidden)' : '') + (fromLobby ? '. Pick an aircraft and take off' : '. The city starts fresh here'));
+  if (fromLobby) closeRooms();
 }
+// the lobby: shown first, and again after leaving a room; it stays up until a room is joined
+function showLobby() {
+  if (!$('#nameGate').hidden) return; // the callsign comes first
+  roomsResumeAfterClose = false;
+  $('#roomsPanel').hidden = false; $('#roomErr').hidden = true;
+  $('#roomIn').value = MP.invite ? MP.invite.name : ''; $('#roomHidden').checked = !!(MP.invite && MP.invite.hidden);
+  renderRooms();
+}
+// leave the room from the pause screen: the flight ends and you go back to the lobby
+function leaveToLobby() {
+  leaveGameRoom();
+  running = paused = false;
+  $('#pause').hidden = $('#crash').hidden = true; $('#menu').hidden = false;
+  hud.hidden = tools.hidden = touchUI.hidden = true;
+  lockPointer.releasing = true; unlockPointer();
+  updateMpBar(); announceRoom();
+  showLobby();
+}
+$('#pLeave').onclick = leaveToLobby;
+$('#roomSolo').onclick = () => { MP.solo = true; closeRooms(); toast('Flying offline'); };
 let roomsResumeAfterClose = false;
 function openRooms() {
   roomsResumeAfterClose = !!(running && !paused && !S.crashed);
@@ -8036,6 +8074,7 @@ function openRooms() {
   renderRooms();
 }
 function closeRooms() {
+  if (!MP.room && !MP.solo) return; // the lobby stays up until you are in a room
   $('#roomsPanel').hidden = true;
   if (roomsResumeAfterClose) togglePause(false);
   roomsResumeAfterClose = false;
@@ -8060,7 +8099,7 @@ async function mpConnect() {
   MP.connecting = true;
   let mod;
   try { mod = await import('https://cdn.jsdelivr.net/npm/trystero@0.25.4/+esm'); }
-  catch (e) { console.warn('Multiplayer is unavailable: the peer-to-peer library did not load.', e); MP.failed = true; updateMpBar(); return; }
+  catch (e) { console.warn('Multiplayer is unavailable: the peer-to-peer library did not load.', e); MP.failed = true; updateMpBar(); renderRooms(); return; }
   // TURN relays carry the game for players whose networks block direct connections (mobile data, school or
   // office Wi-Fi). The credentials come from the provider's endpoint; without them only direct links are tried.
   let turnConfig;
@@ -8080,8 +8119,8 @@ async function mpConnect() {
   };
   MP.lobby.onPeerJoin = id => announceRoom(id);
   MP.lobby.onPeerLeave = id => { MP.lobbyRooms.delete(id); renderRooms(); };
-  joinGameRoom(MP.roomName, MP.roomHidden);
   setInterval(mpTick, 100);
+  updateMpBar(); renderRooms();
 }
 // the game room's messages
 function wireGameRoom(room) {
@@ -8133,11 +8172,11 @@ $('#nameForm').onsubmit = e => {
   MP.name = v;
   try { localStorage.setItem('skylark.user', v); } catch (err) {}
   $('#nameGate').hidden = true;
-  if (MP.room) { updateMpBar(); mpSend('st', stateMsg()); } else if (!MP.connecting) mpConnect();
+  if (MP.room) { updateMpBar(); mpSend('st', stateMsg()); } else { if (!MP.connecting) mpConnect(); showLobby(); }
 };
 $('#pCallsign').onclick = () => askName(true);
 $('#mpBar').onclick = () => { if (running && !paused && !S.crashed) toast('Pause to change your callsign'); else askName(true); };
-if (MP.name) mpConnect(); else askName();
+if (MP.name) { mpConnect(); showLobby(); } else askName();
 
 // Bloom: the finished, antialiased frame is copied into a texture; its brightest parts are blurred over a
 // mip chain and added back over the screen, so the sun, afterburners, fireballs and lights glow.
