@@ -6670,7 +6670,7 @@ function updateCamera(dt, now) {
     } else if (!blast) {
       // ride along behind the falling bomb
       bombCam.free = '';
-      tA.copy(bc.v);
+      tA.copy(bc.v || bc.vel); // bombs keep their velocity in v, missiles in vel
       if (tA.lengthSq() < 1) tA.set(0, -1, 0);
       tA.normalize();
       tmp.copy(bc.obj.position).addScaledVector(tA, bc.kind === 'nuke' ? -32 : -20);
