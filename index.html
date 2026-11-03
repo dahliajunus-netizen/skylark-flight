@@ -2754,6 +2754,12 @@ function buildFromGltf(model) {
       else if (n === 'airbrake') parts.spoilers.push(hinged());
       // Typhoon gear doors: one set drawn open (gear down or moving), the other closed (gear up)
       else if (/^geardoors(open|closed)$/.test(n)) { plane.add(m); parts.doorSets.push({ m, open: n.endsWith('open') }); }
+      else if (/^geardoor_/.test(n) && (multi ? src.parent : src).userData.doorAxis) {
+        // a door panel with its hinge line and the angle that swings it shut (Su-30, Typhoon)
+        const ud = (multi ? src.parent : src).userData;
+        const axis = new THREE.Vector3(...ud.doorAxis).transformDirection(modelMatrix);
+        parts.doorPanels.push({ pivot: hinged(), axis, angle: ud.doorAngle * Math.sign(modelMatrix.determinant()) });
+      }
       else if (/geardoor/.test(n)) parts.gearDoors.push({ pivot: hinged(), sign: Math.abs(hinge.x) < 0.3 ? 1 : Math.sign(hinge.x) });
       else if (A.bodySplit && A.bodySplit.mesh.test(n)) for (const piece of splitAirframe(m, A.bodySplit)) plane.add(piece);
       else plane.add(m);
@@ -3032,7 +3038,7 @@ function setAircraft(id) {
   for (const mark of parts.damageMarks || []) mark.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = [];
+  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
   ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
   buildExteriorLights();
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
@@ -5514,7 +5520,7 @@ function bombCamTarget() {
 const S = {
   pos: new THREE.Vector3(), vel: new THREE.Vector3(), quat: new THREE.Quaternion(), ang: new THREE.Vector3(),
   throttle: 0, onGround: true, crashed: false, brake: false, alpha: 0, V: 0, time: 0, maxAlt: 0, maxSpd: 0, wingDrop: 1,
-  gearDown: true, gearT: 1, gearComp: 0, gearOverT: 0, wingOverT: 0, wingOverFailed: false, noseDip: 0, damaged: false, stumps: [], dmg: { wingL: 1, wingR: 1, stab: 1, fin: 1, engL: 1, engR: 1, legsLost: 0 }, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
+  gearDown: true, gearT: 1, doorT: 1, doorWait: 0, gearComp: 0, gearOverT: 0, wingOverT: 0, wingOverFailed: false, noseDip: 0, damaged: false, stumps: [], dmg: { wingL: 1, wingR: 1, stab: 1, fin: 1, engL: 1, engR: 1, legsLost: 0 }, rho: 1.225, mach: 0, g: 1, hitBuilding: -1, hitPoint: new THREE.Vector3(),
   ammo: AMMO_MAX, bombs: BOMBS_MAX, nukes: NUKES_MAX, firing: false
 };
 const inp = { pitch: 0, roll: 0, yaw: 0 };
@@ -6999,13 +7005,26 @@ function updateVisuals(dt) {
     p.disc.material.opacity = running && !S.crashed ? 0.06 + 0.12 * S.throttle : 0;
   }
   for (const sp of parts.spoilers) sp.rotation.x += ((S.brake && running ? -0.75 : 0) - sp.rotation.x) * Math.min(1, dt * 4);
-  if (running && !S.crashed && !paused) {
+  // Gear doors with hinged panels: lowering, they swing open first and the legs wait for them; raising, the legs
+  // fold in and the doors follow a moment after the gear is up.
+  const doors = parts.doorPanels.length > 0;
+  if (doors) {
+    if (S.gearDown && S.gearT >= 1) S.doorT = 1; // parked, or the gear was set down
+    else if (running && !S.crashed && !paused) {
+      if (S.gearDown || S.gearT > 0) { S.doorWait = 0; S.doorT = Math.min(1, S.doorT + dt / 0.8); }
+      else if ((S.doorWait += dt) > 1.5) S.doorT = Math.max(0, S.doorT - dt / 1.2);
+    }
+  }
+  if (running && !S.crashed && !paused && !(doors && S.gearDown && S.doorT < 1)) {
     S.gearT = clamp(S.gearT + (S.gearDown ? 1 : -1) * dt / A.gearTime, 0, 1);
   }
   const gk = S.gearT * S.gearT * (3 - 2 * S.gearT), ga = (1 - gk) * Math.PI / 2;
   for (const f of parts.flaps) f.rotation.x = 0.52 * gk; // F-15 flaps: 30° down with the gear, up with it
   for (const D of parts.gearDoors) D.pivot.rotation.z = D.sign * ga; // hanging open with the gear down, folded flat when up
-  for (const D of parts.doorSets) D.m.visible = D.open === S.gearT > 0.01;
+  // the open bay (hinge arms, links) shows until the doors are mostly shut; then the closed skin stands in behind them
+  const dk = S.doorT * S.doorT * (3 - 2 * S.doorT);
+  for (const D of parts.doorPanels) { D.pivot.quaternion.setFromAxisAngle(D.axis, (1 - dk) * D.angle); D.pivot.visible = S.doorT > 0; }
+  for (const D of parts.doorSets) D.m.visible = D.open === (doors ? S.doorT > 0.35 : S.gearT > 0.01);
   S.noseDip += ((S.onGround && S.brake && S.V > 1 ? 0.35 * A.travel : 0) - S.noseDip) * Math.min(1, dt * 4);
   for (const L of parts.gearLegs) {
     const off = clamp(S.gearComp + (L.nose ? S.noseDip : 0), 0, A.travel) - 0.4 * A.travel; // + = pushed up from the parked pose
@@ -8478,7 +8497,7 @@ function boot(data) {
     if (sim.ac) setAircraft(sim.ac);
     start(sim.lastMode || 'runway');
     S.pos.fromArray(sim.pos); S.vel.fromArray(sim.vel); S.quat.fromArray(sim.quat);
-    S.throttle = sim.throttle; S.onGround = sim.onGround; S.time = sim.time || 0; S.gearDown = sim.gearDown !== false; S.gearT = S.gearDown ? 1 : 0;
+    S.throttle = sim.throttle; S.onGround = sim.onGround; S.time = sim.time || 0; S.gearDown = sim.gearDown !== false; S.gearT = S.doorT = S.gearDown ? 1 : 0;
     if (sim.nukes === 0 && parts.nuke) { S.nukes = 0; parts.nuke.visible = false; }
     camMode = sim.camMode || 'chase'; camSnap = true; setThrottleUI();
   }
