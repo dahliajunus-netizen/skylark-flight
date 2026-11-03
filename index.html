@@ -7955,17 +7955,15 @@ const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
 MP.roomName = 'Public'; MP.roomHidden = false; MP.lobbyRooms = new Map(); MP.annT = 0;
-{ // an invite link (?room=...&h=1) or the last room used on this device
+{ // an invite link (?room=...&h=1). The room is never remembered: storage is shared by every tab and window
+  // of the browser, so a remembered room could pull other tabs into a room someone else made.
   const q = new URLSearchParams(location.search), inv = (q.get('room') || '').trim();
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem('skylark.room') || 'null'); } catch (e) {}
-  if (ROOM_OK.test(inv)) { MP.invite = { name: inv, hidden: q.get('h') === '1' }; }
-  else if (saved && ROOM_OK.test(saved.name || '')) { MP.roomName = saved.name; MP.roomHidden = !!saved.hidden; }
+  if (ROOM_OK.test(inv)) MP.invite = { name: inv, hidden: q.get('h') === '1' };
+  try { localStorage.removeItem('skylark.room'); } catch (e) {} // left by an earlier version
 }
 function joinGameRoom(name, hidden) {
   if (MP.room) leaveGameRoom();
   MP.roomName = name; MP.roomHidden = hidden;
-  try { localStorage.setItem('skylark.room', JSON.stringify({ name, hidden })); } catch (e) {}
   MP.t0 = performance.now(); // a newcomer here: catch up from the players already in the room
   const room = MP.lib.joinRoom(MP.cfg, roomKey(name, hidden));
   MP.room = room;
