@@ -2090,7 +2090,7 @@ const AC = {
     // fade at low speed, so it can hang at very high angles of attack.
     id: 'su30', mass: 26000, wing: 62, thrust: 149000, thrustAB: 245000,
     CL0: 0.2, CLA: 3.7, stallA: 0.52, cd0: 0.021, k: 0.11, wave: [0.88, 1.08, 0.03],
-    gLimit: 9.5, effV: 85, rates: [0.95, 0.4, 4.3], stabRoll: 0.2, tailStrike: 0.24, gear: 3.07, noseExt: 0.36, weapons: true, gearTime: 4, mainRetract: 'fwd', mainTwist: Math.PI / 2, travel: 0.32,
+    gLimit: 9.5, effV: 85, rates: [0.95, 0.4, 4.3], stabRoll: 0.2, tailStrike: 0.24, gear: 3.07, noseExt: 0.36, strutHinges: true, weapons: true, gearTime: 4, mainRetract: 'fwd', mainTwist: Math.PI / 2, travel: 0.32,
     hiG: { g: 13, rate: 2.6, aoa: 2.1, cl: 1.3, cd: 3.0, cobraV: 210 }, // held Shift: see physics
     tvc: 0.85, canards: true,
     ammo: 150, gunRate: 25, roundDmg: 2.2, muzzle: [-0.81, 0.75, 2.96], stabSign: 1, model: 'su30_split.glb', split: 21.94, // GSh-30-1, 30 mm: the model has it beside the left LERX
@@ -2151,7 +2151,7 @@ const AC = {
     // Eurofighter Typhoon: ~17 t with bombs, 51.2 m² delta, two EJ200s (~60 kN dry, ~90 kN reheat each)
     id: 'typhoon', mass: 16000, wing: 51.2, thrust: 120000, thrustAB: 180000,
     CL0: 0.15, CLA: 3.2, stallA: 0.5, cd0: 0.02, k: 0.14, wave: [0.9, 1.1, 0.025],
-    gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 3.08, weapons: true, gearTime: 4, mainRetract: 'out', centreX: 0.5, travel: 0.3,
+    gLimit: 9, effV: 100, rates: [0.75, 0.3, 3.8], stabRoll: 0, tailStrike: 0.2, gear: 3.08, strutHinges: true, weapons: true, gearTime: 4, mainRetract: 'out', centreX: 0.5, travel: 0.3,
     hiG: { g: 12, rate: 1.9, aoa: 1.75, cl: 1.2, cd: 3.2, cobraV: 180 }, // the unstable delta-canard pitches up even faster
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
     ammo: 150, gunHz: 28, roundDmg: 1.6, muzzle: [0.95, -0.91, 2.2], stabSign: -1, model: 'typhoon_split.glb', split: 15.96, // BK-27 port in the right wing root
@@ -2734,7 +2734,7 @@ function buildFromGltf(model) {
         // struts are the oleo cylinder, wheels ride on the piston; both keep the model's textures
         const leg = gearPart[1] === 'nose' ? 'Nose' : (side === 'L' ? 'Left' : 'Right') + ' main';
         m.name = `${leg} gear ${gearPart[2]}`; m.userData.keepMaterial = true;
-        if (A.id === 'typhoon') m.userData.gearHinge = hinge.clone();
+        m.userData.gearHinge = hinge.clone(); // a strut's origin is its trunnion
         gear.add(m);
         if (gearPart[2] === 'wheel') {
           // origin on the axle so the tire can roll in place
@@ -3085,12 +3085,9 @@ function rigGear() {
     bb.makeEmpty();
     list.forEach(([, b]) => bb.union(b));
     const pivot = new THREE.Group(), upper = new THREE.Group(), lower = new THREE.Group();
-    const noseStrut = A.id === 'typhoon' ? list.find(([m]) => /nose gear strut/i.test(m.name || '')) : null;
-    if (noseStrut) {
-      // Hinge at the top, forward end of the nose strut, as marked on the Eurofighter model.
-      const hingeBox = noseStrut[1];
-      pivot.position.set((hingeBox.min.x + hingeBox.max.x) / 2, hingeBox.max.y, hingeBox.min.z);
-    } else pivot.position.set((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
+    const trunnion = A.strutHinges && list.find(([m]) => /strut/i.test(m.name || '') && m.userData.gearHinge);
+    if (trunnion) pivot.position.copy(trunnion[0].userData.gearHinge); // the split model marks each leg's trunnion
+    else pivot.position.set((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2);
     g.add(pivot);
     let strutBottom = 0;
     // noseExt: the nose leg stands this much longer than modelled (the Su-30 model's sits short, nose-high)
