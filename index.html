@@ -7954,7 +7954,7 @@ const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
 // a hidden room is a different room from a listed one with the same name
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
-MP.roomName = 'Public'; MP.roomHidden = false; MP.lobbyRooms = new Map(); MP.annT = 0;
+MP.roomName = 'Public'; MP.roomHidden = false; MP.lobbyRooms = new Map(); MP.gossipRooms = new Map(); MP.lobbyPeers = new Set(); MP.annT = 0;
 { // an invite link (?room=...&h=1). The room is never remembered: storage is shared by every tab and window
   // of the browser, so a remembered room could pull other tabs into a room someone else made.
   const q = new URLSearchParams(location.search), inv = (q.get('room') || '').trim();
@@ -7988,19 +7988,28 @@ function leaveGameRoom() {
 function announceRoom(target) {
   MP.annT = performance.now();
   if (!MP.lobbyAnn) return;
-  try { MP.lobbyAnn.send({ room: MP.room && !MP.roomHidden ? MP.roomName : '', n: MP.peers.size + 1 }, target ? { target } : undefined); } catch (e) {}
+  const known = listRooms(true).filter(r => r.players > 0).slice(0, 30).map(r => ({ r: r.name, n: r.players, a: Math.round(r.age) }));
+  try { MP.lobbyAnn.send({ room: MP.room && !MP.roomHidden ? MP.roomName : '', n: MP.peers.size + 1, known }, target ? { target } : undefined); } catch (e) {}
 }
-function listRooms() {
+// the rooms in use: from the players this page hears directly, then rooms they passed on (age: how old the news is)
+function listRooms(withAge = false) {
   const now = performance.now(), rooms = new Map();
   for (const [id, r] of MP.lobbyRooms) {
     if (now - r.t > 15000) { MP.lobbyRooms.delete(id); continue; }
     if (!r.room) continue;
-    const k = r.room.toLowerCase(), e = rooms.get(k) || { name: r.room, n: 0, max: 0 };
+    const k = r.room.toLowerCase(), e = rooms.get(k) || { name: r.room, n: 0, max: 0, age: 0 };
     e.n++; e.max = Math.max(e.max, r.n); rooms.set(k, e);
   }
-  if (MP.room && !MP.roomHidden) { const k = MP.roomName.toLowerCase(), e = rooms.get(k) || { name: MP.roomName, n: 0, max: 0 }; e.n++; e.max = Math.max(e.max, MP.peers.size + 1); rooms.set(k, e); }
-  if (!rooms.has('public')) rooms.set('public', { name: 'Public', n: 0, max: 0 });
-  return [...rooms.values()].map(e => ({ name: e.name, players: Math.max(e.n, e.max) })).sort((a, b) => b.players - a.players || a.name.localeCompare(b.name));
+  if (MP.room && !MP.roomHidden) { const k = MP.roomName.toLowerCase(), e = rooms.get(k) || { name: MP.roomName, n: 0, max: 0, age: 0 }; e.n++; e.max = Math.max(e.max, MP.peers.size + 1); rooms.set(k, e); }
+  for (const [k, g] of MP.gossipRooms) {
+    if (now - g.t > 15000) { MP.gossipRooms.delete(k); continue; }
+    const e = rooms.get(k);
+    if (!e) rooms.set(k, { name: g.name, n: 0, max: g.n, age: now - g.t });
+    else e.max = Math.max(e.max, g.n);
+  }
+  if (!rooms.has('public')) rooms.set('public', { name: 'Public', n: 0, max: 0, age: 0 });
+  return [...rooms.values()].map(e => ({ name: e.name, players: Math.max(e.n, e.max), ...(withAge ? { age: e.age } : {}) }))
+    .sort((a, b) => b.players - a.players || a.name.localeCompare(b.name));
 }
 function renderRooms() {
   if ($('#roomsPanel').hidden) return;
@@ -8019,6 +8028,12 @@ function renderRooms() {
     const b = document.createElement('b'); b.textContent = MP.roomName; now.append(b);
     now.append(MP.roomHidden ? ' (hidden). ' : '. ', (MP.peers.size + 1) + ' online here.');
   } else now.append(MP.failed ? 'Multiplayer could not connect. You can still fly on your own.' : MP.lib ? 'Join a room to start flying, or create your own.' : 'Connecting to the lobby…');
+  if (MP.lib) {
+    const k = MP.lobbyPeers.size, alone = !k && performance.now() - MP.lobbyT > 20000;
+    now.append(document.createElement('br'), k ? `Connected to ${k} other ${k === 1 ? 'player' : 'players'} in the lobby.`
+      : alone ? 'No other players found yet. If friends see rooms you can\'t, type the room name to join it, or try another network.'
+      : 'Looking for other players…');
+  }
   const list = $('#roomList');
   list.textContent = '';
   const rooms = listRooms();
@@ -8106,17 +8121,29 @@ async function mpConnect() {
     catch (e) { console.warn('TURN relay credentials did not load; trying direct connections only.', e); }
   }
   MP.lib = mod; MP.self = mod.selfId;
-  MP.cfg = turnConfig ? { appId: 'skylark-flight-dahliajunus', turnConfig } : { appId: 'skylark-flight-dahliajunus' };
+  // Players find each other through Nostr relays. Of the five the library picks for this app, two no longer
+  // answer, so players whose networks couldn't reach the other three never met anyone. Use eight that answer:
+  // those three (so older pages still overlap) and five well-known public relays.
+  const relayConfig = { urls: ['wss://purplerelay.com', 'wss://nostr-01.yakihonne.com', 'wss://bucket.coracle.social',
+    'wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://offchain.pub', 'wss://nostr-pub.wellorder.net'] };
+  MP.cfg = turnConfig ? { appId: 'skylark-flight-dahliajunus', turnConfig, relayConfig } : { appId: 'skylark-flight-dahliajunus', relayConfig };
   // the lobby: which rooms exist and how many are in each
   MP.lobby = mod.joinRoom(MP.cfg, 'lobby-v1');
+  MP.lobbyT = performance.now();
   MP.lobbyAnn = MP.lobby.makeAction('ann');
   MP.lobbyAnn.onMessage = (d, { peerId }) => {
     if (!d || typeof d.room !== 'string' || d.room.length > 24 || (d.room && !ROOM_OK.test(d.room)) || !num(d.n, 64)) return;
     MP.lobbyRooms.set(peerId, { room: d.room, n: Math.round(d.n), t: performance.now() });
+    // rooms this player has heard of from others: kept while the news is under 15 s old
+    if (Array.isArray(d.known)) for (const g of d.known.slice(0, 30)) {
+      if (!g || typeof g.r !== 'string' || !ROOM_OK.test(g.r) || !num(g.n, 64) || !num(g.a, 15000) || g.a < 0) continue;
+      const k = g.r.toLowerCase(), t = performance.now() - g.a, old = MP.gossipRooms.get(k);
+      if (!old || t > old.t) MP.gossipRooms.set(k, { name: g.r, n: Math.round(g.n), t });
+    }
     renderRooms();
   };
-  MP.lobby.onPeerJoin = id => announceRoom(id);
-  MP.lobby.onPeerLeave = id => { MP.lobbyRooms.delete(id); renderRooms(); };
+  MP.lobby.onPeerJoin = id => { MP.lobbyPeers.add(id); announceRoom(id); renderRooms(); };
+  MP.lobby.onPeerLeave = id => { MP.lobbyPeers.delete(id); MP.lobbyRooms.delete(id); renderRooms(); };
   setInterval(mpTick, 100);
   updateMpBar(); renderRooms();
 }
