@@ -2090,6 +2090,8 @@ const AC = {
     centreX: 0.6, // the main gear sits 1.3-1.6 m out, inside the default centreline band
     hiG: { g: 12, rate: 1.7, aoa: 1.75, cl: 1.15, cd: 3.2, cobraV: 175 }, // held Shift: see physics
     ammo: 940, muzzle: [1.70, -0.23, 2.15], stabSign: 1, model: 'f-15c_eagle_split.glb', split: 19.6, // M61 port in the right wing root
+    // the export's "Body" is the whole airframe: wings outboard of the 4 m wide fuselage, twin canted fins above the tail
+    bodySplit: { mesh: /^body$/, wing: { x: 2.1, y: 0.7, z0: -6, z1: 6.5 }, fin: { x0: 0.9, x1: 3.2, y: 0.62, z0: 4.2 } },
     mainTwist: Math.PI / 2, // main wheels turn flat as the legs fold forward
     loadouts: [{ id: 'mk82', name: '6 × MK-82', spec: '6 × MK-82' }, { id: 'b61', name: 'B61', nuke: 'b61', spec: 'B61 NUCLEAR · 0.3 KT' },
       { id: 'aam', name: 'AIM-120 · AIM-9', aam: true, spec: '4 × AIM-120C · 4 × AIM-9X' }],
@@ -2118,6 +2120,9 @@ const AC = {
     hiG: { g: 12, rate: 1.9, aoa: 1.75, cl: 1.2, cd: 3.2, cobraV: 180 }, // the unstable delta-canard pitches up even faster
     // canards: tilting the leading edge up pitches the nose up, the opposite of a tailplane
     ammo: 150, gunHz: 28, roundDmg: 1.6, muzzle: [0.95, -0.91, 2.2], stabSign: -1, model: 'typhoon_split.glb', split: 15.96, // BK-27 port in the right wing root
+    // the export's body (one piece per material) is the whole airframe: the delta wing outboard of the 2 m wide
+    // fuselage, the single fin on the centreline above the tail
+    bodySplit: { mesh: /^body(_\d+)?$/, wing: { x: 1.15, y: 0.6, z0: -3.5, z1: 9 }, fin: { x0: 0, x1: 0.5, y: 1.0, z0: 1.5 } },
     // Stations on the model: outer wing pylons at x ±3.65 (bottom y -1.47), inner pylons at x ±1.62 (bottom y -1.57);
     // the belly is at y -1.3 to -1.48. The flames fit the 0.65 m nozzles.
     rig: { ab: [[-0.49, -0.58, 6.86], [0.49, -0.58, 6.86]], abScale: 0.62, bombs: [[-3.65, -1.64, 3.0], [3.65, -1.64, 3.0], [-1.62, -1.74, 1.2], [1.62, -1.74, 1.2]], nuke: null,
@@ -2553,6 +2558,47 @@ function buildF15() {
 // Blender models point their nose along glTF +Z; turning them 180° about Y puts the nose on -Z like the sim.
 // Parts are found by name: wheels/struts become the gear, stabilators/canards pivot for pitch and roll,
 // a speed brake or airbrake hinges on its front edge. Afterburners and stores come from the aircraft's rig.
+// Cut a one-piece airframe mesh (already in the aircraft frame) into fuselage, left and right wing and fins,
+// triangle by triangle, by where each triangle's centre lies (A.bodySplit). The pieces take the names the damage
+// zones look for ("wingL", "wingR", "vertical_tail"), so each can be hit, torn at the point of impact and lost
+// like the moving surfaces already are.
+function splitAirframe(m, rule) {
+  const geo = m.geometry, pos = geo.attributes.position, idx = geo.index;
+  const cnt = idx ? idx.count : pos.count, lists = { core: [], wingL: [], wingR: [], finL: [], finR: [], fin: [] };
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const W = rule.wing, F = rule.fin;
+  for (let t = 0; t < cnt; t += 3) {
+    const i0 = idx ? idx.getX(t) : t, i1 = idx ? idx.getX(t + 1) : t + 1, i2 = idx ? idx.getX(t + 2) : t + 2;
+    a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1); c.fromBufferAttribute(pos, i2);
+    const x = (a.x + b.x + c.x) / 3, y = (a.y + b.y + c.y) / 3, z = (a.z + b.z + c.z) / 3, ax = Math.abs(x);
+    let key = 'core';
+    if (y > F.y && z > F.z0 && ax >= F.x0 && ax <= F.x1) key = F.x0 > 0 ? (x < 0 ? 'finL' : 'finR') : 'fin';
+    else if (ax > W.x && y < W.y && z > W.z0 && z < W.z1) key = x < 0 ? 'wingL' : 'wingR';
+    lists[key].push(i0, i1, i2);
+  }
+  const names = { core: m.name, wingL: 'wingL', wingR: 'wingR', finL: 'vertical_tail', finR: 'vertical_tail', fin: 'vertical_tail' };
+  const out = [];
+  for (const [key, list] of Object.entries(lists)) {
+    if (!list.length) continue;
+    // only this piece's own vertices, so its bounds (which say which side it is on) are its own
+    const remap = new Map(), keep = [];
+    const index = list.map(i => { let j = remap.get(i); if (j === undefined) { j = keep.length; remap.set(i, j); keep.push(i); } return j; });
+    const g = new THREE.BufferGeometry();
+    for (const k in geo.attributes) {
+      const src = geo.attributes[k], size = src.itemSize, get = ['getX', 'getY', 'getZ', 'getW'];
+      const arr = new (src.isInterleavedBufferAttribute ? src.data.array : src.array).constructor(keep.length * size);
+      keep.forEach((i, j) => { for (let c = 0; c < size; c++) arr[j * size + c] = src[get[c]](i); });
+      g.setAttribute(k, new THREE.BufferAttribute(arr, size, src.normalized));
+    }
+    g.setIndex(index);
+    const piece = new THREE.Mesh(g, m.material);
+    piece.name = names[key];
+    piece.castShadow = piece.receiveShadow = true;
+    piece.userData.fromModel = true;
+    out.push(piece);
+  }
+  return out;
+}
 function buildFromGltf(model) {
   const turn = new THREE.Matrix4().makeRotationY(Math.PI), m4 = new THREE.Matrix4();
   model.updateMatrixWorld(true);
@@ -2633,6 +2679,7 @@ function buildFromGltf(model) {
       // Typhoon gear doors: one set drawn open (gear down or moving), the other closed (gear up)
       else if (/^geardoors(open|closed)$/.test(n)) { plane.add(m); parts.doorSets.push({ m, open: n.endsWith('open') }); }
       else if (/geardoor/.test(n)) parts.gearDoors.push({ pivot: hinged(), sign: Math.abs(hinge.x) < 0.3 ? 1 : Math.sign(hinge.x) });
+      else if (A.bodySplit && A.bodySplit.mesh.test(n)) for (const piece of splitAirframe(m, A.bodySplit)) plane.add(piece);
       else plane.add(m);
       continue;
     }
@@ -3223,12 +3270,20 @@ function ripZone(z, pl, pw) {
     z.meshes.splice(z.meshes.indexOf(m), 1);
   }
   if (z.kind === 'wing') {
-    // bombs hanging outboard of the tear go with the wing, and so does a 757's engine
+    // bombs hanging outboard of the tear go with the wing, and so does a 757's engine; a wing lost whole is
+    // measured from its root, so stores on the fuselage stay
+    const out = cut === -Infinity ? z.root + 0.4 : cut;
     for (const b of [...parts.bombs]) {
-      if (!b.visible || (b.position.x < 0) !== (z.side === 'L') || Math.abs(b.position.x) <= cut) continue;
+      if (!b.visible || (b.position.x < 0) !== (z.side === 'L') || Math.abs(b.position.x) <= out) continue;
       parts.bombs.splice(parts.bombs.indexOf(b), 1);
       S.bombs = Math.max(0, S.bombs - 1);
       spawnGroupDebris(b, new THREE.Box3(new THREE.Vector3(-0.2, -0.2, -1.3), new THREE.Vector3(0.2, 0.2, 1.3)));
+    }
+    // so do air-to-air missiles on its pylons and rails
+    for (const m of [...(parts.missiles || [])]) {
+      if (!m.visible || (m.position.x < 0) !== (z.side === 'L') || Math.abs(m.position.x) <= out) continue;
+      parts.missiles.splice(parts.missiles.indexOf(m), 1);
+      spawnGroupDebris(m, new THREE.Box3(new THREE.Vector3(-0.15, -0.15, -1.8), new THREE.Vector3(0.15, 0.15, 1.8)));
     }
     for (const e of parts.zones) {
       if (e.kind !== 'eng' || !e.alive || e.side !== z.side) continue;
