@@ -1452,6 +1452,58 @@ const BASE_BOXES = [];
     }
   }
 
+  // ---- field equipment ----
+  // Windsocks beside each touchdown zone. There is no wind in the sim, so they show the usual sea breeze, from the
+  // south-southwest (they point downwind, toward 020°), drooping a little.
+  const socks = [], WIND_TO = 20 * Math.PI / 180;
+  // ILS: a localizer antenna array 345 m beyond the far end of each instrument runway (between the reciprocal
+  // runway's approach-light poles), and a glideslope mast beside each touchdown zone, each with its equipment hut.
+  const ilsEnds = [[R36, -1], [R36, 1], [R09L, -1], [R09L, 1], [R09R, -1], [R04, -1], [R13, -1]];
+  // BAK-12 arresting gear, as at most fighter bases: a cable across each runway 460 m in from each end, marked by a
+  // row of yellow discs, with its energy absorbers in housings beside the runway.
+  const cableDiscs = [];
+  RUNWAYS.forEach(R => {
+    const hl = R.rect.hl, w = R.w;
+    for (const e of [-1, 1]) {
+      const [wx, wz] = at(R, e * (hl - 300), -e * (w / 2 + 70));
+      socks.push([wx, wz]);
+      deco.push([wx, Y + 3.2, wz, 0.22, 6.4, 0.22, '#d9dcdc'], [wx, Y + 0.25, wz, 1.6, 0.5, 1.6, '#8b8d8a']);
+      const t = e * (hl - 460), [lx, lz] = at(R, t, 0);
+      line(paint, ...at(R, t, -w / 2), ...at(R, t, w / 2), 0.25, Y + LAYER.rwy + 0.025, '#24272a');
+      for (let sd = -w / 2 + 4; sd <= w / 2 - 4 + 0.1; sd += (w - 8) / 7) cableDiscs.push(at(R, t, sd));
+      for (const sd of [-1, 1]) {
+        const [hx, hz] = at(R, t, sd * (w / 2 + 16));
+        deco.push([hx, Y + 0.7, hz, 3.2, 1.4, 2.2, '#4f5d47'], [hx, Y + 1.5, hz, 3.4, 0.2, 2.4, '#3d4838']);
+      }
+    }
+  });
+  for (const [R, e] of ilsEnds) {
+    const r = R.rect, hl = r.hl;
+    // localizer: across the centreline beyond the stop end (the far end from this direction's threshold)
+    const [cx0, cz0] = at(R, -e * (hl + 345), 0), across = [-r.uz, r.ux];
+    deco.push([cx0, Y + 2.6, cz0, 0.3, 0.3, 0.3, '#c7cbcc']);
+    for (let k = -7; k <= 7; k++) {
+      const ex = cx0 + across[0] * k * 3, ez = cz0 + across[1] * k * 3;
+      deco.push([ex, Y + 1.6, ez, 0.12, 3.2, 0.12, '#bfc4c6'], [ex, Y + 2.9, ez, 0.9 * Math.abs(across[0]) + 0.1, 0.12, 0.9 * Math.abs(across[1]) + 0.1, '#e8eaea']);
+    }
+    for (const sd of [-1, 1]) deco.push([cx0 + across[0] * sd * 21, Y + 2.6, cz0 + across[1] * sd * 21, Math.abs(across[0]) * 0.3 + 0.12, 0.25, Math.abs(across[1]) * 0.3 + 0.12, '#c7cbcc']);
+    const [shx, shz] = at(R, -e * (hl + 375), 18);
+    deco.push([shx, Y + 1.3, shz, 4, 2.6, 3, '#e3e0d6']);
+    // glideslope: a mast 300 m in from the threshold, 150 m to the side, with its hut
+    const [gx, gz] = at(R, e * (hl - 300), e * (R.w / 2 + 150));
+    deco.push([gx, Y + 8, gz, 0.4, 16, 0.4, '#c94d3a'], [gx, Y + 13, gz, 0.6, 1.2, 1.4, '#e8eaea'], [gx, Y + 9.5, gz, 0.6, 1.2, 1.4, '#e8eaea'], [gx, Y + 6, gz, 0.6, 1.2, 1.4, '#e8eaea']);
+    deco.push([gx + 6, Y + 1.3, gz + 6, 3.5, 2.6, 3, '#e3e0d6']);
+  }
+  // Red mandatory hold-short signs at each runway hold: white runway numbers on red, on the left of the taxiway.
+  const holdSigns = [];
+  const rwyOf = (x, z) => { let best = RUNWAYS[0], bd = Infinity; for (const R of RUNWAYS) { const r = R.rect, dx = x - r.cx, dz = z - r.cz, a = clamp(dx * r.ux + dz * r.uz, -r.hl, r.hl); const d = Math.hypot(dx - r.ux * a, dz - r.uz * a); if (d < bd) { bd = d; best = R; } } return best; };
+  for (const [hx, hz, ux, uz] of holds) {
+    const R = rwyOf(hx, hz), left = [-uz, ux];
+    const sx = hx + left[0] * 21 + ux * 2, sz = hz + left[1] * 21 + uz * 2;
+    holdSigns.push({ x: sx, z: sz, ux, uz, label: R.names.slice().sort().join('-') });
+    deco.push([sx, Y + 0.45, sz, 0.12, 0.9, 0.12, '#55595b']);
+  }
+
   const toGeo = g => {
     const geo = new THREE.BufferGeometry(), nrm = new Float32Array(g.pos.length);
     for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1;
@@ -1462,7 +1514,35 @@ const BASE_BOXES = [];
     geo.setIndex(g.idx);
     return geo;
   };
-  const surf = new THREE.Mesh(toGeo(flat), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  // Worn pavement, drawn from world position: stains and grain on every surface, and on the runways lighter
+  // concrete at the ends, black rubber on the main-gear tracks through each touchdown zone, and a worn centreline.
+  const surfMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+  const rwA = RUNWAYS.map(R => new THREE.Vector4(R.rect.cx, R.rect.cz, R.rect.ux, R.rect.uz)), rwB = RUNWAYS.map(R => new THREE.Vector2(R.rect.hl, R.rect.hw));
+  surfMat.onBeforeCompile = sh => {
+    sh.uniforms.uRwA = { value: rwA }; sh.uniforms.uRwB = { value: rwB };
+    worldPosShader(sh, `uniform vec4 uRwA[${rwA.length}]; uniform vec2 uRwB[${rwA.length}];
+float pvH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float pvN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(pvH(i), pvH(i + vec2(1.0, 0.0)), f.x), mix(pvH(i + vec2(0.0, 1.0)), pvH(i + vec2(1.0, 1.0)), f.x), f.y); }`, `{
+  vec2 p = vWPos.xz;
+  float near = 1.0 - smoothstep(1800.0, 7000.0, distance(vWPos, cameraPosition));
+  float w = pvN(p / 41.0) * 0.55 + pvN(p / 8.7) * 0.3 + pvN(p * 0.83) * 0.15;
+  diffuseColor.rgb *= mix(1.0, 0.84 + 0.28 * w, near);
+  for (int i = 0; i < ${rwA.length}; i++) {
+    vec2 d = p - uRwA[i].xy;
+    float a = dot(d, uRwA[i].zw), b = d.y * uRwA[i].z - d.x * uRwA[i].w;
+    if (abs(a) > uRwB[i].x || abs(b) > uRwB[i].y) continue;
+    float e = uRwB[i].x - abs(a); // metres from the nearer end
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.56, 0.56, 0.54) * (0.88 + 0.24 * w), 1.0 - smoothstep(285.0, 315.0, e));
+    float zone = smoothstep(200.0, 380.0, e) * (1.0 - smoothstep(850.0, 1500.0, e));
+    float tracks = exp(-pow((abs(b) - 3.8) / 2.4, 2.0)) + 0.85 * exp(-pow((abs(b) - 9.5) / 3.2, 2.0)) + 0.3 * exp(-b * b / 40.0);
+    float streak = 0.5 + 0.5 * pvN(vec2(a / 26.0, b * 1.9));
+    diffuseColor.rgb *= 1.0 - 0.62 * clamp(zone * tracks * streak, 0.0, 1.0);
+    diffuseColor.rgb *= 1.0 - 0.13 * exp(-b * b / 9.0) * (0.6 + 0.4 * pvN(vec2(a / 11.0, 3.0)));
+  }
+}`, '');
+  };
+  const surf = new THREE.Mesh(toGeo(flat), surfMat);
   surf.receiveShadow = true;
   scene.add(surf);
   // paint is lit like the pavement under it (and takes shadows), so it no longer glows at night
@@ -1531,7 +1611,119 @@ const BASE_BOXES = [];
     fm.setMatrixAt(i, m.compose(p.set((a[0] + b[0]) / 2, Y + 1.4, (a[1] + b[1]) / 2), q.setFromAxisAngle(UP, Math.atan2(-dz, dx)), sc.set(Math.hypot(dx, dz), 2.8, 0.2)));
   });
   scene.add(fm);
+  // windsocks: striped orange and white cones on their poles, mouth into the wind
+  const sockGeo = new THREE.CylinderGeometry(0.42, 0.18, 3.6, 12, 5, true);
+  sockGeo.rotateZ(-Math.PI / 2); sockGeo.translate(1.8, 0, 0); // mouth at the pole, tail downwind along +x
+  { const pa = sockGeo.attributes.position, cols = [];
+    for (let i = 0; i < pa.count; i++) { const band = Math.min(4, Math.floor(pa.getX(i) / 0.72 + 1e-3)); cols.push(...(band % 2 ? [0.95, 0.95, 0.93] : [0.96, 0.36, 0.08])); }
+    sockGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3)); }
+  const sockMesh = new THREE.InstancedMesh(sockGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide }), socks.length);
+  const sockQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2 - WIND_TO, -0.12, 'YXZ'));
+  socks.forEach(([x, z], i) => sockMesh.setMatrixAt(i, m.compose(p.set(x, Y + 6.1, z), sockQ, sc.set(1, 1, 1))));
+  sockMesh.castShadow = true;
+  scene.add(sockMesh);
+  // arresting-gear markings: yellow discs across the runway at each cable
+  const discGeo = new THREE.CircleGeometry(1.5, 16); discGeo.rotateX(-Math.PI / 2);
+  const discMesh = new THREE.InstancedMesh(discGeo, new THREE.MeshStandardMaterial({ color: '#d9b23a', roughness: 0.8 }), cableDiscs.length);
+  cableDiscs.forEach(([x, z], i) => discMesh.setMatrixAt(i, m.makeTranslation(x, Y + LAYER.rwy + 0.03, z)));
+  discMesh.receiveShadow = true;
+  scene.add(discMesh);
+  // hold signs: a dark sign box on its legs, and a face (front and back) from an atlas of runway numbers
+  const signLabels = [...new Set(holdSigns.map(h => h.label))], scv = document.createElement('canvas');
+  scv.width = 512; scv.height = 64 * signLabels.length;
+  const sx2 = scv.getContext('2d');
+  signLabels.forEach((lb, i) => {
+    sx2.fillStyle = '#c8202a'; sx2.fillRect(0, i * 64, 512, 64);
+    sx2.strokeStyle = '#ffffff'; sx2.lineWidth = 4; sx2.strokeRect(5, i * 64 + 5, 502, 54);
+    sx2.fillStyle = '#ffffff'; sx2.font = 'bold 46px Arial, Helvetica, sans-serif'; sx2.textAlign = 'center'; sx2.textBaseline = 'middle';
+    sx2.fillText(lb, 256, i * 64 + 34);
+  });
+  const signFaces = { pos: [], uv: [], idx: [] };
+  for (const h of holdSigns) {
+    const li = signLabels.indexOf(h.label), v0 = 1 - (li + 1) / signLabels.length, v1 = 1 - li / signLabels.length;
+    for (const side of [1, -1]) {
+      // the face toward aircraft coming up to the hold (along -u), and the same on the back
+      const rx = side * h.uz, rz = -side * h.ux, ox = h.x + h.ux * side * 0.21, oz = h.z + h.uz * side * 0.21, hw = 2.2, y0 = Y + 0.95, y1 = Y + 1.95;
+      const i0 = signFaces.pos.length / 3;
+      signFaces.pos.push(ox - rx * hw, y0, oz - rz * hw, ox + rx * hw, y0, oz + rz * hw, ox + rx * hw, y1, oz + rz * hw, ox - rx * hw, y1, oz - rz * hw);
+      signFaces.uv.push(0, v0, 1, v0, 1, v1, 0, v1);
+      signFaces.idx.push(i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3);
+    }
+  }
+  const sfGeo = new THREE.BufferGeometry();
+  sfGeo.setAttribute('position', new THREE.Float32BufferAttribute(signFaces.pos, 3));
+  sfGeo.setAttribute('uv', new THREE.Float32BufferAttribute(signFaces.uv, 2));
+  sfGeo.setIndex(signFaces.idx); sfGeo.computeVertexNormals();
+  const signTex = new THREE.CanvasTexture(scv); signTex.anisotropy = 4;
+  scene.add(new THREE.Mesh(sfGeo, new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.6, side: THREE.DoubleSide, emissive: '#ffffff', emissiveMap: signTex, emissiveIntensity: 0.18 })));
+  const signBox = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#2b2e30', roughness: 0.8 }), holdSigns.length);
+  holdSigns.forEach((h, i) => signBox.setMatrixAt(i, m.compose(p.set(h.x, Y + 1.45, h.z), q.setFromAxisAngle(UP, Math.atan2(h.ux, h.uz)), sc.set(4.5, 1.05, 0.4))));
+  scene.add(signBox);
 })();
+
+// ---- aircraft parked on the flight line ----
+// Fighters nose-in on the main apron's stands (stop bars at z = -815, facing south), heavies on the heavy apron's
+// stands (stop bars at z = 470, facing north). They are scenery: drawn from the same models as other players'
+// aircraft, built once each model has loaded, and hidden beyond 4 km to keep the frame rate up.
+const PARKED = [];
+['f15', 'f15', 'f15', null, 'typhoon', 'typhoon', null, 'a10', 'a10', null, 'f15', null, null]
+  .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6300 + 280 * k, stop: -815, face: 1 }); });
+['b52', 'b52', null, 'b748', null, 'b757', null, 'ac130', 'ac130', null, null, null]
+  .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6200 + 300 * k, stop: 470, face: -1 }); });
+let parkedCheckAt = 0;
+// A model is dozens of parts; parked, nothing moves, so its parts are merged into one mesh per material and an
+// aircraft costs a few draw calls instead of dozens.
+function mergeParked(g) {
+  g.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), byMat = new Map(), keep = [];
+  g.traverse(o => {
+    if (!o.isMesh) return;
+    if (Array.isArray(o.material) || !o.geometry.attributes.normal) { keep.push(o); return; }
+    (byMat.get(o.material) || byMat.set(o.material, []).get(o.material)).push(o);
+  });
+  const out = new THREE.Group(), M = new THREE.Matrix4();
+  for (const [mat, list] of byMat) {
+    const uv = list.every(o => o.geometry.attributes.uv), pos = [], nrm = [], uvs = [], idx = [];
+    for (const o of list) {
+      M.multiplyMatrices(inv, o.matrixWorld);
+      const geo = o.geometry.clone().applyMatrix4(M), p = geo.attributes.position, nm = geo.attributes.normal, base = pos.length / 3;
+      for (let i = 0; i < p.count; i++) { pos.push(p.getX(i), p.getY(i), p.getZ(i)); nrm.push(nm.getX(i), nm.getY(i), nm.getZ(i)); if (uv) uvs.push(geo.attributes.uv.getX(i), geo.attributes.uv.getY(i)); }
+      if (geo.index) for (let i = 0; i < geo.index.count; i++) idx.push(base + geo.index.getX(i));
+      else for (let i = 0; i < p.count; i++) idx.push(base + i);
+      // a mirrored part (negative scale) has its faces wound the other way
+      if (M.determinant() < 0) for (let i = idx.length - (geo.index ? geo.index.count : p.count); i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
+      geo.dispose();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    if (uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = mesh.receiveShadow = true;
+    out.add(mesh);
+  }
+  for (const o of keep) { const c = o.clone(); M.multiplyMatrices(inv, o.matrixWorld); M.decompose(c.position, c.quaternion, c.scale); out.add(c); }
+  out.position.copy(g.position); out.quaternion.copy(g.quaternion); out.scale.copy(g.scale);
+  return out;
+}
+function updateParkedAircraft(now) {
+  if (now - parkedCheckAt < 300) return;
+  parkedCheckAt = now;
+  for (const P of PARKED) {
+    if (!P.obj) {
+      if (!MODELS[P.ac]) continue;
+      const g = ghostModel(P.ac);
+      g.rotation.y = P.face > 0 ? Math.PI : 0;
+      g.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(g);
+      g.position.set(P.x, CITY_H - b.min.y + 0.05, P.face > 0 ? P.stop - 4 - b.max.z : P.stop + 4 - b.min.z);
+      P.obj = mergeParked(g);
+      scene.add(P.obj);
+    }
+    P.obj.visible = (P.obj.position.x - camera.position.x) ** 2 + (P.obj.position.z - camera.position.z) ** 2 < 4000 * 4000;
+  }
+}
 
 // ---------------- city ----------------
 // World-space shader helpers: patterns (windows, streets) are drawn from world position, so
@@ -8472,6 +8664,7 @@ function frame(now) {
   updateGearOverspeed(dt);
   updateCamera(dt, now);
   updateSceneryVisibility(now);
+  updateParkedAircraft(now);
   updatePapi();
   const stall = running ? updateHUD() : false;
   updateAudio(stall);
