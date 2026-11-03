@@ -2403,42 +2403,82 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
 const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b748: null, b52: null, ac130: null, su30: null, concorde: null }; // Blender-built models, filled in as they load
-const AB_MATS = [
-  ['#62aaff', 0.24], // cool outer sheath
-  ['#ff7136', 0.58], // turbulent orange flame
-  ['#ffc77d', 0.72], // hot inner plume
-  ['#fff4d4', 0.92]  // bright nozzle core
-].map(([color, opacity]) => new THREE.MeshBasicMaterial({
-  color, transparent: true, opacity, blending: THREE.AdditiveBlending,
-  depthWrite: false, side: THREE.DoubleSide, fog: false
-}));
-const AB_SHOCK_COLORS = ['#b9e3ff', '#ffbd87', '#8ec5ff', '#ffd0a0', '#9ccfff'];
+// Afterburner: a shader-drawn exhaust plume and a glowing nozzle. In reheat the jet leaves the nozzle as a short,
+// hot yellow-orange core inside a translucent pink-to-violet sheath, with a train of evenly spaced shock diamonds
+// (where the over-expanded jet recompresses) that fade downstream, and a turbulent flicker. Seen from behind,
+// the nozzle shows its flame holder: glowing rings and spokes, dull orange at high dry power, bright in reheat.
+const AB_LEN = 9.5, AB_R = 0.5; // plume length and nozzle radius before the aircraft's abScale
+const AB_PLUME_VERT = `uniform float uLen; varying float vZ; varying vec3 vN, vV;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() {
+  vZ = position.z / uLen;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+  gl_Position = projectionMatrix * mv;
+#include <logdepthbuf_vertex>
+}`;
+const AB_PLUME_FRAG = `uniform float uTime, uK, uSeed, uCore; varying float vZ; varying vec3 vN, vV;
+#include <logdepthbuf_pars_fragment>
+void main() {
+#include <logdepthbuf_fragment>
+  float x = clamp(vZ, 0.0, 1.0), facing = abs(dot(vN, vV));
+  float thick = pow(facing, 1.4);                       // a soft, rounded edge: the plume is thickest face-on
+  float reach = mix(0.45, 1.0, uK);                      // more reheat, longer plume
+  float fade = smoothstep(reach, reach * 0.2, x);
+  float flick = 0.82 + 0.18 * sin(uTime * 41.0 + uSeed + x * 23.0) * sin(uTime * 27.0 + uSeed * 1.7 + x * 11.0);
+  // shock diamonds: sharp bright nodes about a nozzle diameter apart, weakening downstream
+  float cells = 6.0, node = pow(0.5 + 0.5 * cos(6.2831 * (x * cells - 0.35)), 10.0) * exp(-x * 2.4) * smoothstep(0.03, 0.09, x);
+  vec3 hot = vec3(1.0, 0.6, 0.22), pink = vec3(0.95, 0.42, 0.72), violet = vec3(0.5, 0.36, 1.0);
+  vec3 sheath = mix(hot, mix(pink, violet, smoothstep(0.15, 0.7, x)), smoothstep(0.0, 0.22, x));
+  vec3 c;
+  if (uCore > 0.5) { // the hot inner core: yellow-white at the exit, short
+    float coreFade = smoothstep(0.42 * reach, 0.0, x);
+    c = mix(vec3(1.0, 0.95, 0.75), hot, smoothstep(0.0, 0.25, x)) * thick * coreFade * flick * 1.0;
+    c += vec3(1.0, 0.92, 1.0) * node * thick * 1.8 * coreFade;
+  } else {
+    c = sheath * (0.25 + 0.75 * thick) * fade * flick * 0.5;
+    c += vec3(0.85, 0.75, 1.0) * node * thick * fade * 1.5;
+  }
+  gl_FragColor = vec4(c * (0.55 + 0.45 * uK), 1.0);
+}`;
+const AB_NOZZLE_FRAG = `uniform float uTime, uHeat, uSeed; varying vec2 vUv;
+#include <logdepthbuf_pars_fragment>
+void main() {
+#include <logdepthbuf_fragment>
+  vec2 q = vUv - 0.5; float r = length(q) * 2.0, a = atan(q.y, q.x);
+  if (r > 1.0) discard;
+  float rings = smoothstep(0.08, 0.0, abs(r - 0.38)) + smoothstep(0.07, 0.0, abs(r - 0.7)) * 0.8;
+  float spokes = pow(0.5 + 0.5 * cos(a * 12.0), 8.0) * smoothstep(0.2, 0.35, r) * smoothstep(0.95, 0.75, r);
+  float glow = (0.55 + 0.45 * (1.0 - r)) + 0.9 * rings + 0.6 * spokes;
+  float flick = 0.9 + 0.1 * sin(uTime * 33.0 + uSeed + r * 9.0);
+  vec3 dull = vec3(0.9, 0.32, 0.08), bright = vec3(1.0, 0.72, 0.35);
+  vec3 c = mix(dull, bright, clamp(uHeat - 0.4, 0.0, 1.0)) * glow * flick * uHeat * smoothstep(1.0, 0.85, r);
+  gl_FragColor = vec4(c, 1.0);
+}`;
 function addAfterburner(side, x, y, z) {
   const ab = new THREE.Group(); ab.position.set(x, y, z); plane.add(ab);
-  const size = A.rig.abScale || 1;
-  ab.userData.s = size;
-  ab.userData.phase = Object.keys(parts).filter(k => /^ab/.test(k)).length * 1.7;
-  ab.userData.flames = AB_MATS.map(mat => mat.clone());
+  const size = A.rig.abScale || 1, seed = Object.keys(parts).filter(k => /^ab/.test(k)).length * 1.7;
+  ab.userData.s = size; ab.userData.k = 0;
   ab.scale.setScalar(size);
-  const plume = (radius, length, material) => {
-    const g = new THREE.ConeGeometry(radius, length, 24, 1, true);
-    g.translate(0, length / 2, 0); g.rotateX(Math.PI / 2);
-    const mesh = new THREE.Mesh(g, material); mesh.frustumCulled = false; ab.add(mesh);
-  };
-  plume(0.72, 6.4, ab.userData.flames[0]);
-  plume(0.49, 4.8, ab.userData.flames[1]);
-  plume(0.30, 3.25, ab.userData.flames[2]);
-  plume(0.16, 1.9, ab.userData.flames[3]);
-  // Periodic shock diamonds give the exhaust a hot, compressed jet-plume profile.
-  [[0.36, 0.05], [0.43, 0.045], [0.34, 0.04], [0.38, 0.035], [0.28, 0.03]].forEach(([r, tube], i) => {
-    const mat = new THREE.MeshBasicMaterial({
-      color: AB_SHOCK_COLORS[i], transparent: true, opacity: 0.42 - i * 0.035,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false
-    });
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 8, 24), mat);
-    ring.position.z = 0.55 + i * 0.88;
-    ab.add(ring);
+  const mat = (frag, extra) => new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uK: { value: 0 }, uSeed: { value: seed }, uCore: { value: 0 }, uLen: { value: AB_LEN }, uHeat: { value: 0 }, ...extra },
+    vertexShader: frag === AB_NOZZLE_FRAG ? 'varying vec2 vUv;\n#include <common>\n#include <logdepthbuf_pars_vertex>\nvoid main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);\n#include <logdepthbuf_vertex>\n}' : AB_PLUME_VERT,
+    fragmentShader: frag, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    side: frag === AB_NOZZLE_FRAG ? THREE.FrontSide : THREE.DoubleSide
   });
+  // plume: an open, slightly widening tube from the nozzle exit back along +Z
+  const tube = (r0, r1, len) => {
+    const g = new THREE.CylinderGeometry(r1, r0, len, 32, 1, true);
+    g.rotateX(Math.PI / 2); g.translate(0, 0, len / 2);
+    return g;
+  };
+  const sheath = new THREE.Mesh(tube(AB_R * 0.95, AB_R * 1.25, AB_LEN), mat(AB_PLUME_FRAG));
+  const core = new THREE.Mesh(tube(AB_R * 0.62, AB_R * 0.5, AB_LEN), mat(AB_PLUME_FRAG, { uCore: { value: 1 } }));
+  const nozzle = new THREE.Mesh(new THREE.CircleGeometry(AB_R * 0.95, 48), mat(AB_NOZZLE_FRAG));
+  nozzle.position.z = -0.08; // just inside the exit, facing aft
+  for (const m of [sheath, core, nozzle]) { m.frustumCulled = false; m.renderOrder = 5; ab.add(m); }
+  ab.userData.plume = [sheath, core]; ab.userData.nozzle = nozzle;
   ab.visible = false;
   parts[side] = ab;
 }
@@ -6930,16 +6970,20 @@ function updateVisuals(dt) {
     else w.spin *= Math.exp(-dt * (S.gearDown ? 0.4 : 6));
     w.m.rotation.x += w.spin * dt;
   }
-  const abOn = running && !S.crashed && !!A.thrustAB && S.throttle > AB_AT;
+  // afterburner: reheat lights over about a third of a second; the nozzle glows from high dry power upwards
+  const live = running && !S.crashed;
+  const abTarget = live && A.thrustAB && S.throttle > AB_AT ? 0.35 + 0.65 * (S.throttle - AB_AT) / (1 - AB_AT) : 0;
   for (const ab of [parts.abL, parts.abR, parts.abL2, parts.abR2].filter(Boolean)) {
-    ab.visible = abOn;
-    if (abOn) {
-      const k = 0.55 + (S.throttle - AB_AT) / (1 - AB_AT) * 0.45, s = ab.userData.s || 1;
-      const flutter = 1 + 0.035 * Math.sin(S.time * 31 + ab.userData.phase);
-      const width = 0.97 + 0.05 * Math.sin(S.time * 19 + ab.userData.phase * 1.4);
-      ab.scale.set(s * width, s * width, s * k * flutter);
-      ab.userData.flames[0].opacity = 0.18 + 0.04 * (0.5 + 0.5 * Math.sin(S.time * 23 + ab.userData.phase));
+    ab.userData.k += (abTarget - ab.userData.k) * Math.min(1, dt / 0.12);
+    const k = ab.userData.k, heat = live && A.thrustAB ? clamp((S.throttle - 0.55) / (AB_AT - 0.55), 0, 1) * 0.55 + k * 0.9 : 0;
+    ab.visible = heat > 0.02;
+    if (!ab.visible) continue;
+    for (const m of ab.userData.plume) {
+      m.visible = k > 0.02;
+      const u = m.material.uniforms; u.uTime.value = S.time; u.uK.value = k;
+      m.scale.z = 0.6 + 0.4 * k + 0.03 * Math.sin(S.time * 29 + u.uSeed.value);
     }
+    const nu = ab.userData.nozzle.material.uniforms; nu.uTime.value = S.time; nu.uHeat.value = heat;
   }
   emitStumps(dt);
   S.bayOpen = Math.max(0, (S.bayOpen || 0) - dt);
