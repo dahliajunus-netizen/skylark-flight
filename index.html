@@ -116,6 +116,20 @@ body.noui .mpTag { display: none; }
 .tbtn { font: 700 11px var(--font-ui); letter-spacing: .1em; color: var(--fg); background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 8px; padding: 9px 11px; cursor: pointer; touch-action: manipulation; }
 .tbtn:hover { border-color: var(--cyan); }
 #graphicsPanel { z-index: 40; background: rgba(4,8,13,.82); }
+#roomsPanel { z-index: 40; background: rgba(4,8,13,.82); }
+#roomsPanel .card { width: min(500px, 100%); }
+#roomNow { color: var(--dim); font-size: 13px; }
+#roomNow b { color: var(--cyan); }
+.room-list { display: grid; gap: 6px; margin: 12px 0; max-height: 40vh; overflow-y: auto; }
+.room-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--glass-edge); border-radius: 8px; background: rgba(255,255,255,.045); color: var(--fg); font: 600 14px var(--font-ui); text-align: left; cursor: pointer; }
+.room-row span { margin-left: auto; color: var(--dim); font: 12px var(--font-num); }
+.room-row[aria-current="true"] { border-color: var(--cyan); color: var(--cyan); cursor: default; }
+.room-empty { color: var(--dim); font-size: 13px; padding: 6px 2px; }
+#roomForm { display: flex; gap: 8px; }
+#roomIn { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 12px; color: inherit; background: rgba(255,255,255,.08); border: 1px solid var(--glass-edge); border-radius: 8px; }
+#roomIn:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+.room-hide { display: flex; gap: 8px; align-items: center; margin-top: 10px; color: var(--dim); font-size: 13px; }
+#roomErr { margin: 8px 0 0; }
 #graphicsPanel .card { width: min(480px, 100%); }
 .graphics-options { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
 .graphics-option { min-height: 68px; text-align: left; padding: 12px; border: 1px solid var(--glass-edge); border-radius: 8px; background: rgba(255,255,255,.045); color: var(--fg); cursor: pointer; font: 700 14px var(--font-ui); }
@@ -318,6 +332,19 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   </div>
 </div>
 
+<div id="roomsPanel" class="overlay" hidden>
+  <div class="card glass">
+    <div class="eyebrow">MULTIPLAYER</div>
+    <h2>Rooms</h2>
+    <p id="roomNow"></p>
+    <div id="roomList" class="room-list" role="list"></div>
+    <form id="roomForm"><input id="roomIn" maxlength="24" autocomplete="off" spellcheck="false" placeholder="Room name" aria-label="Room name"><button class="btn primary" type="submit">Create or join</button></form>
+    <label class="room-hide"><input type="checkbox" id="roomHidden"> Hidden: not in this list, join by name or invite link</label>
+    <p id="roomErr" class="reason" hidden>Use 2 to 24 letters, numbers, spaces, - or _.</p>
+    <div class="actions"><button class="btn" id="roomInvite">Copy invite link</button><button class="btn primary" id="closeRooms">Done</button></div>
+  </div>
+</div>
+
 <div id="touch" hidden>
   <div id="stick" class="glass"><div id="knob"></div></div>
   <div id="thrTrack" class="glass"><span>THR</span><div id="thrFill"></div></div>
@@ -337,6 +364,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <button class="btn primary" id="goRunway">Take off from runway</button>
       <button class="btn" id="goAir">Start airborne</button>
       <button class="btn" id="menuGraphics">Graphics</button>
+      <button class="btn" id="menuRooms">Rooms</button>
     </div>
     <dl class="keys key-only" id="keyList">
       <dt>Mouse aim</dt><dd>Pick it in the controls picker (menu or pause): move the mouse and the nose follows the circle; left click fires the gun. W/S/A/D still override</dd>
@@ -408,6 +436,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <button class="btn" id="pApproach">Approach</button>
       <button class="btn" id="pCallsign">Change callsign</button>
       <button class="btn" id="pauseGraphics">Graphics</button>
+      <button class="btn" id="pauseRooms">Rooms</button>
       <button class="btn" id="pRebuild">Rebuild city</button>
     </div>
   </div>
@@ -7652,7 +7681,7 @@ function mpPeer(id) {
   }
   return P;
 }
-function dropPeer(id) {
+function dropPeer(id, quiet = false) {
   const P = MP.peers.get(id);
   if (!P) return;
   if (P.obj) scene.remove(P.obj);
@@ -7661,7 +7690,7 @@ function dropPeer(id) {
   MP.lockedBy.delete(id);
   P.tag.remove();
   MP.peers.delete(id);
-  if (P.name !== '…') { toast(P.name + ' left'); chatLine('', P.name + ' left', 'sys'); }
+  if (P.name !== '…' && !quiet) { toast(P.name + ' left'); chatLine('', P.name + ' left', 'sys'); }
   updateMpBar(); updateB52Buttons(); tally();
 }
 function b52Holder() { for (const P of MP.peers.values()) if (P.ac === 'b52' && P.cl) return P; return null; }
@@ -7816,8 +7845,9 @@ $('#bChat').onclick = () => { if (CHAT.open) closeChat(); else openChat(); };
 
 function updateMpBar() {
   const el = $('#mpBar'), n = MP.peers.size + 1;
+  if (n !== MP.lastN) { MP.lastN = n; announceRoom(); renderRooms(); }
   if (!MP.room) { setText(el, MP.failed ? 'OFFLINE' : 'CONNECTING…'); return; }
-  setText(el, `${MP.name.toUpperCase()} · ${n} ONLINE`);
+  setText(el, `${MP.name.toUpperCase()} · ${MP.roomName.toUpperCase()}${MP.roomHidden ? ' (HIDDEN)' : ''} · ${n} ONLINE`);
   el.title = [MP.name + ' (you)', ...[...MP.peers.values()].map(P => P.name + ' · ' + acShort(P.ac))].join('\n');
   el.classList.toggle('live', n > 1);
 }
@@ -7906,11 +7936,126 @@ function mpTick() {
   MP.out = {};
   if (MP.hits.length) { const ev = { k: 'h', a: MP.hits }; MP.hits = []; mpFx(ev); }
   mpSend('st', stateMsg());
+  if (performance.now() - MP.annT > 4000) { announceRoom(); renderRooms(); }
   fadeChat();
   if (MP.vote) { if (performance.now() > MP.vote.end) tally(); else renderVote(); }
 }
 // Metered's free TURN plan. The key is public like everything on this page; its usage limit is set in Metered.
 const TURN_CREDENTIALS_URL = 'https://YOUR_APP.metered.live/api/v1/turn/credentials?apiKey=707514ac080586ae65aabad5944de82d1b86';
+// Rooms. Each room is its own peer-to-peer room with its own players and its own shared city. Every page also
+// sits in a small lobby room and says there which room it is in (unless that room is hidden), so everyone can
+// see a live list of rooms and how many are in each. "Public" uses the original room, so older pages still meet.
+const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
+// a hidden room is a different room from a listed one with the same name
+const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
+  : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
+MP.roomName = 'Public'; MP.roomHidden = false; MP.lobbyRooms = new Map(); MP.annT = 0;
+{ // an invite link (?room=...&h=1) or the last room used on this device
+  const q = new URLSearchParams(location.search), inv = (q.get('room') || '').trim();
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('skylark.room') || 'null'); } catch (e) {}
+  if (ROOM_OK.test(inv)) { MP.roomName = inv; MP.roomHidden = q.get('h') === '1'; }
+  else if (saved && ROOM_OK.test(saved.name || '')) { MP.roomName = saved.name; MP.roomHidden = !!saved.hidden; }
+}
+function joinGameRoom(name, hidden) {
+  if (MP.room) leaveGameRoom();
+  MP.roomName = name; MP.roomHidden = hidden;
+  try { localStorage.setItem('skylark.room', JSON.stringify({ name, hidden })); } catch (e) {}
+  MP.t0 = performance.now(); // a newcomer here: catch up from the players already in the room
+  const room = MP.lib.joinRoom(MP.cfg, roomKey(name, hidden));
+  MP.room = room;
+  for (const n of ['st', 'fx', 'vote', 'sync', 'log', 'pw', 'ev', 'ms', 'chat']) MP.act[n] = room.makeAction(n);
+  wireGameRoom(room);
+  announceRoom();
+  updateMpBar(); renderRooms();
+  chatLine('', 'You joined ' + name + (hidden ? ' (hidden)' : ''), 'sys');
+}
+// leave the room: the other players go, and the city goes back to new, ready for the next room's own city
+function leaveGameRoom() {
+  if (!MP.room) return;
+  for (const id of [...MP.peers.keys()]) dropPeer(id, true);
+  try { MP.room.leave(); } catch (e) {}
+  MP.room = null; MP.act = {};
+  MP.synced = MP.asked = false; MP.syncFrom = ''; MP.out = {};
+  MP.vote = null; renderVote();
+  MP.lockedBy.clear(); MP.incoming.clear(); setLock(null, true);
+  rebuildCity();
+}
+// tell the lobby which room this page is in (an empty name for a hidden room)
+function announceRoom(target) {
+  MP.annT = performance.now();
+  if (!MP.lobbyAnn) return;
+  try { MP.lobbyAnn.send({ room: MP.roomHidden ? '' : MP.roomName, n: MP.peers.size + 1 }, target ? { target } : undefined); } catch (e) {}
+}
+function listRooms() {
+  const now = performance.now(), rooms = new Map();
+  for (const [id, r] of MP.lobbyRooms) {
+    if (now - r.t > 15000) { MP.lobbyRooms.delete(id); continue; }
+    if (!r.room) continue;
+    const k = r.room.toLowerCase(), e = rooms.get(k) || { name: r.room, n: 0, max: 0 };
+    e.n++; e.max = Math.max(e.max, r.n); rooms.set(k, e);
+  }
+  if (!MP.roomHidden) { const k = MP.roomName.toLowerCase(), e = rooms.get(k) || { name: MP.roomName, n: 0, max: 0 }; e.n++; e.max = Math.max(e.max, MP.peers.size + 1); rooms.set(k, e); }
+  if (!rooms.has('public')) rooms.set('public', { name: 'Public', n: 0, max: 0 });
+  return [...rooms.values()].map(e => ({ name: e.name, players: Math.max(e.n, e.max) })).sort((a, b) => b.players - a.players || a.name.localeCompare(b.name));
+}
+function renderRooms() {
+  if ($('#roomsPanel').hidden) return;
+  $('#roomNow').innerHTML = '';
+  const now = $('#roomNow');
+  now.append('You are in ');
+  const b = document.createElement('b'); b.textContent = MP.roomName; now.append(b);
+  now.append(MP.roomHidden ? ' (hidden). ' : '. ', MP.room ? (MP.peers.size + 1) + ' online here.' : 'Connecting…');
+  const list = $('#roomList');
+  list.textContent = '';
+  const rooms = listRooms();
+  for (const r of rooms) {
+    const row = document.createElement('button');
+    row.type = 'button'; row.className = 'room-row'; row.setAttribute('role', 'listitem');
+    const here = r.name.toLowerCase() === MP.roomName.toLowerCase();
+    row.setAttribute('aria-current', String(here));
+    row.textContent = r.name;
+    const c = document.createElement('span'); c.textContent = r.players ? r.players + (r.players === 1 ? ' player' : ' players') : 'empty'; row.append(c);
+    row.onclick = () => { if (!here) switchRoom(r.name, false); };
+    list.append(row);
+  }
+  if (!MP.lobby) { const e = document.createElement('div'); e.className = 'room-empty'; e.textContent = 'Finding rooms…'; list.append(e); }
+}
+function switchRoom(name, hidden) {
+  if (!MP.lib) { toast('Multiplayer is still connecting'); return; }
+  joinGameRoom(name, hidden);
+  try { history.replaceState(null, '', location.pathname); } catch (e) {} // an invite link applies once
+  toast('Joined room ' + name + (hidden ? ' (hidden)' : '') + '. The city starts fresh here');
+}
+let roomsResumeAfterClose = false;
+function openRooms() {
+  roomsResumeAfterClose = !!(running && !paused && !S.crashed);
+  if (roomsResumeAfterClose) { togglePause(true); $('#pause').hidden = true; }
+  $('#roomsPanel').hidden = false; $('#roomErr').hidden = true; $('#roomIn').value = '';
+  $('#roomHidden').checked = false;
+  renderRooms();
+}
+function closeRooms() {
+  $('#roomsPanel').hidden = true;
+  if (roomsResumeAfterClose) togglePause(false);
+  roomsResumeAfterClose = false;
+}
+$('#menuRooms').onclick = $('#pauseRooms').onclick = openRooms;
+$('#closeRooms').onclick = closeRooms;
+$('#roomIn').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') closeRooms(); });
+$('#roomForm').onsubmit = e => {
+  e.preventDefault();
+  const v = $('#roomIn').value.trim().replace(/\s+/g, ' ');
+  if (!ROOM_OK.test(v)) { $('#roomErr').hidden = false; return; }
+  $('#roomErr').hidden = true;
+  if (v.toLowerCase() === MP.roomName.toLowerCase() && $('#roomHidden').checked === MP.roomHidden) { toast('You are already in ' + MP.roomName); return; }
+  switchRoom(v, $('#roomHidden').checked);
+};
+$('#roomInvite').onclick = async () => {
+  const url = location.origin + location.pathname + '?room=' + encodeURIComponent(MP.roomName) + (MP.roomHidden ? '&h=1' : '');
+  try { await navigator.clipboard.writeText(url); toast('Invite link copied: ' + MP.roomName); }
+  catch (e) { prompt('Copy this invite link', url); }
+};
 async function mpConnect() {
   MP.connecting = true;
   let mod;
@@ -7923,9 +8068,23 @@ async function mpConnect() {
     try { const list = await (await fetch(TURN_CREDENTIALS_URL)).json(); if (Array.isArray(list) && list.length) turnConfig = list; }
     catch (e) { console.warn('TURN relay credentials did not load; trying direct connections only.', e); }
   }
-  const room = mod.joinRoom(turnConfig ? { appId: 'skylark-flight-dahliajunus', turnConfig } : { appId: 'skylark-flight-dahliajunus' }, 'main');
-  MP.room = room; MP.self = mod.selfId;
-  for (const n of ['st', 'fx', 'vote', 'sync', 'log', 'pw', 'ev', 'ms', 'chat']) MP.act[n] = room.makeAction(n);
+  MP.lib = mod; MP.self = mod.selfId;
+  MP.cfg = turnConfig ? { appId: 'skylark-flight-dahliajunus', turnConfig } : { appId: 'skylark-flight-dahliajunus' };
+  // the lobby: which rooms exist and how many are in each
+  MP.lobby = mod.joinRoom(MP.cfg, 'lobby-v1');
+  MP.lobbyAnn = MP.lobby.makeAction('ann');
+  MP.lobbyAnn.onMessage = (d, { peerId }) => {
+    if (!d || typeof d.room !== 'string' || d.room.length > 24 || (d.room && !ROOM_OK.test(d.room)) || !num(d.n, 64)) return;
+    MP.lobbyRooms.set(peerId, { room: d.room, n: Math.round(d.n), t: performance.now() });
+    renderRooms();
+  };
+  MP.lobby.onPeerJoin = id => announceRoom(id);
+  MP.lobby.onPeerLeave = id => { MP.lobbyRooms.delete(id); renderRooms(); };
+  joinGameRoom(MP.roomName, MP.roomHidden);
+  setInterval(mpTick, 100);
+}
+// the game room's messages
+function wireGameRoom(room) {
   MP.act.chat.onMessage = (d, { peerId }) => onChat(peerId, d);
   MP.act.ms.onMessage = (d, { peerId }) => onMissileMsg(peerId, d);
   MP.act.pw.onMessage = (d, { peerId }) => onPlaneHits(peerId, d);
@@ -7950,8 +8109,6 @@ async function mpConnect() {
     for (const ev of d.ev) applyFx(ev, null, true);
     if (d.i === d.n - 1 && (d.n > 1 || d.ev.length)) toast('Caught up with the shared city');
   };
-  setInterval(mpTick, 100);
-  updateMpBar();
 }
 // the callsign: asked for on the first visit, changed by clicking the player count
 function askName(change = false) {
