@@ -85,3 +85,10 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - Source: [Boeing 747-8i](https://sketchfab.com/3d-models/boeing-747-8i-cd1977bedc32412fa1ce2cda23520b84)
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: `b748_split.glb` bakes the model's object transforms and renames its moving parts for Skylark Flight: ailerons, flaps, spoilers, elevators, rudder, the four fans (so they spin), the nose, wing and body landing gear with their bogies and wheels, and the gear doors, each with its origin on its hinge. The flight-deck windows get a see-through glass material.
+
+## Concorde
+
+- Creator: [thomas333](https://sketchfab.com/thomas333)
+- Source: [Concorde 3D Model](https://sketchfab.com/3d-models/concorde-3d-model-d2222f34152d4850afff0124872fc9ba)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: `concorde_split.glb` bakes the model's object transforms; cuts the droop nose, six elevons and rudder out of the airframe skin; splits each engine's nozzle bucket into upper and lower thrust-reverser eyelids; separates the visor, landing gear legs, bogies and wheels, and gives the gear covers hinges; gives the flight-deck windows a see-through glass material; paints the airframe (the export made it fully metallic); and downsizes the largest textures to 2048 px.

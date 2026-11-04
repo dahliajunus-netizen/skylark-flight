@@ -2475,19 +2475,23 @@ const AC = {
     id: 'concorde', mass: 150000, wing: 358.25, thrust: 557600, thrustAB: 676800,
     CL0: 0.08, CLA: 3.4, stallA: 0.42, cd0: 0.0105, k: 0.22, wave: [0.95, 1.25, 0.0075],
     ram: 0.42, mmo: 2.04, // intake pressure recovery: thrust grows with Mach (to Mach 2.04, where the engine control holds it)
-    gLimit: 2.5, effV: 100, rates: [0.38, 0.14, 0.85], stabRoll: 0, tailStrike: 0.24, gear: 6.0, weapons: false, gearTime: 12, mainRetract: 'in', travel: 0.5,
-    droop: 0.218, // the nose droops 12.5° with the gear down, for the view on takeoff and landing
-    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'CONCORDE.gltf.json', podEngines: true,
-    rig: { ab: [[-4.5, -2.35, 16.4], [4.5, -2.35, 16.4], [-5.7, -2.35, 16.4], [5.7, -2.35, 16.4]], bombs: [], nuke: null },
-    box: new THREE.Box3(new THREE.Vector3(-12.8, -3.3, -37.6), new THREE.Vector3(12.8, 6.2, 24.66)), slideI: 900,
-    hitPts: [[37.0, 0, -0.5], [-24.6, 0, 0.4], [-14.1, 12.8, -2.1], [-14.1, -12.8, -2.1], [-23.5, 0, 6.2],
-      [-8.0, 5.1, -3.3], [-8.0, -5.1, -3.3], [0, 0, -1.64], [20.0, 0, -1.6]],
-    chase: [12, 95, 80], eye: [0.85, 29.8], scale: 2.6, shadow: 42, airStart: [210, 0.75], fireball: 2.0, crashBlast: [55, 1900],
+    gLimit: 2.5, effV: 100, rates: [0.38, 0.14, 0.85], stabRoll: 0, tailStrike: 0.24, gear: 5.69, noseExt: 0.42, strutHinges: true, weapons: false, gearTime: 12, mainRetract: 'in', travel: 0.5,
+    // the nose droops 12.5° with the gear down (Concorde's flaps, in effect), for the view on takeoff and landing
+    droop: 0.218,
+    reverse: 0.3, // reverse thrust on the brake, on the ground: 30% of full dry thrust
+    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'concorde_split.glb', split: 61.66, podEngines: true,
+    // the flames fit the 1.04 m nozzle exits, behind the reverser eyelids; the model's origin is the middle of its bounds
+    rig: { ab: [[-4.70, -2.27, 17.4], [4.70, -2.27, 17.4], [-5.97, -2.27, 17.4], [5.97, -2.27, 17.4]], abScale: 0.95, bombs: [], nuke: null },
+    box: new THREE.Box3(new THREE.Vector3(-12.41, -3.2, -31.5), new THREE.Vector3(12.41, 5.69, 30.8)), slideI: 900,
+    hitPts: [[31.0, 0, -1.0], [-30.8, 0, 0.4], [-16.5, 12.4, -2.3], [-16.5, -12.4, -2.3], [-26.0, 0, 5.69],
+      [-14.0, 5.3, -2.6], [-14.0, -5.3, -2.6], [0, 0, -2.5], [20.0, 0, -2.5]],
+    // the captain's seat, behind the windscreen (y -0.54 to 0.1, z -24.6 to -22.6)
+    chase: [12, 95, 80], eye: [-0.25, 22.2, -0.45], scale: 2.6, shadow: 42, airStart: [210, 0.75], fireball: 2.0, crashBlast: [55, 1900],
     sound: { whine: [420, 1100, 1.5], roar: [70, 230, 1.7] },
     eyebrow: 'AÉROSPATIALE/BAC CONCORDE · SUPERSONIC AIRLINER',
     desc: 'Fly Concorde from the military airbase on the south coast: 61.66 m long, four Olympus engines with reheat, and a cruise at twice the speed of sound. Climb high before going supersonic, where the air is thin enough to let it run at Mach 2. Slow down and it needs a lot of nose-up and a lot of power.',
     specs: ['ROTATE 200 KT', 'APPROACH 165 KT', '2.5 G LIMIT', 'MACH 2.04 CRUISE', '4 × OLYMPUS 593', 'NO WEAPONS', 'RWY 36 · 16,400 FT'],
-    tip: 'Takeoff: full throttle into reheat, rotate at about 200 kt, raise the gear (the nose comes up with it). Climb to 50,000 ft or more and use reheat to push through Mach 1, then throttle back out of reheat: it holds Mach 2 on dry thrust. Land at about 165 kt, nose high.'
+    tip: 'Takeoff: full throttle into reheat, rotate at about 200 kt, raise the gear (the nose comes up with it). Climb to 50,000 ft or more and use reheat to push through Mach 1, then throttle back out of reheat: it holds Mach 2 on dry thrust. Land at about 165 kt, nose high, and hold the brake for reverse thrust.'
   },
   ac130: {
     // Lockheed Martin AC-130J Ghostrider: a C-130J-based gunship, ~62 t on a mission, 162 m² wing, four AE 2100D3
@@ -2965,6 +2969,11 @@ function buildFromGltf(model) {
       else if (/^canard_/.test(n)) { m.name = 'canard ' + (side === 'L' ? 'left' : 'right'); if (A.canards) parts.canards.push(hinged()); else parts['stab' + side] = hinged(); }
       else if (/^nozzle_/.test(n)) parts.tvc.push(hinged()); // thrust-vectoring nozzles pivot at their front
       else if (/^elevon_/.test(n)) { m.name = 'wing' + side + ' elevon'; parts.elevons.push(hinged()); }
+      else if (n === 'droop_nose' || n === 'droop_visor') { // Concorde's nose, hinged at its lower edge; its visor drops further
+        const p = hinged(); p.userData.droop = n === 'droop_visor' ? 1.8 : 1; parts.droop.push(p);
+      }
+      // thrust-reverser eyelids: the upper lid's trailing edge swings down, the lower lid's up
+      else if (/^reverser_(up|dn)_/.test(n)) parts.reversers.push({ pivot: hinged(), sign: /^reverser_up/.test(n) ? 1 : -1 });
       else if (/^rudder(_|$)/.test(n)) { m.name = 'vertical_tail'; parts.rudders.push(hinged()); }
       else if (n === 'airbrake' || /^spoiler_/.test(n)) parts.spoilers.push(hinged());
       else if (/^fan_face_/.test(n)) { m.name = n; parts.fans.push(hinged()); } // turbofan faces spin about the engine axis
@@ -3033,7 +3042,7 @@ function addPropDisc(m) {
   parts.props.push({ m, disc });
 }
 
-// Concorde: 61.66 m long, 25.6 m span. The Blender model (CONCORDE.gltf.json, concorde/build_concorde.py) replaces this stand-in once it loads.
+// Concorde: 61.66 m long, 25.6 m span. The split model (concorde_split.glb) replaces this stand-in once it loads.
 function buildConcorde() {
   if (MODELS.concorde) return buildFromGltf(MODELS.concorde);
   const white = M('#f1f2ef', 0.4, 0.1), grey = M('#dcdfe1', 0.45, 0.1), dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
@@ -3227,7 +3236,7 @@ function setAircraft(id) {
   for (const mark of parts.damageMarks || []) mark.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.fans = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
+  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.fans = []; parts.reversers = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
   ({ f15: buildF15, typhoon: buildTyphoon, su34: buildSU30, b737: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
   buildExteriorLights();
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
@@ -5984,7 +5993,11 @@ function physics(dt) {
     // engine control winds the thrust back so it can't run away above Mach 2.04
     * (A.ram ? (1 + A.ram * Math.max(0, Math.min(mach, A.mmo) - 0.5)) * clamp((A.mmo + 0.06 - mach) / 0.06, 0, 1) : 1);
   force.set(0, 0, 0);
-  force.addScaledVector(F, thrust * (S.dmg.engL + S.dmg.engR) / 2);
+  // Reverse thrust (Concorde): holding the brake on the ground swings the nozzle buckets shut over about a second and
+  // turns the engines' jets forward at reverse power, A.reverse of full dry thrust, fading out below about 40 kt
+  S.rev = (S.rev || 0) + ((A.reverse && S.brake && S.onGround && !S.crashed ? 1 : 0) - (S.rev || 0)) * Math.min(1, dt * 1.5);
+  const reverse = (A.reverse || 0) * A.thrust * S.rev * clamp(V / 20, 0, 1);
+  force.addScaledVector(F, (thrust * (1 - S.rev) - reverse) * (S.dmg.engL + S.dmg.engR) / 2);
   if (A.recoil && S.firing && S.ammo > 0) force.addScaledVector(F, -A.recoil); // the GAU-8 pushes back
   if (V > 0.5) {
     vhat.copy(v).divideScalar(V);
@@ -7186,7 +7199,8 @@ function updateVisuals(dt) {
   for (const c of parts.canards) c.rotation.x = inp.pitch * 0.35; // foreplanes lead the pitch the other way
   for (const z of parts.tvc) z.rotation.x = -inp.pitch * 0.26; // thrust vectoring: up to 15° with the stick
   for (const e of parts.elevons) e.rotation.x = -inp.pitch * 0.3 + (e.position.x < 0 ? 1 : -1) * inp.roll * 0.3; // pitch and roll together
-  for (const d of parts.droop) d.rotation.x += (-A.droop * S.gearT - d.rotation.x) * Math.min(1, dt * 0.8);
+  for (const d of parts.droop) d.rotation.x += (-A.droop * (d.userData.droop || 1) * S.gearT - d.rotation.x) * Math.min(1, dt * 0.8);
+  for (const r of parts.reversers) r.pivot.rotation.x = r.sign * 0.95 * (S.rev || 0); // closed behind the jet pipe at full reverse
   // propellers: a visible turn rate (the real ones run ~1,000 rpm, far past what a frame can show) and a blur disc
   const spin = running && !S.crashed ? 14 + 26 * S.throttle : 0;
   // turbofans spool up and down with the throttle (a slow lag, as real engines do) and stop with the engines out
