@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15, a Eurofighter Typhoon, a Boeing 757 or a B-52 from a huge military airbase next to a destructible city, with other players online.">
+<meta name="description" content="Skylark: a browser flight simulator. Fly an F-15, a Eurofighter Typhoon, a Boeing 737 MAX or a B-52 from a huge military airbase next to a destructible city, with other players online.">
 <style>:root{color-scheme:dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -363,7 +363,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h1>Skylark</h1>
     <p id="acDesc"></p>
     <div class="specs" id="acSpecs"></div>
-    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="su34" aria-pressed="false">Su-34</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="su34" aria-pressed="false">Su-34</button><button class="pickb" data-ac="b737" aria-pressed="false">737 MAX 8</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <div class="actions">
@@ -432,7 +432,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="card glass">
     <div class="eyebrow">HOLDING</div>
     <h2>Paused</h2>
-    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="su34" aria-pressed="false">Su-34</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="su34" aria-pressed="false">Su-34</button><button class="pickb" data-ac="b737" aria-pressed="false">737 MAX 8</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <div class="actions">
@@ -1676,7 +1676,7 @@ float pvN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f)
 const PARKED = [];
 ['f15', 'f15', 'f15', null, 'typhoon', 'typhoon', null, 'su34', 'su34', null, 'f15', null, null]
   .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6300 + 280 * k, stop: -815, face: 1 }); });
-['b52', 'b52', null, 'b748', null, 'b757', null, 'ac130', 'ac130', null, null, null]
+['b52', 'b52', null, 'b748', null, 'b737', null, 'ac130', 'ac130', null, null, null]
   .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6200 + 300 * k, stop: 470, face: -1 }); });
 let parkedCheckAt = 0;
 // A model is dozens of parts; parked, nothing moves, so its parts are merged into one mesh per material and an
@@ -2430,19 +2430,22 @@ const AC = {
     specs: ['ROTATE 160 KT', 'APPROACH 155 KT', '2 G LIMIT', '8 × TF33 ENGINES', 'STORES', 'RWY 36 · 16,400 FT'],
     tip: 'Start airborne puts you at 30,000 ft over the sea, cruising toward the city. With the B41, keep flying straight at full power after release: you clear its 13 km blast by about half a kilometre. Takeoff: full throttle and a long roll; the B-52 lifts off almost level at about 160 kt with a gentle pull. Drop bombs from at least 1,500 ft, wing bombs first, then the bay. Lower the gear and land at about 155 kt.'
   },
-  b757: {
-    id: 'b757', mass: 80000, wing: 185, thrust: 380000, thrustAB: 0,
-    CL0: 0.35, CLA: 5.0, stallA: 0.28, cd0: 0.022, k: 0.045, wave: [0.78, 0.95, 0.08],
-    gLimit: 2.5, effV: 85, rates: [0.35, 0.15, 0.6], stabRoll: 0, tailStrike: 0.2, gear: 4.4, weapons: false, gearTime: 8, mainRetract: 'in', gearTruckTilt: 9.6 * Math.PI / 180, travel: 0.45,
-    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B757.gltf.json', podEngines: true, rig: { ab: [], bombs: [], nuke: null },
-    box: new THREE.Box3(new THREE.Vector3(-19, -3.95, -23.65), new THREE.Vector3(19, 9.2, 23.65)), slideI: 420,
-    hitPts: [[23.65, 0, -0.35], [-23.65, 0, 1.0], [-3.4, 19, 0.55], [-3.4, -19, 0.55], [-21.9, 0, 9.2], [-21.0, 7.6, 1.42], [-21.0, -7.6, 1.42], [0, 0, -1.9], [7.15, 6.5, -3.9], [7.15, -6.5, -3.9]],
-    chase: [13, 85, 70], eye: [0.9, 19.7], scale: 2.3, shadow: 34, airStart: [125, 0.5], fireball: 1.8, crashBlast: [50, 1600],
-    sound: { whine: [350, 900, 1.6], roar: [110, 300, 1.25] },
-    eyebrow: 'BOEING 757-200 · TWIN-ENGINE AIRLINER',
-    desc: 'Fly a Boeing 757 from a huge military airbase on the south coast, just outside the city, with its downtown towers, river, suburbs and hills. It weighs 80 tonnes, has no weapons, turns gently and carries a lot of momentum, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
-    specs: ['ROTATE 145 KT', 'APPROACH 140 KT', '2.5 G LIMIT', 'MAX MACH 0.86', 'NO WEAPONS', 'RWY 36 · 16,400 FT'],
-    tip: 'Takeoff: full throttle, pull back gently at 145 kt, then raise the gear. It rolls slowly, so start turns early. Lower the gear and land at about 140 kt.'
+  b737: {
+    // Boeing 737 MAX 8: ~65 t at a typical weight, 127 m² wing, two CFM LEAP-1B (~130 kN each), Mach 0.79 cruise
+    id: 'b737', mass: 65000, wing: 127, thrust: 260000, thrustAB: 0,
+    CL0: 0.35, CLA: 5.0, stallA: 0.28, cd0: 0.022, k: 0.045, wave: [0.79, 0.94, 0.08],
+    gLimit: 2.5, effV: 80, rates: [0.4, 0.17, 0.7], stabRoll: 0, tailStrike: 0.2, gear: 6.33, strutHinges: true, weapons: false, gearTime: 7, mainRetract: 'in', travel: 0.4,
+    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'b737_split.glb', split: 39.52, podEngines: true, rig: { ab: [], bombs: [], nuke: null },
+    // the model's origin is the middle of its bounds, 2.9 m above the fuselage centreline (the fin is tall)
+    box: new THREE.Box3(new THREE.Vector3(-18, -5.3, -19.76), new THREE.Vector3(18, 6.33, 19.76)), slideI: 340,
+    hitPts: [[19.7, 0, -2.9], [-19.6, 0, -1.5], [-5.7, 18, -2.3], [-5.7, -18, -2.3], [-18.5, 0, 6.2], [-17, 7.1, -1.4], [-17, -7.1, -1.4], [0, 0, -5.0], [6, 4.85, -4.5], [6, -4.85, -4.5]],
+    // the captain's seat, behind the windscreen (y -2.52 to -1.97, z -18.2 to -16.5)
+    chase: [9, 58, 48], eye: [-2.2, 16.6, -0.45], scale: 1.95, shadow: 30, airStart: [130, 0.5], fireball: 1.6, crashBlast: [45, 1300],
+    sound: { whine: [380, 950, 1.5], roar: [115, 310, 1.2] },
+    eyebrow: 'BOEING 737 MAX 8 · NARROW-BODY AIRLINER',
+    desc: 'Fly a Boeing 737 MAX 8 from a huge military airbase on the south coast, just outside the city, with its downtown towers, river, suburbs and hills. It weighs 65 tonnes, has no weapons and turns gently, so plan ahead. The buildings are still solid, and they still come down if you hit them.',
+    specs: ['ROTATE 145 KT', 'APPROACH 140 KT', '2.5 G LIMIT', 'MAX MACH 0.82', 'NO WEAPONS', 'RWY 36 · 16,400 FT'],
+    tip: 'Takeoff: full throttle, pull back gently at 145 kt, then raise the gear. It rolls slowly, so start turns early. Hold the brake in the air to raise the spoilers. Lower the gear and land at about 140 kt.'
   },
   b748: {
     // Boeing 747-8: ~300 t at a medium weight, 554 m² wing, four GEnx-2B (~290 kN each), Mach 0.855 cruise
@@ -2520,7 +2523,7 @@ const gs = { cam: false, sel: 0, zoom: 1, fov: 16, mode: 0, target: null, w: [],
 const gsEl = {};
 let A = AC.f15, GEAR = A.gear;
 const plane = new THREE.Group();
-const AIRLINER_IDS = new Set(['b757', 'b748', 'concorde']);
+const AIRLINER_IDS = new Set(['b737', 'b748', 'concorde']);
 // a bright green phosphor: monochrome, pushed through a strong green tint, lifted and with a little more contrast
 const NVG_FILTER = 'grayscale(1) sepia(1) hue-rotate(72deg) saturate(8) brightness(1.9) contrast(1.15)';
 let nvgOn = false, exteriorLightsOn = false, exteriorLightGroup = null;
@@ -2614,7 +2617,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-const MODELS = { f15: null, typhoon: null, su34: null, b757: null, b748: null, b52: null, ac130: null, su30: null, concorde: null }; // Blender-built models, filled in as they load
+const MODELS = { f15: null, typhoon: null, su34: null, b737: null, b748: null, b52: null, ac130: null, su30: null, concorde: null }; // Blender-built models, filled in as they load
 // Afterburner: a shader-drawn exhaust plume and a glowing nozzle. In reheat the jet leaves the nozzle as a short,
 // hot yellow-orange core inside a translucent pink-to-violet sheath, with a train of evenly spaced shock diamonds
 // (where the over-expanded jet recompresses) that fade downstream, and a turbulent flicker. Seen from behind,
@@ -2961,7 +2964,8 @@ function buildFromGltf(model) {
       else if (/^nozzle_/.test(n)) parts.tvc.push(hinged()); // thrust-vectoring nozzles pivot at their front
       else if (/^elevon_/.test(n)) { m.name = 'wing' + side + ' elevon'; parts.elevons.push(hinged()); }
       else if (/^rudder(_|$)/.test(n)) { m.name = 'vertical_tail'; parts.rudders.push(hinged()); }
-      else if (n === 'airbrake') parts.spoilers.push(hinged());
+      else if (n === 'airbrake' || /^spoiler_/.test(n)) parts.spoilers.push(hinged());
+      else if (/^fan_face_/.test(n)) { m.name = n; parts.fans.push(hinged()); } // turbofan faces spin about the engine axis
       // Typhoon gear doors: one set drawn open (gear down or moving), the other closed (gear up)
       else if (/^geardoors(open|closed)$/.test(n)) { plane.add(m); parts.doorSets.push({ m, open: n.endsWith('open') }); }
       else if (/^geardoor_/.test(n) && (multi ? src.parent : src).userData.doorAxis) {
@@ -3164,10 +3168,10 @@ function buildB52() {
   parts.gear = gear;
 }
 
-// Boeing 757-200: 47.3 m long, 38 m span, 3.8 m fuselage, two underwing turbofans, tall landing gear.
-// The Blender model (B757.gltf.json) replaces this simple stand-in once it loads.
+// A twin-engine airliner stand-in (a 757-sized barrel, wings and two underwing turbofans), drawn for the 737 MAX until
+// its model (b737_split.glb) loads.
 function build757() {
-  if (MODELS.b757) return buildFromGltf(MODELS.b757);
+  if (MODELS[A.id]) return buildFromGltf(MODELS[A.id]);
   const white = M('#f1f1ee', 0.45, 0.1), blue = M('#1f4e8c', 0.5, 0.1), eng = M('#c9ccd0', 0.4, 0.4), wingMat = M('#cdd1d6', 0.5, 0.3);
   const dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75), win = M('#28323d', 0.2, 0.5);
   // fuselage barrel, nose and an upswept tail cone
@@ -3221,8 +3225,8 @@ function setAircraft(id) {
   for (const mark of parts.damageMarks || []) mark.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
-  ({ f15: buildF15, typhoon: buildTyphoon, su34: buildSU30, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
+  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.fans = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
+  ({ f15: buildF15, typhoon: buildTyphoon, su34: buildSU30, b737: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
   buildExteriorLights();
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
@@ -3325,7 +3329,7 @@ function rigGear() {
 
 // ---------------- structural damage ----------------
 // The airframe is split into zones by part name: each wing (with its pods, pylons, flaps, spoilers and stores),
-// each tailplane or canard, each fin, each 757 engine and each gear leg. Everything else is the core.
+// each tailplane or canard, each fin, each airliner engine and each gear leg. Everything else is the core.
 // Zones carry sample points from their own vertices; when one touches a building, the ground or the water,
 // that zone is torn off at the point of impact and the jet flies on without it. Only the core hitting is a crash.
 const ZONE_RULES = [['eng', /nacelle|fan_face|exhaust_cone|engine_pylon/], ['wing', /wing(?!_body)|spoiler|flap_fairing/],
@@ -3389,7 +3393,7 @@ function buildZones() {
   plane.updateMatrixWorld(true);
   plane.traverse(o => {
     if (!o.isMesh || !o.userData.fromModel || parts.gear && isInside(o, parts.gear)) return;
-    // podded engines only exist on the 757; the fighters' "nacelles" are their intake and engine-bay bodies (core)
+    // podded engines only exist on the airliners; the fighters' "nacelles" are their intake and engine-bay bodies (core)
     const nm = nameOf(o), rule = ZONE_RULES.find(([k, re]) => re.test(nm) && (k !== 'eng' || A.podEngines));
     if (!rule) { core.push(o); return; }
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
@@ -3543,7 +3547,7 @@ function ripZone(z, pl, pw) {
     z.meshes.splice(z.meshes.indexOf(m), 1);
   }
   if (z.kind === 'wing') {
-    // bombs hanging outboard of the tear go with the wing, and so does a 757's engine; a wing lost whole is
+    // bombs hanging outboard of the tear go with the wing, and so does an airliner's engine; a wing lost whole is
     // measured from its root, so stores on the fuselage stay
     const out = cut === -Infinity ? z.root + 0.4 : cut;
     for (const b of [...parts.bombs]) {
@@ -4085,7 +4089,7 @@ if (THREE.GLTFLoader) {
       parts.nuke.visible = visible;
     }
   }, undefined, err => console.warn('B28 nuclear-thunder GLB did not load; using the simple B28.', err));
-  for (const id of ['f15', 'typhoon', 'su34', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
+  for (const id of ['f15', 'typhoon', 'su34', 'b737', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
         // glTF colours are linear; this renderer treats material colours as already display-ready
@@ -6840,7 +6844,7 @@ function placeReticle(node, p) {
 }
 const el = { aimRet: $('#aimRet'), noseRet: $('#noseRet'), nukes: $('#nukes'), ccipN: $('#ccipN'), gun: $('#gun'), bombs: $('#bombs'), gunRet: $('#gunRet'), ccip: $('#ccip'), spd: $('#spd'), mach: $('#mach'), gl: $('#gload'), alt: $('#alt'), vs: $('#vs'), aoa: $('#aoa'), rwy: $('#rwy'), gnd: $('#cGnd'), brk: $('#cBrk'), gear: $('#cGear'), ab: $('#cAb'), ra: $('#cRa'), warn: $('#warn') };
 const setText = (node, s) => { if (node.textContent !== s) node.textContent = s; };
-const GEAR_VLE_KT = { su30: 300, f15: 300, typhoon: 280, su34: 300, b52: 260, b757: 260, b748: 260, concorde: 300, ac130: 220 };
+const GEAR_VLE_KT = { su30: 300, f15: 300, typhoon: 280, su34: 300, b52: 260, b737: 270, b748: 260, concorde: 300, ac130: 220 };
 const GEAR_OVERSPEED_SECONDS = 4;
 const indicatedKnots = () => S.V * Math.sqrt(S.rho / RHO) * 1.94384;
 function updateGearOverspeed(dt) {
@@ -6862,7 +6866,7 @@ function updateGearOverspeed(dt) {
   S.gearDown = false; S.gearT = 0; S.gearOverT = 0;
   toast('LANDING GEAR TORN OFF BY OVERSPEED');
 }
-const LOW_ALT_WING_LIMIT_KT = { su30: 700, f15: 700, typhoon: 700, su34: 700, b52: 500, b757: 450, b748: 450, concorde: 600, ac130: 360 };
+const LOW_ALT_WING_LIMIT_KT = { su30: 700, f15: 700, typhoon: 700, su34: 700, b52: 500, b737: 450, b748: 450, concorde: 600, ac130: 360 };
 const STRUCTURAL_OVERSPEED_AGL = 550; // 1,800 ft
 const STRUCTURAL_OVERSPEED_CLEAR_AGL = 760;
 const STRUCTURAL_OVERSPEED_SECONDS = 6;
@@ -7183,6 +7187,9 @@ function updateVisuals(dt) {
   for (const d of parts.droop) d.rotation.x += (-A.droop * S.gearT - d.rotation.x) * Math.min(1, dt * 0.8);
   // propellers: a visible turn rate (the real ones run ~1,000 rpm, far past what a frame can show) and a blur disc
   const spin = running && !S.crashed ? 14 + 26 * S.throttle : 0;
+  // turbofans spool up and down with the throttle (a slow lag, as real engines do) and stop with the engines out
+  S.fanW = (S.fanW || 0) + ((running && !S.crashed ? 5 + 40 * S.throttle : 0) - (S.fanW || 0)) * Math.min(1, dt * 0.6);
+  for (const fan of parts.fans) fan.rotation.z += S.fanW * dt;
   for (const p of parts.props) {
     p.m.rotation.z += spin * dt;
     p.disc.visible = !!p.m.parent;

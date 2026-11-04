@@ -71,3 +71,10 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - Source: [Sukhoi Su-34 - Figther Jet - Free](https://sketchfab.com/3d-models/sukhoi-su-34-figther-jet-free-2e81f16e6769441da3b5bc50237473ce)
 - License: [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 - Changes: `su34_split.glb` separates the canards, stabilators, rudders, canopy, landing gear struts, bogies and wheels, and gear doors into named parts, each with its origin on its hinge; cuts the flaperons out of the wing skins along their hinge lines; and gives each gear door its hinge line and closing angle. This adapted model is shared under the same license.
+
+## Boeing 737 MAX 8 (Lion Air)
+
+- Creator: [Oyan3D](https://sketchfab.com/oyan3D)
+- Source: [737 MAX Lion Air](https://sketchfab.com/3d-models/737-max-lion-air-2747cad8b4c64122abe992c9ad1e8bd1)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: `b737_split.glb` bakes the model's object transforms, cuts the flaps, ailerons, spoilers, elevators and rudder out of the wing, tailplane and fin skins along their hinge lines, and separates the engine fan faces (so they spin), the landing gear struts and wheels, and the nose gear doors into named parts, each with its origin on its hinge. The flight-deck windows get a see-through glass material.
