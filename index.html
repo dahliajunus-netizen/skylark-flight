@@ -8268,7 +8268,7 @@ const TURN_CREDENTIALS_URL = 'https://YOUR_APP.metered.live/api/v1/turn/credenti
 // sits in a small lobby room and says there which room it is in (unless that room is hidden), so everyone can
 // see a live list of rooms and how many are in each. "Public" uses the original room, so older pages still meet.
 const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
-const BUILD = '2026-11-04';
+const BUILD = '2026-11-04b';
 // a hidden room is a different room from a listed one with the same name
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
@@ -8348,6 +8348,8 @@ function renderRooms() {
     item('BLOCKED-NETWORK RELAY', c.turn === 'ready' ? 'READY' : c.turn === 'saved' ? 'SAVED' : 'NONE', c.turn !== 'none');
     item('DIRECT LINKS', c.rtc ? 'OK' : 'BLOCKED', c.rtc);
     item('PLAYERS HEARD', String(c.heard), c.heard > 0);
+    const off = Math.round(c.clock / 1000), offText = Math.abs(off) >= 120 ? Math.round(off / 60) + ' MIN' : off + ' S';
+    item('CLOCK', !c.clockChecked ? 'UNCHECKED' : c.clock ? 'CORRECTED ' + (off > 0 ? '+' : '') + offText : 'OK', c.clockChecked);
   }
   $('#roomNow').innerHTML = '';
   const now = $('#roomNow');
@@ -8436,8 +8438,29 @@ $('#roomInvite').onclick = async () => {
   try { await navigator.clipboard.writeText(url); toast('Invite link copied: ' + MP.roomName); }
   catch (e) { prompt('Copy this invite link', url); }
 };
+// Players find each other through relay announcements stamped with the computer's clock, and each page only
+// listens for announcements newer than its own "now". A computer whose clock is minutes off (a wrong time or time
+// zone) then throws away everyone else's announcements, or everyone throws away its own, and that player sees no
+// one. So before connecting, the page asks the web server for the time and, if the computer is more than 5 s out,
+// runs Date.now on the corrected time (the game itself times things with performance.now).
+const realNow = Date.now.bind(Date);
+MP.clockOffset = 0;
+Date.now = () => realNow() + MP.clockOffset;
+async function syncClock() {
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 3000);
+    const t0 = realNow(), res = await fetch(location.href.split('#')[0], { method: 'HEAD', cache: 'no-store', signal: ctl.signal }), t1 = realNow();
+    clearTimeout(timer);
+    const server = Date.parse(res.headers.get('date') || '');
+    if (!isFinite(server)) return;
+    const off = server + 500 - (t0 + t1) / 2; // the Date header is whole seconds
+    MP.clockChecked = true;
+    if (Math.abs(off) > 5000) { MP.clockOffset = off; console.warn('This computer\'s clock is ' + Math.round(off / 1000) + ' s off; correcting it for multiplayer.'); }
+  } catch (e) { console.warn('Could not check the clock against the server.', e); }
+}
 async function mpConnect() {
   MP.connecting = true;
+  await syncClock();
   let mod;
   try { mod = await import('https://cdn.jsdelivr.net/npm/trystero@0.25.4/+esm'); }
   catch (e) { console.warn('Multiplayer is unavailable: the peer-to-peer library did not load.', e); MP.failed = true; updateMpBar(); renderRooms(); return; }
@@ -8501,7 +8524,7 @@ $('#roomReconnect').onclick = mpReconnect;
 function connectionCheck() {
   let open = 0, total = 0;
   try { const socks = MP.lib && MP.lib.getRelaySockets ? MP.lib.getRelaySockets() : {}; for (const ws of Object.values(socks)) { total++; if (ws && ws.readyState === 1) open++; } } catch (e) {}
-  return { open, total, turn: MP.turnState || 'none', rtc: typeof RTCPeerConnection === 'function', heard: MP.lobbyPeers.size };
+  return { open, total, turn: MP.turnState || 'none', rtc: typeof RTCPeerConnection === 'function', heard: MP.lobbyPeers.size, clock: MP.clockOffset, clockChecked: !!MP.clockChecked };
 }
 // the game room's messages
 function wireGameRoom(room) {
