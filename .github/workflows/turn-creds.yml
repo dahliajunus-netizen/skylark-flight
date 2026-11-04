@@ -1,0 +1,33 @@
+# Every 6 hours, fetch Cloudflare TURN relay passwords that last 2 days and publish them as turn.json on the
+# turn-creds branch. The game reads them from raw.githubusercontent.com when the Worker in turn-worker/ can't be
+# reached (some internet providers block every workers.dev address). The API token is the repo secret
+# CF_TURN_API_TOKEN; only the short-lived passwords are published.
+name: Refresh TURN passwords
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Cloudflare TURN passwords
+        env:
+          TOKEN: ${{ secrets.CF_TURN_API_TOKEN }}
+          KEY_ID: 00bcb0173b29e93b788e1f8e8e929c34
+        run: |
+          curl -sf -X POST "https://rtc.live.cloudflare.com/v1/turn/keys/$KEY_ID/credentials/generate-ice-servers" \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"ttl": 172800}' > r.json
+          # the same plain list the Worker gives; port 53 is left out because browsers refuse it
+          jq -c '[.iceServers[] | .urls |= ([.] | flatten | map(select(test(":53\b") | not)))]' r.json > turn.json
+          test "$(jq length turn.json)" -gt 0
+      - name: Publish on the turn-creds branch
+        run: |
+          mkdir out && mv turn.json out/ && cd out
+          git init -q -b turn-creds
+          git config user.name github-actions
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add turn.json && git commit -qm "TURN passwords $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" turn-creds

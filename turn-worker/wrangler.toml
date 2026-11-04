@@ -1,0 +1,6 @@
+name = "skylark-turn"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+TURN_KEY_ID = "00bcb0173b29e93b788e1f8e8e929c34"

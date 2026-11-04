@@ -8274,13 +8274,20 @@ function mpTick() {
   fadeChat();
   if (MP.vote) { if (performance.now() > MP.vote.end) tally(); else renderVote(); }
 }
-// Metered's free TURN plan. The key is public like everything on this page; its usage limit is set in Metered.
-const TURN_CREDENTIALS_URL = 'https://YOUR_APP.metered.live/api/v1/turn/credentials?apiKey=707514ac080586ae65aabad5944de82d1b86';
+// Where the TURN relay passwords come from, tried in order. The first is a small Cloudflare Worker (turn-worker/
+// in this repo) that hands out Cloudflare TURN passwords lasting 6 hours, then a copy of such passwords kept on GitHub; Cloudflare's free allowance is 1,000 GB
+// a month. Metered's free plan is kept as the fallback; its key is public like everything on this page.
+const TURN_CREDENTIAL_URLS = [
+  'https://skylark-turn.skylark-flight.workers.dev/',
+  'https://raw.githubusercontent.com/dahliajunus-netizen/skylark-flight/turn-creds/turn.json', // refreshed every 6 h by .github/workflows/turn-creds.yml, for networks that block workers.dev
+  'https://YOUR_APP.metered.live/api/v1/turn/credentials?apiKey=707514ac080586ae65aabad5944de82d1b86'
+];
+const TURN_SAVED_MAX_AGE = 5 * 3600e3; // a saved set is only used while its passwords are still good
 // Rooms. Each room is its own peer-to-peer room with its own players and its own shared city. Every page also
 // sits in a small lobby room and says there which room it is in (unless that room is hidden), so everyone can
 // see a live list of rooms and how many are in each. "Public" uses the original room, so older pages still meet.
 const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
-const BUILD = '2026-11-04c';
+const BUILD = '2026-11-04d';
 // a hidden room is a different room from a listed one with the same name
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
@@ -8480,18 +8487,22 @@ async function mpConnect() {
   // office Wi-Fi). The credentials come from the provider's endpoint; without them only direct links are tried.
   let turnConfig;
   MP.turnState = 'none';
-  if (TURN_CREDENTIALS_URL) {
+  for (const url of TURN_CREDENTIAL_URLS) {
     try {
       const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 4000);
-      const list = await (await fetch(TURN_CREDENTIALS_URL, { signal: ctl.signal })).json();
+      const list = await (await fetch(url, { signal: ctl.signal })).json();
       clearTimeout(timer);
-      if (Array.isArray(list) && list.length) { turnConfig = list; MP.turnState = 'ready'; try { localStorage.setItem('skylark.turn', JSON.stringify(list)); } catch (e) {} }
-    } catch (e) { console.warn('TURN relay credentials did not load; using the saved set if there is one.', e); }
-    if (!turnConfig) try {
-      const saved = JSON.parse(localStorage.getItem('skylark.turn') || 'null');
-      if (Array.isArray(saved) && saved.length) { turnConfig = saved; MP.turnState = 'saved'; }
-    } catch (e) {}
+      if (Array.isArray(list) && list.length) {
+        turnConfig = list; MP.turnState = 'ready';
+        try { localStorage.setItem('skylark.turn', JSON.stringify({ t: Date.now(), list })); } catch (e) {}
+        break;
+      }
+    } catch (e) { console.warn('TURN relay credentials did not load from ' + url.split('?')[0], e); }
   }
+  if (!turnConfig) try {
+    const saved = JSON.parse(localStorage.getItem('skylark.turn') || 'null');
+    if (saved && Array.isArray(saved.list) && saved.list.length && Date.now() - saved.t < TURN_SAVED_MAX_AGE) { turnConfig = saved.list; MP.turnState = 'saved'; }
+  } catch (e) {}
   MP.lib = mod; MP.self = mod.selfId;
   // Players find each other through Nostr relays. Of the five the library picks for this app, two no longer
   // answer, so players whose networks couldn't reach the other three never met anyone. Use eight that answer:
