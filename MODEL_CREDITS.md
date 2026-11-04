@@ -78,3 +78,10 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - Source: [737 MAX Lion Air](https://sketchfab.com/3d-models/737-max-lion-air-2747cad8b4c64122abe992c9ad1e8bd1)
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: `b737_split.glb` bakes the model's object transforms, cuts the flaps, ailerons, spoilers, elevators and rudder out of the wing, tailplane and fin skins along their hinge lines, and separates the engine fan faces (so they spin), the landing gear struts and wheels, and the nose gear doors into named parts, each with its origin on its hinge. The flight-deck windows get a see-through glass material.
+
+## Boeing 747-8i
+
+- Creator: [AF267](https://sketchfab.com/jsong.js.us)
+- Source: [Boeing 747-8i](https://sketchfab.com/3d-models/boeing-747-8i-cd1977bedc32412fa1ce2cda23520b84)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: `b748_split.glb` bakes the model's object transforms and renames its moving parts for Skylark Flight: ailerons, flaps, spoilers, elevators, rudder, the four fans (so they spin), the nose, wing and body landing gear with their bogies and wheels, and the gear doors, each with its origin on its hinge. The flight-deck windows get a see-through glass material.

@@ -2451,14 +2451,16 @@ const AC = {
     // Boeing 747-8: ~300 t at a medium weight, 554 m² wing, four GEnx-2B (~290 kN each), Mach 0.855 cruise
     id: 'b748', mass: 300000, wing: 554, thrust: 1150000, thrustAB: 0,
     CL0: 0.45, CLA: 5.2, stallA: 0.26, cd0: 0.021, k: 0.042, wave: [0.82, 0.96, 0.08],
-    gLimit: 2.5, effV: 90, rates: [0.28, 0.11, 0.42], stabRoll: 0, tailStrike: 0.17, gear: 5.5, weapons: false, gearTime: 10, mainRetract: 'in', gearTruckTilt: 13 * Math.PI / 180, gearTruckStowTilt: -5 * Math.PI / 180, travel: 0.5,
+    gLimit: 2.5, effV: 90, rates: [0.28, 0.11, 0.42], stabRoll: 0, tailStrike: 0.17, gear: 9.62, noseExt: 0.22, strutHinges: true, weapons: false, gearTime: 10, mainRetract: 'in', gearTruckTilt: 13 * Math.PI / 180, gearTruckStowTilt: -5 * Math.PI / 180, travel: 0.5,
     bodyFwd: 3.5, // the body gear (inboard of 3.5 m) folds forward into the belly; the wing gear folds inward
     centreX: 1.0, // only the nose gear is on the centreline (the body trucks' inner wheels are 1.4 m out)
-    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'B747.gltf.json', podEngines: true, rig: { ab: [], bombs: [], nuke: null },
-    box: new THREE.Box3(new THREE.Vector3(-34.2, -3.3, -33.5), new THREE.Vector3(34.2, 13.85, 42.75)), slideI: 1600,
-    hitPts: [[33.5, 0, -0.4], [-42.7, 0, 2.3], [-21.0, 34.2, 1.8], [-21.0, -34.2, 1.8], [-38.5, 0, 13.85], [-38.5, 11, 2.9], [-38.5, -11, 2.9],
-      [3.5, 11.84, -4.6], [3.5, -11.84, -4.6], [-4.2, 21.03, -3.4], [-4.2, -21.03, -3.4], [0, 0, -3.3]],
-    chase: [20, 125, 100], eye: [3.6, 31.2], scale: 3.4, shadow: 50, airStart: [130, 0.6], fireball: 2.6, crashBlast: [70, 2600],
+    ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'b748_split.glb', split: 76.3, podEngines: true, rig: { ab: [], bombs: [], nuke: null },
+    // the model's origin is the middle of its bounds, about 7 m above the belly (the fin is tall)
+    box: new THREE.Box3(new THREE.Vector3(-34.25, -8.6, -38.15), new THREE.Vector3(34.25, 9.62, 39.62)), slideI: 1600,
+    hitPts: [[38.1, 0, -4.5], [-39.5, 0, -1.5], [-14.4, 34.2, -2.35], [-14.4, -34.2, -2.35], [-37, 0, 9.6], [-36.7, 11, -1.5], [-36.7, -11, -1.5],
+      [7.9, 12.0, -6.9], [7.9, -12.0, -6.9], [6.3, 21.2, -6.9], [6.3, -21.2, -6.9], [0, 0, -7.3]],
+    // the captain's seat on the upper deck, behind the windscreen (y -0.9 to -0.3, z -33.8 to -31.9)
+    chase: [20, 125, 100], eye: [-0.55, 32.3, -0.55], scale: 3.4, shadow: 50, airStart: [130, 0.6], fireball: 2.6, crashBlast: [70, 2600],
     sound: { whine: [300, 800, 1.7], roar: [90, 260, 1.4] },
     eyebrow: 'BOEING 747-8 · FOUR-ENGINE WIDEBODY',
     desc: 'Fly a Boeing 747-8 from the military airbase on the south coast, just outside the city: 76 m long, 68 m across the wingtips, four engines and 300 tonnes in the air. It answers the controls slowly and takes a long time to stop, so plan every turn and every approach well ahead.',
@@ -3124,7 +3126,7 @@ function buildTyphoon() {
   parts.gear = gear;
 }
 
-// Boeing 747-8: 76.25 m long, 68.4 m span. The Blender model (B747.gltf.json, b747/build_b747.py) replaces this stand-in once it loads.
+// Boeing 747-8: 76.25 m long, 68.4 m span. The split model (b748_split.glb) replaces this stand-in once it loads.
 function build748() {
   if (MODELS.b748) return buildFromGltf(MODELS.b748);
   const white = M('#f1f1ee', 0.45, 0.1), blue = M('#1f4e8c', 0.5, 0.1), eng = M('#c9ccd0', 0.4, 0.4), wingMat = M('#cdd1d6', 0.5, 0.3);
