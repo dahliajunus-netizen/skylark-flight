@@ -5852,6 +5852,7 @@ function airSpawn() {
 
 function crash(msg) {
   if (S.crashed) return;
+  MP.stT = 0; // report the crash straight away
   // shot down (or brought down by damage) within 20 s of another player's hit: everyone hears who did it
   const H = MP.lastHitBy;
   if (H && performance.now() - H.t < 20000) { mpSend('ev', { k: 'kill', by: H.name }); toast(H.name + ' shot you down'); }
@@ -8028,12 +8029,16 @@ function updateB52Buttons() {
 }
 function stateMsg() {
   const q = S.quat, still = !running || paused || S.crashed;
-  return {
-    n: MP.name, ac: A.id, r: running ? 1 : 0, c: S.crashed ? 1 : 0, ps: paused ? 1 : 0, p: mpV(S.pos), v: still ? [0, 0, 0] : mpV(S.vel),
-    q: [q.x, q.y, q.z, q.w].map(v => Math.round(v * 1e4) / 1e4), g: S.gearT > 0.5 ? 1 : 0,
-    cl: A.id === 'b52' ? MP.claim : 0, up: Math.round(performance.now() - MP.t0), lf: MP.life, rp: MP.rips,
-    ml: missiles.slice(0, 12).map(m => [...mpV(m.pos), ...mpV(m.vel)])
+  const m = {
+    n: MP.name, ac: A.id, r: running ? 1 : 0, p: mpV(S.pos), v: still ? [0, 0, 0] : mpV(S.vel),
+    q: [q.x, q.y, q.z, q.w].map(v => Math.round(v * 1e3) / 1e3), g: S.gearT > 0.5 ? 1 : 0, up: Math.round(performance.now() - MP.t0), lf: MP.life
   };
+  if (S.crashed) m.c = 1;
+  if (paused) m.ps = 1;
+  if (A.id === 'b52') m.cl = MP.claim;
+  if (MP.rips.length) m.rp = MP.rips;
+  if (missiles.length) m.ml = missiles.slice(0, 12).map(x => [...mpV(x.pos), ...mpV(x.vel)]);
+  return m;
 }
 function onState(id, d) {
   if (!d || typeof d !== 'object') return;
@@ -8263,8 +8268,9 @@ function mpTick() {
   for (const id in MP.out) { if (MP.out[id].length) mpSend('pw', { a: MP.out[id] }, id); }
   MP.out = {};
   if (MP.hits.length) { const ev = { k: 'h', a: MP.hits }; MP.hits = []; mpFx(ev); }
-  mpSend('st', stateMsg());
-  if (performance.now() - MP.annT > 4000) { announceRoom(); renderRooms(); }
+  const nowMs = performance.now(), idle = !running || paused || S.crashed;
+  if (nowMs - (MP.stT || 0) >= (idle ? 1000 : 195)) { MP.stT = nowMs; mpSend('st', stateMsg()); }
+  if (nowMs - MP.annT > 4000) { announceRoom(); renderRooms(); }
   fadeChat();
   if (MP.vote) { if (performance.now() > MP.vote.end) tally(); else renderVote(); }
 }
@@ -8274,7 +8280,7 @@ const TURN_CREDENTIALS_URL = 'https://YOUR_APP.metered.live/api/v1/turn/credenti
 // sits in a small lobby room and says there which room it is in (unless that room is hidden), so everyone can
 // see a live list of rooms and how many are in each. "Public" uses the original room, so older pages still meet.
 const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
-const BUILD = '2026-11-04b';
+const BUILD = '2026-11-04c';
 // a hidden room is a different room from a listed one with the same name
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
