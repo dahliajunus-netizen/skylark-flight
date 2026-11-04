@@ -132,6 +132,8 @@ body.noui .mpTag { display: none; }
 #roomErr { margin: 8px 0 0; }
 #roomsPanel.gate { background: rgba(4,8,13,.94); }
 #roomInviteNote { color: var(--amber); font-size: 13px; }
+#roomDiag { color: var(--dim); font: 11px var(--font-num); letter-spacing: .04em; line-height: 1.6; }
+#roomDiag b { font-weight: 700; } #roomDiag .ok { color: #7ee2a8; } #roomDiag .bad { color: var(--amber); }
 #graphicsPanel .card { width: min(480px, 100%); }
 .graphics-options { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
 .graphics-option { min-height: 68px; text-align: left; padding: 12px; border: 1px solid var(--glass-edge); border-radius: 8px; background: rgba(255,255,255,.045); color: var(--fg); cursor: pointer; font: 700 14px var(--font-ui); }
@@ -340,11 +342,12 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h2>Rooms</h2>
     <p id="roomNow"></p>
     <p id="roomInviteNote" hidden></p>
+    <p id="roomDiag"></p>
     <div id="roomList" class="room-list" role="list"></div>
     <form id="roomForm"><input id="roomIn" maxlength="24" autocomplete="off" spellcheck="false" placeholder="Room name" aria-label="Room name"><button class="btn primary" type="submit">Create or join</button></form>
     <label class="room-hide"><input type="checkbox" id="roomHidden"> Hidden: not in this list, join by name or invite link</label>
     <p id="roomErr" class="reason" hidden>Use 2 to 24 letters, numbers, spaces, - or _.</p>
-    <div class="actions"><button class="btn" id="roomInvite">Copy invite link</button><button class="btn" id="roomSolo" hidden>Fly offline</button><button class="btn primary" id="closeRooms">Done</button></div>
+    <div class="actions"><button class="btn" id="roomInvite">Copy invite link</button><button class="btn" id="roomSolo" hidden>Fly offline</button><button class="btn" id="roomReconnect">Reconnect</button><button class="btn primary" id="closeRooms">Done</button></div>
   </div>
 </div>
 
@@ -8265,6 +8268,7 @@ const TURN_CREDENTIALS_URL = 'https://YOUR_APP.metered.live/api/v1/turn/credenti
 // sits in a small lobby room and says there which room it is in (unless that room is hidden), so everyone can
 // see a live list of rooms and how many are in each. "Public" uses the original room, so older pages still meet.
 const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
+const BUILD = '2026-11-04';
 // a hidden room is a different room from a listed one with the same name
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
@@ -8335,6 +8339,16 @@ function renderRooms() {
   const note = $('#roomInviteNote');
   note.hidden = !(gate && MP.invite);
   if (MP.invite) setText(note, `You were invited to ${MP.invite.name}${MP.invite.hidden ? ' (hidden)' : ''}. Press Create or join to go in.`);
+  const dg = $('#roomDiag');
+  dg.textContent = '';
+  if (MP.lib) {
+    const c = connectionCheck(), item = (label, value, ok) => { const sp = document.createElement('span'); sp.className = ok ? 'ok' : 'bad'; sp.textContent = value; dg.append(label + ' ', sp, '   '); };
+    item('VERSION', BUILD, true);
+    item('RELAYS', c.total ? c.open + '/' + c.total : '…', c.open > 0);
+    item('BLOCKED-NETWORK RELAY', c.turn === 'ready' ? 'READY' : c.turn === 'saved' ? 'SAVED' : 'NONE', c.turn !== 'none');
+    item('DIRECT LINKS', c.rtc ? 'OK' : 'BLOCKED', c.rtc);
+    item('PLAYERS HEARD', String(c.heard), c.heard > 0);
+  }
   $('#roomNow').innerHTML = '';
   const now = $('#roomNow');
   if (MP.room) {
@@ -8430,9 +8444,18 @@ async function mpConnect() {
   // TURN relays carry the game for players whose networks block direct connections (mobile data, school or
   // office Wi-Fi). The credentials come from the provider's endpoint; without them only direct links are tried.
   let turnConfig;
+  MP.turnState = 'none';
   if (TURN_CREDENTIALS_URL) {
-    try { const list = await (await fetch(TURN_CREDENTIALS_URL)).json(); if (Array.isArray(list) && list.length) turnConfig = list; }
-    catch (e) { console.warn('TURN relay credentials did not load; trying direct connections only.', e); }
+    try {
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 4000);
+      const list = await (await fetch(TURN_CREDENTIALS_URL, { signal: ctl.signal })).json();
+      clearTimeout(timer);
+      if (Array.isArray(list) && list.length) { turnConfig = list; MP.turnState = 'ready'; try { localStorage.setItem('skylark.turn', JSON.stringify(list)); } catch (e) {} }
+    } catch (e) { console.warn('TURN relay credentials did not load; using the saved set if there is one.', e); }
+    if (!turnConfig) try {
+      const saved = JSON.parse(localStorage.getItem('skylark.turn') || 'null');
+      if (Array.isArray(saved) && saved.length) { turnConfig = saved; MP.turnState = 'saved'; }
+    } catch (e) {}
   }
   MP.lib = mod; MP.self = mod.selfId;
   // Players find each other through Nostr relays. Of the five the library picks for this app, two no longer
@@ -8441,8 +8464,13 @@ async function mpConnect() {
   const relayConfig = { urls: ['wss://purplerelay.com', 'wss://nostr-01.yakihonne.com', 'wss://bucket.coracle.social',
     'wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://offchain.pub', 'wss://nostr-pub.wellorder.net'] };
   MP.cfg = turnConfig ? { appId: 'skylark-flight-dahliajunus', turnConfig, relayConfig } : { appId: 'skylark-flight-dahliajunus', relayConfig };
-  // the lobby: which rooms exist and how many are in each
-  MP.lobby = mod.joinRoom(MP.cfg, 'lobby-v1');
+  joinLobby();
+  setInterval(mpTick, 100);
+  updateMpBar(); renderRooms();
+}
+// the lobby: which rooms exist and how many are in each
+function joinLobby() {
+  MP.lobby = MP.lib.joinRoom(MP.cfg, 'lobby-v1');
   MP.lobbyT = performance.now();
   MP.lobbyAnn = MP.lobby.makeAction('ann');
   MP.lobbyAnn.onMessage = (d, { peerId }) => {
@@ -8458,8 +8486,22 @@ async function mpConnect() {
   };
   MP.lobby.onPeerJoin = id => { MP.lobbyPeers.add(id); announceRoom(id); renderRooms(); };
   MP.lobby.onPeerLeave = id => { MP.lobbyPeers.delete(id); MP.lobbyRooms.delete(id); renderRooms(); };
-  setInterval(mpTick, 100);
-  updateMpBar(); renderRooms();
+}
+// Reconnect: leave and join the lobby again, and the room you are in, as if the page had just opened
+function mpReconnect() {
+  if (!MP.lib) { toast('Multiplayer is still loading'); return; }
+  try { MP.lobby.leave(); } catch (e) {}
+  MP.lobbyPeers.clear(); MP.lobbyRooms.clear(); MP.gossipRooms.clear();
+  joinLobby();
+  if (MP.room) joinGameRoom(MP.roomName, MP.roomHidden);
+  toast('Reconnecting…'); renderRooms();
+}
+$('#roomReconnect').onclick = mpReconnect;
+// what this page can reach, for players who can't see each other
+function connectionCheck() {
+  let open = 0, total = 0;
+  try { const socks = MP.lib && MP.lib.getRelaySockets ? MP.lib.getRelaySockets() : {}; for (const ws of Object.values(socks)) { total++; if (ws && ws.readyState === 1) open++; } } catch (e) {}
+  return { open, total, turn: MP.turnState || 'none', rtc: typeof RTCPeerConnection === 'function', heard: MP.lobbyPeers.size };
 }
 // the game room's messages
 function wireGameRoom(room) {
