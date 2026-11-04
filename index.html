@@ -837,7 +837,10 @@ const HORIZON = new THREE.Color('#788997');
 scene.fog = new THREE.Fog(HORIZON, 2600, 23000);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 60000); // far enough to see a 44 km mushroom cloud
 
-const DAY_SECONDS = 720; // one full day-night cycle takes twelve minutes of flight time
+// One full day-night cycle takes twelve minutes, on the world clock rather than this flight's timer: every player
+// sees the same time of day (the multiplayer code corrects a wrong computer clock against the server), and
+// spawning again or reloading the page carries on where the day was.
+const DAY_SECONDS = 720;
 const SUN_DIR = new THREE.Vector3();
 const HEMI_BASE = 0.12; // subdued ambient keeps silhouettes and terrain contrast stronger
 const hemi = new THREE.HemisphereLight('#8492a1', '#4a4841', HEMI_BASE);
@@ -921,7 +924,7 @@ const stars = new THREE.Points(starGeo, starMaterial);
 stars.frustumCulled = false; stars.renderOrder = 0; scene.add(stars);
 
 function updateDayNight() {
-  const phase = S.time / DAY_SECONDS * Math.PI * 2 + Math.PI / 2;
+  const phase = (Date.now() / 1000 % DAY_SECONDS) / DAY_SECONDS * Math.PI * 2 + Math.PI / 2;
   const elevation = Math.sin(phase) * 0.78;
   const azimuth = phase * 0.5 + 0.35;
   SUN_DIR.set(Math.cos(azimuth) * Math.cos(elevation), Math.sin(elevation), Math.sin(azimuth) * Math.cos(elevation)).normalize();
@@ -945,6 +948,8 @@ function updateDayNight() {
   Object.assign(FOG_SUN.col, { x: sun.color.r * daylight, y: sun.color.g * daylight, z: sun.color.b * daylight });
   // clouds keep a faint sky-lit glow at night instead of turning into black holes in the star field
   if (cloudField) cloudField.material.emissive.copy(HORIZON).multiplyScalar(0.5 * night);
+  // night vision amplifies the light itself, strongly at night and mildly by day, before the green tint
+  renderer.toneMappingExposure = 0.54 * (nvgOn && !isAirliner() ? 1.5 + 5 * night : 1);
   updateEnvironment();
 }
 
@@ -2507,7 +2512,8 @@ const gsEl = {};
 let A = AC.f15, GEAR = A.gear;
 const plane = new THREE.Group();
 const AIRLINER_IDS = new Set(['b757', 'b748', 'concorde']);
-const NVG_FILTER = 'grayscale(1) sepia(1) hue-rotate(82deg) saturate(5) brightness(1.4) contrast(1.08)';
+// a bright green phosphor: monochrome, pushed through a strong green tint, lifted and with a little more contrast
+const NVG_FILTER = 'grayscale(1) sepia(1) hue-rotate(72deg) saturate(8) brightness(1.9) contrast(1.15)';
 let nvgOn = false, exteriorLightsOn = false, exteriorLightGroup = null;
 const isAirliner = () => AIRLINER_IDS.has(A.id);
 function applyCanvasFilter() {
