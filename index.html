@@ -363,7 +363,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <h1>Skylark</h1>
     <p id="acDesc"></p>
     <div class="specs" id="acSpecs"></div>
-    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="su34" aria-pressed="false">Su-34</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <div class="actions">
@@ -381,9 +381,9 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>R / F</dt><dd>Throttle; above 85% lights the afterburners</dd>
       <dt>G</dt><dd>Landing gear up / down</dd>
       <dt>B</dt><dd>Wheel brakes and speed brake</dd>
-      <dt>Space</dt><dd>Fire the cannon (hold); the A-10's 30 mm GAU-8 goes BRRRT</dd>
+      <dt>Space</dt><dd>Fire the cannon (hold)</dd>
       <dt>X</dt><dd>Drop a bomb; it lands on the magenta BOMB marker</dd>
-      <dt>L</dt><dd>Radar: lock the nearest aircraft ahead, press again to cycle (F-15C, Typhoon; the A-10's targeting pod sees 20 km)</dd>
+      <dt>L</dt><dd>Radar: lock the nearest aircraft ahead, press again to cycle (fighters)</dd>
       <dt>X with missiles</dt><dd>Fire an air-to-air missile (pick the missile loadout): the heat-seeker inside its reach, the AIM-120 beyond it</dd>
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
       <dt>K</dt><dd>Countermeasures: one salvo of flares and chaff (not on the airliners)</dd>
@@ -432,7 +432,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="card glass">
     <div class="eyebrow">HOLDING</div>
     <h2>Paused</h2>
-    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="a10" aria-pressed="false">A-10C</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
+    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="su34" aria-pressed="false">Su-34</button><button class="pickb" data-ac="b757" aria-pressed="false">757-200</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b52" aria-pressed="false">B-52H</button></div>
     <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
     <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
     <div class="actions">
@@ -1674,7 +1674,7 @@ float pvN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f)
 // stands (stop bars at z = 470, facing north). They are scenery: drawn from the same models as other players'
 // aircraft, built once each model has loaded, and hidden beyond 4 km to keep the frame rate up.
 const PARKED = [];
-['f15', 'f15', 'f15', null, 'typhoon', 'typhoon', null, 'a10', 'a10', null, 'f15', null, null]
+['f15', 'f15', 'f15', null, 'typhoon', 'typhoon', null, 'su34', 'su34', null, 'f15', null, null]
   .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6300 + 280 * k, stop: -815, face: 1 }); });
 ['b52', 'b52', null, 'b748', null, 'b757', null, 'ac130', 'ac130', null, null, null]
   .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6200 + 300 * k, stop: 470, face: -1 }); });
@@ -2374,27 +2374,35 @@ const AC = {
     specs: ['ROTATE 155 KT', 'APPROACH 145 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'BK-27 27 MM · 150 RDS', 'STORES', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle, pull back at about 155 kt, then raise the gear. Watch the canards: they tilt nose-up to pitch up. Lower the gear and land at about 145 kt.'
   },
-  a10: {
-    // Fairchild Republic A-10C: ~17 t with fuel and ammunition, 47 m² straight wing, two TF34s (~40 kN each), no afterburner
-    id: 'a10', mass: 17000, wing: 47, thrust: 80000, thrustAB: 0,
-    CL0: 0.3, CLA: 4.8, stallA: 0.28, cd0: 0.032, k: 0.061, wave: [0.55, 0.7, 0.08], // tops out near 400 kt
-    gLimit: 7.3, effV: 75, rates: [0.65, 0.3, 2.0], stabRoll: 0, tailStrike: 0.2, gear: 2.05, weapons: true, gearTime: 5, mainRetract: 'fwd', travel: 0.3,
-    // GAU-8/A Avenger: 30 mm, 3,900 rounds a minute, and enough recoil (~40 kN) to slow the jet while it fires
-    ammo: 1150, gunRate: 65, roundDmg: 2.5, recoil: 40000, brrt: true, muzzle: [0, -0.2, 8.6], stabSign: 1, model: 'A10.gltf.json', podEngines: true,
-    // three under each outer wing, then one inboard of each gear pod (outboard first, alternating sides)
-    rig: { ab: [], nuke: null, bombs: [[-6.6, -0.594, 0.218], [6.6, -0.594, 0.218], [-5.5, -0.751, 0.172], [5.5, -0.751, 0.172],
-      [-4.4, -0.91, 0.126], [4.4, -0.91, 0.126], [-1.55, -1.07, 0.08], [1.55, -1.07, 0.08]],
-      aam: [[-6.6, -0.66, 0.2, 'aim9'], [6.6, -0.66, 0.2, 'aim9']] }, // a pair of AIM-9s for self-defence
-    loadouts: [{ id: 'mk82', name: '8 × MK-82', spec: '8 × MK-82' }, { id: 'aam', name: '2 × AIM-9', aam: true, spec: '2 × AIM-9X' }],
-    radar: { name: 'TGP', range: 20000, cone: 0.7 }, // no radar: the targeting pod finds aircraft close in
-    box: new THREE.Box3(new THREE.Vector3(-8.8, -1.0, -8.65), new THREE.Vector3(8.8, 2.45, 8.15)), slideI: 55,
-    hitPts: [[8.6, 0, -0.2], [0.3, 8.75, 0.15], [0.3, -8.75, 0.15], [-8.1, 0, 0.4], [-7.0, 2.92, 2.4], [-7.0, -2.92, 2.4], [-4.0, 1.6, 1.4], [-4.0, -1.6, 1.4], [0, 0, -0.95]],
-    chase: [5, 32, 28], eye: [1.25, 4.9], scale: 1, shadow: 16, airStart: [140, 0.75], fireball: 1, crashBlast: [30, 500],
-    sound: { whine: [900, 1700, 1.5], roar: [120, 320, 0.8] },
-    eyebrow: 'A-10C THUNDERBOLT II · CLOSE AIR SUPPORT',
-    desc: 'Fly an A-10 Warthog from the military airbase on the south coast, just outside the city. It is slow, tough and turns tight, with eight Mk-82s under its straight wings and the GAU-8 Avenger in the nose: 1,150 rounds of 30 mm that chew through buildings. Short bursts: the recoil slows the jet down.',
-    specs: ['ROTATE 135 KT', 'APPROACH 140 KT', '7.3 G LIMIT', 'MAX 400 KT', 'GAU-8/A 30 MM · 1,150 RDS', 'STORES', 'RWY 36 · 16,400 FT'],
-    tip: 'Takeoff: full throttle, pull back gently at about 135 kt, then raise the gear. There are no afterburners, so keep your speed up in turns. Fire the gun in short bursts. Lower the gear and land at about 140 kt.'
+  su34: {
+    // Sukhoi Su-34: ~38 t with a full bomb load, 62 m² wing, two AL-31F-M1 (~76 kN dry, ~132 kN in reheat each).
+    // A Su-27 airframe with a side-by-side cockpit: heavy and steady rather than agile, with canards, all-moving
+    // tailplanes and flaperons, and no thrust vectoring.
+    id: 'su34', mass: 38000, wing: 62, thrust: 152000, thrustAB: 264000,
+    CL0: 0.2, CLA: 3.6, stallA: 0.45, cd0: 0.024, k: 0.12, wave: [0.86, 1.05, 0.035],
+    gLimit: 7, effV: 95, rates: [0.6, 0.28, 2.6], stabRoll: 0.15, tailStrike: 0.22, gear: 3.1, strutHinges: true, noseAft: true, weapons: true, gearTime: 5, mainRetract: 'fwd', mainTwist: Math.PI / 2, travel: 0.32,
+    canards: true,
+    ammo: 180, gunRate: 25, roundDmg: 2.2, muzzle: [1.3, 0.05, 2.3], stabSign: 1, model: 'su34_split.glb', split: 24.14, // GSh-30-1, 30 mm, in the right LERX
+    loadouts: [{ id: 'fab', name: '8 × FAB-500', spec: '8 × FAB-500' },
+      { id: 'aam', name: 'R-77 · R-73', aam: true, spec: '6 × R-77 · 2 × R-73' }],
+    radar: { name: 'Sh141', range: 120000, cone: 1.05 },
+    // Stations on the model: wing pylons at x ±3.59, ±4.72 (bottoms y -0.5) and ±6.18 (-0.6), wingtip rails at
+    // ±7.25 (-0.55), rails under the intakes at ±1.33 (-1.56). Each store hangs with its fins just clear; the flames
+    // fit the 1.08 m nozzle exits.
+    rig: { ab: [[-1.19, -0.82, 8.25], [1.19, -0.82, 8.25]], abScale: 0.85, nuke: null,
+      bombs: [[-6.18, -1.1, 2.75, 'fab500'], [6.18, -1.1, 2.75, 'fab500'], [-4.72, -1.0, 3.3, 'fab500'], [4.72, -1.0, 3.3, 'fab500'],
+        [-3.59, -1.0, 2.85, 'fab500'], [3.59, -1.0, 2.85, 'fab500'], [-1.33, -2.06, 1.3, 'fab500'], [1.33, -2.06, 1.3, 'fab500']],
+      // R-73s on the wingtip rails; R-77s on the wing pylons and under the intakes
+      aam: [[-7.25, -0.76, 3.75, 'r73'], [7.25, -0.76, 3.75, 'r73'], [-4.72, -0.86, 3.3, 'r77'], [4.72, -0.86, 3.3, 'r77'],
+        [-3.59, -0.86, 2.85, 'r77'], [3.59, -0.86, 2.85, 'r77'], [-1.33, -1.92, 1.3, 'r77'], [1.33, -1.92, 1.3, 'r77']] },
+    box: new THREE.Box3(new THREE.Vector3(-7.37, -1.6, -12.07), new THREE.Vector3(7.37, 3.1, 12.07)), slideI: 85,
+    hitPts: [[12.0, 0, -0.2], [-5.6, 7.3, -0.35], [-5.6, -7.3, -0.35], [-12.0, 0, -0.3], [-7.0, 2.1, 3.0], [-7.0, -2.1, 3.0], [0, 0, -1.5]],
+    chase: [6, 38, 34], eye: [0.85, 5.5, -0.42], // the pilot sits in the left seat scale: 1, shadow: 18, airStart: [165, 0.55], fireball: 1.1, crashBlast: [34, 600],
+    sound: { whine: [540, 1250, 1.1], roar: [140, 410, 1.15] },
+    eyebrow: 'SUKHOI SU-34 · STRIKE FIGHTER',
+    desc: 'Fly the Su-34 from the military airbase on the south coast, just outside the city: a two-seat strike fighter with its crew side by side behind the flat "duck" nose. It is heavier and steadier than the Su-30. Carry eight FAB-500s for the city, or six R-77s and two R-73s against other players.',
+    specs: ['ROTATE 160 KT', 'APPROACH 150 KT', '7 G LIMIT', 'MACH 1+ IN AB', 'GSH-30-1 · 180 RDS', 'STORES', 'RWY 36 · 16,400 FT'],
+    tip: 'Takeoff: full throttle, pull back at about 160 kt, then raise the gear. It is heavy, so plan your turns early. Lower the gear and land at about 150 kt.'
   },
   b52: {
     // Boeing B-52H: ~140 t plus up to 18 t of bombs, 370 m² wing, eight TF33s (~76 kN each)
@@ -2605,7 +2613,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-const MODELS = { f15: null, typhoon: null, a10: null, b757: null, b748: null, b52: null, ac130: null, su30: null, concorde: null }; // Blender-built models, filled in as they load
+const MODELS = { f15: null, typhoon: null, su34: null, b757: null, b748: null, b52: null, ac130: null, su30: null, concorde: null }; // Blender-built models, filled in as they load
 // Afterburner: a shader-drawn exhaust plume and a glowing nozzle. In reheat the jet leaves the nozzle as a short,
 // hot yellow-orange core inside a translucent pink-to-violet sheath, with a train of evenly spaced shock diamonds
 // (where the over-expanded jet recompresses) that fade downstream, and a turbulent flicker. Seen from behind,
@@ -2930,7 +2938,7 @@ function buildFromGltf(model) {
         m.position.sub(hinge); pivot.add(m);
         return pivot;
       };
-      const gearPart = /^(nose|main)gear(?:_[lr])?_(strut|wheel)$/.exec(n);
+      const gearPart = /^(nose|main)gear(?:_[lr])?_(strut|wheel|bogie)\d*$/.exec(n);
       if (gearPart) {
         // struts are the oleo cylinder, wheels ride on the piston; both keep the model's textures
         const leg = gearPart[1] === 'nose' ? 'Nose' : (side === 'L' ? 'Left' : 'Right') + ' main';
@@ -3040,8 +3048,8 @@ function buildConcorde() {
 }
 
 // Sukhoi Su-30SM: 21.94 m long, 14.7 m span. The split model (su30_split.glb) replaces this stand-in once it loads.
-function buildSU30() {
-  if (MODELS.su30) return buildFromGltf(MODELS.su30);
+function buildSU30() { // also the Su-34's stand-in until its model loads
+  if (MODELS[A.id]) return buildFromGltf(MODELS[A.id]);
   const blue = M('#56657a'), light = M('#9aa3ad'), dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
   add(tube(0.3, 0.75, 21, 16), blue, 0, 0.1, 0);
   for (const sx of [-1, 1]) {
@@ -3141,33 +3149,6 @@ function build748() {
   parts.gear = gear;
 }
 
-// A-10C Thunderbolt II: 16.26 m long, 17.53 m span. The Blender model (A10.gltf.json, a10/build_a10.py) replaces this stand-in once it loads.
-function buildA10() {
-  if (MODELS.a10) return buildFromGltf(MODELS.a10);
-  const grey = M('#555b60'), greyD = M('#43484c'), dark = M('#262c33', 0.5, 0.4), metal = M('#5f5a55', 0.35, 0.75);
-  add(tube(0.3, 0.75, 16, 16), grey, 0, 0.05, 0);
-  add(new THREE.SphereGeometry(1, 16, 10), dark, 0, 1.0, -4.6).scale.set(0.48, 0.55, 1.3);
-  for (const sx of [-1, 1]) {
-    add(planform([[0.5, -0.9], [8.77, -0.46], [8.77, 1.26], [0.5, 2.1]].map(([x, z]) => [x * sx, z]), 0.4), grey, 0, -0.45, 0);
-    add(tube(0.46, 0.7, 3.6, 16), greyD, sx * 1.6, 1.38, 4.2);
-    const stab = new THREE.Group(); stab.position.set(sx * 0.2, 0.55, 6.9); plane.add(stab);
-    add(planform([[0, -0.7], [2.7, -0.45], [2.7, 0.97], [0, 1.05]].map(([x, z]) => [x * sx, z]), 0.14), grey, 0, 0, 0, stab);
-    parts[sx < 0 ? 'stabL' : 'stabR'] = stab;
-    add(profile([[6.25, -0.55], [6.3, 2.42], [7.75, 2.42], [7.95, -0.55]], 0.14), greyD, sx * 2.92, 0, 0);
-    add(tube(0.33, 0.33, 3.6, 12), grey, sx * 2.6, -0.73, 0);
-  }
-  add(tube(0.12, 0.12, 0.9, 10), metal, 0, -0.2, -8.15);
-  const r = A.rig;
-  addStores(r.bombs);
-  const gear = new THREE.Group(); plane.add(gear);
-  const wheel = rad => { const g = new THREE.CylinderGeometry(rad, rad, 0.26, 14); g.rotateZ(Math.PI / 2); return g; };
-  for (const [x, z, rad] of [[0.36, -5.5, 0.38], [-2.6, 0.25, 0.5], [2.6, 0.25, 0.5]]) {
-    add(wheel(rad), dark, x, -GEAR + rad, z, gear);
-    add(new THREE.BoxGeometry(0.14, GEAR - rad - 0.7, 0.14), metal, x, -(GEAR - rad + 0.7) / 2, z, gear);
-  }
-  parts.gear = gear;
-}
-
 // Boeing B-52H: 48.5 m long, 56.4 m span. The Blender model (B52.gltf.json) replaces this stand-in once it loads.
 function buildB52() {
   if (MODELS.b52) return buildFromGltf(MODELS.b52);
@@ -3240,7 +3221,7 @@ function setAircraft(id) {
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
   parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
-  ({ f15: buildF15, typhoon: buildTyphoon, a10: buildA10, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
+  ({ f15: buildF15, typhoon: buildTyphoon, su34: buildSU30, b757: build757, b748: build748, b52: buildB52, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
   buildExteriorLights();
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
@@ -3329,7 +3310,7 @@ function rigGear() {
     const ac130MainGear = A.id === 'ac130' && key[0] !== 'c' && key[1] !== 'o';
     const fwd = !ac130MainGear && (key[0] === 'c' || b52Truck || (A.mainRetract === 'fwd' && A.id !== 'b52') || (A.bodyFwd && Math.abs((bb.min.x + bb.max.x) / 2) < A.bodyFwd));
     const outboardRetract = A.mainRetract === 'out' && key[0] !== 'c';
-    const sign = ac130MainGear ? 0 : b52Truck ? (key[0] === 'L' ? 1 : -1) : fwd ? 1 : (key[0] === 'R' ? -1 : 1) * (outboardRetract ? -1 : 1);
+    const sign = ac130MainGear ? 0 : b52Truck ? (key[0] === 'L' ? 1 : -1) : fwd ? (A.noseAft && key === centre[0] ? -1 : 1) : (key[0] === 'R' ? -1 : 1) * (outboardRetract ? -1 : 1);
     const leg = { key, pivot, upper, lower, truck, truckHome, truckCorners, truckFootY: pivot.position.y + truckBounds.min.y, nose: key === centre[0], len: Math.max(0.3, -strutBottom), ext, axis: ac130MainGear ? 'none' : fwd ? 'x' : 'z', sign, homeY: pivot.position.y, retractLift: ac130MainGear ? Math.max(1.5, Math.max(0.3, -strutBottom) + 0.3) : 0 };
     parts.gearLegs.push(leg);
     const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
@@ -4103,7 +4084,7 @@ if (THREE.GLTFLoader) {
       parts.nuke.visible = visible;
     }
   }, undefined, err => console.warn('B28 nuclear-thunder GLB did not load; using the simple B28.', err));
-  for (const id of ['f15', 'typhoon', 'a10', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
+  for (const id of ['f15', 'typhoon', 'su34', 'b757', 'b748', 'b52', 'ac130', 'su30', 'concorde']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
         // glTF colours are linear; this renderer treats material colours as already display-ready
@@ -6858,7 +6839,7 @@ function placeReticle(node, p) {
 }
 const el = { aimRet: $('#aimRet'), noseRet: $('#noseRet'), nukes: $('#nukes'), ccipN: $('#ccipN'), gun: $('#gun'), bombs: $('#bombs'), gunRet: $('#gunRet'), ccip: $('#ccip'), spd: $('#spd'), mach: $('#mach'), gl: $('#gload'), alt: $('#alt'), vs: $('#vs'), aoa: $('#aoa'), rwy: $('#rwy'), gnd: $('#cGnd'), brk: $('#cBrk'), gear: $('#cGear'), ab: $('#cAb'), ra: $('#cRa'), warn: $('#warn') };
 const setText = (node, s) => { if (node.textContent !== s) node.textContent = s; };
-const GEAR_VLE_KT = { su30: 300, f15: 300, typhoon: 280, a10: 250, b52: 260, b757: 260, b748: 260, concorde: 300, ac130: 220 };
+const GEAR_VLE_KT = { su30: 300, f15: 300, typhoon: 280, su34: 300, b52: 260, b757: 260, b748: 260, concorde: 300, ac130: 220 };
 const GEAR_OVERSPEED_SECONDS = 4;
 const indicatedKnots = () => S.V * Math.sqrt(S.rho / RHO) * 1.94384;
 function updateGearOverspeed(dt) {
@@ -6880,7 +6861,7 @@ function updateGearOverspeed(dt) {
   S.gearDown = false; S.gearT = 0; S.gearOverT = 0;
   toast('LANDING GEAR TORN OFF BY OVERSPEED');
 }
-const LOW_ALT_WING_LIMIT_KT = { su30: 700, f15: 700, typhoon: 700, a10: 470, b52: 500, b757: 450, b748: 450, concorde: 600, ac130: 360 };
+const LOW_ALT_WING_LIMIT_KT = { su30: 700, f15: 700, typhoon: 700, su34: 700, b52: 500, b757: 450, b748: 450, concorde: 600, ac130: 360 };
 const STRUCTURAL_OVERSPEED_AGL = 550; // 1,800 ft
 const STRUCTURAL_OVERSPEED_CLEAR_AGL = 760;
 const STRUCTURAL_OVERSPEED_SECONDS = 6;
@@ -7163,7 +7144,7 @@ function updateCamera(dt, now) {
     camera.lookAt(tmp.copy(S.pos).addScaledVector(F, A.chase[2]).addScaledVector(U, 2 * A.scale));
     camera.fov = 60 + Math.min(14, S.V * 0.04);
   } else {
-    camera.position.copy(S.pos).addScaledVector(U, A.eye[0]).addScaledVector(F, A.eye[1]);
+    camera.position.copy(S.pos).addScaledVector(U, A.eye[0]).addScaledVector(F, A.eye[1]).addScaledVector(R, A.eye[2] || 0); // [up, fwd, right]
     // head turn while right mouse is held; eases back to straight ahead on release
     if (!look.active) { const k = Math.exp(-dt * 6); look.yaw *= k; look.pitch *= k; }
     camQ.copy(S.quat).multiply(tilt)
@@ -7283,9 +7264,8 @@ addEventListener('resize', () => {
 });
 
 // ---------------- air-to-air missiles and radar ----------------
-// Missiles are a loadout of their own on the F-15C, Typhoon and A-10 (no bombs while carrying them), and the
-// targets are the other players. The radar (on the A-10, its targeting pod) sees aircraft in a cone ahead of the
-// nose. L locks the nearest and then cycles through the rest; X fires. With a lock, the missile is picked by
+// Missiles are a loadout of their own on the fighters (no bombs while carrying them), and the targets are the
+// other players. The radar sees aircraft in a cone ahead of the nose. L locks the nearest and then cycles through the rest; X fires. With a lock, the missile is picked by
 // range: the short-range heat-seeker inside its reach, the AIM-120 beyond it. Without a lock, a heat-seeker
 // looks for a target near the nose and an AIM-120 flies straight. Missiles steer by proportional navigation,
 // pull limited g and burn out, so a hard turn at the right moment can beat them. The proximity fuse sends the
@@ -7496,7 +7476,7 @@ function endMissile(i) {
 // heat-seekers can only be fooled by flares, the radar-guided AIM-120 only by chaff, a decoy only works while it is
 // fresh, and the odds depend on decoyChance below. A missile chasing someone else ignores these decoys.
 // Counts are combined release salvos (2 flares + 2 chaff bundles each), scaled to aircraft capacity.
-const CM_LOAD = { f15: 90, typhoon: 96, su30: 96, a10: 120, b52: 180, ac130: 120 };
+const CM_LOAD = { f15: 90, typhoon: 96, su30: 96, su34: 96, b52: 180, ac130: 120 };
 const CM_GAP = 0.005, FLARE_LIFE = 4.5, CHAFF_LIFE = 6;
 const CM = { left: 0, cool: 0 };
 const decoys = []; // { id, owner ('' for our own), kind 'flare' | 'chaff', p, v, t, life }

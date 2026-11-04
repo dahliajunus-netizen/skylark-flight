@@ -64,3 +64,10 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - Source: [FAB-500 M-54 V5](https://sketchfab.com/3d-models/fab-500-m-54-v5-87e064b28f6f4d7ba1fde7e79d621b8d)
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: in Skylark Flight the model is baked to a static mesh, aimed nose-forward, centred and sized to the FAB-500 M-54's 2.38 m.
+
+## Su-34
+
+- Creator: [bohmerang](https://sketchfab.com/bohmerang)
+- Source: [Sukhoi Su-34 - Figther Jet - Free](https://sketchfab.com/3d-models/sukhoi-su-34-figther-jet-free-2e81f16e6769441da3b5bc50237473ce)
+- License: [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+- Changes: `su34_split.glb` separates the canards, stabilators, rudders, canopy, landing gear struts, bogies and wheels, and gear doors into named parts, each with its origin on its hinge; cuts the flaperons out of the wing skins along their hinge lines; and gives each gear door its hinge line and closing angle. This adapted model is shared under the same license.
