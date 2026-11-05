@@ -784,6 +784,10 @@ const scene = new THREE.Scene();
 // Four directional PAPI units at each runway end. Their individual beam cutoffs create
 // the standard 4-white / 3-white-1-red / 2-and-2 / 1-white-3-red / 4-red indications.
 const papiSystems = [];
+// The airfield's lamps are a few tens of centimetres across, far less than a pixel from the air, so each also gets a
+// glow sprite (a point drawn at least a few pixels wide, added onto the frame), bright at night and faint by day.
+// uNight comes from the day/night cycle, uScale is the pixels per metre at 1 m away, uTime runs the flashers.
+const runwayGlow = { uNight: { value: 0 }, uScale: { value: 800 }, uTime: { value: 0 } };
 const papiWhite = new THREE.MeshBasicMaterial({ color: 0xfff8e8, toneMapped: false, fog: false });
 const papiRed = new THREE.MeshBasicMaterial({ color: 0xff241f, toneMapped: false, fog: false });
 const papiCase = new THREE.MeshStandardMaterial({ color: 0x292d31, roughness: 0.85 });
@@ -958,6 +962,7 @@ function updateDayNight() {
   const twilight = smooth(-0.32, 0.08, elevation);
   const night = 1 - twilight;
   starMaterial.opacity = 0.88 * smooth(0.28, 0.82, night);
+  runwayGlow.uNight.value = night;
   stars.visible = starMaterial.opacity > 0.005;
   const uniforms = sky.material.uniforms;
   uniforms.top.value.copy(SKY_DAY.top).lerp(SKY_NIGHT.top, night);
@@ -1395,7 +1400,7 @@ const BASE_BOXES = [];
     cx.save(); cx.translate((i % 5) * 256 + 128, Math.floor(i / 5) * 256 + 136); cx.scale(k, 1); cx.fillText(nm, 0, 0); cx.restore();
   });
   const lights = []; // [x, z, colour]
-  const approachPoles = [], approachBars = [], approachHeads = [];
+  const approachPoles = [], approachBars = [], approachHeads = [], flashers = [];
   RUNWAYS.forEach((R, ri) => {
     const r = R.rect, hl = r.hl, w = R.w, y = Y + LAYER.rwy + 0.02;
     const mk = (t, s, len, wid) => { const [x, z] = at(R, t, s); quad(paint, x, z, r.ux, r.uz, len / 2, wid / 2, y, WHITE); };
@@ -1419,7 +1424,10 @@ const BASE_BOXES = [];
       for (let d = 30; d <= 900; d += 30) {
         const [ax, az] = at(R, e * (hl + d), 0), h = 1.4 + 10.6 * d / 900;
         approachPoles.push([ax, az, h]);
-        approachHeads.push([ax, az, Y + h + 0.35]);
+        // a 4 m barrette of five lamps across the centreline
+        for (const sd of [-2, -1, 0, 1, 2]) { const [bx, bz] = at(R, e * (hl + d), sd); approachHeads.push([bx, bz, Y + h + 0.35]); }
+        // sequenced flashers (the "rabbit"): a white strobe runs in toward the threshold twice a second
+        if (d >= 300) flashers.push([ax, Y + h + 0.9, az, (900 - d) / 600]);
       }
       // CAT II/III uses closer 150 m crossbars; CAT I keeps the 300 m pattern.
       for (const d of (cat23 ? [150, 300, 450, 600, 750, 900] : [300, 600, 900])) {
@@ -1617,6 +1625,60 @@ float pvN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f)
   headMesh.instanceMatrix.needsUpdate = true;
   if (headMesh.instanceColor) headMesh.instanceColor.needsUpdate = true;
   scene.add(headMesh);
+  {
+    // size: the glow's width in metres; seq: -1 for a steady lamp, else where a flasher sits in its sequence (0 to 1)
+    const pos = [], col = [], size = [], seq = [];
+    const put = (x, y, z, colour, m, q) => { c.set(colour); pos.push(x, y, z); col.push(c.r, c.g, c.b); size.push(m); seq.push(q); };
+    for (const [x, z, colour] of lights) put(x, Y + 0.2, z, colour, 2.4, -1);
+    for (const [x, z, y, colour] of approachHeads) put(x, y, z, colour || '#fff0ce', 3.2, -1);
+    for (const [x, y, z, q] of flashers) put(x, y, z, '#ffffff', 9, q);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('size', new THREE.Float32BufferAttribute(size, 1));
+    g.setAttribute('seq', new THREE.Float32BufferAttribute(seq, 1));
+    const glowPts = new THREE.Points(g, new THREE.ShaderMaterial({
+      uniforms: runwayGlow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false,
+      vertexShader: `
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        attribute float size; attribute float seq; attribute vec3 color;
+        uniform float uNight, uScale, uTime;
+        varying vec3 vColor; varying float vA;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          // drawn a little toward the eye (2 m, plus a little with range) so the ground in the depth buffer doesn't hide it
+          float dist = length(mv.xyz);
+          mv.xyz *= 1.0 - min(0.5, (2.0 + dist * 0.004) / max(dist, 1.0));
+          float a = mix(0.12, 1.0, uNight);
+          if (seq >= 0.0) {
+            // one flash per lamp in each half second, running from the outer lamp in toward the threshold
+            float ph = fract(uTime * 2.0) - seq * 0.6;
+            a = (ph >= 0.0 && ph < 0.06 ? 1.0 : 0.0) * mix(0.5, 1.0, uNight);
+          }
+          vColor = color; vA = a;
+          // never smaller than a few pixels, so the lit runway reads from far out; brighter when it's shrunk
+          float px = size * uScale / max(dist, 1.0);
+          gl_PointSize = clamp(px, mix(1.0, 3.2, uNight), 64.0);
+          vA *= clamp(px / gl_PointSize * 0.6 + 0.55, 0.55, 1.0);
+          gl_Position = projectionMatrix * mv;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `
+        #include <logdepthbuf_pars_fragment>
+        varying vec3 vColor; varying float vA;
+        void main() {
+          #include <logdepthbuf_fragment>
+          float r = length(gl_PointCoord - 0.5) * 2.0;
+          if (r > 1.0) discard;
+          float core = exp(-r * r * 9.0), halo = exp(-r * r * 2.5) * 0.35;
+          gl_FragColor = vec4(vColor * (core * 1.6 + halo) * vA, 1.0);
+        }`
+    }));
+    glowPts.frustumCulled = false;
+    glowPts.renderOrder = 2;
+    scene.add(glowPts);
+  }
   const dm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 }), deco.length);
   deco.forEach(([x, y, z, sx, sy, sz, col], i) => { dm.setMatrixAt(i, m.compose(p.set(x, y, z), q.identity(), sc.set(sx, sy, sz))); dm.setColorAt(i, c.set(col)); });
   dm.castShadow = dm.receiveShadow = true;
@@ -8933,7 +8995,8 @@ function frame(now) {
   if (S.crashed && !paused) updateWreck(dt);
   updateParticles(glow, dt); updateParticles(haze, dt);
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
-  glow.mat.uniforms.uScale.value = haze.mat.uniforms.uScale.value = pScale;
+  glow.mat.uniforms.uScale.value = haze.mat.uniforms.uScale.value = runwayGlow.uScale.value = pScale;
+  runwayGlow.uTime.value = now / 1000;
   updateDayNight();
   if (waterWaves) { waterWaves.offset.x = (waterWaves.offset.x + dt * 0.012) % 1; waterWaves.offset.y = (waterWaves.offset.y + dt * 0.005) % 1; }
   if (cloudField) { cloudField.position.x += dt * 1.7; cloudField.position.z += dt * 0.65; }
