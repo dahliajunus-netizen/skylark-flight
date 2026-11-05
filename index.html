@@ -2997,36 +2997,59 @@ function buildFromGltf(model) {
       const hingeLine = along => {
         const key = n + '|' + along;
         if (hingeLines.has(key)) return hingeLines.get(key);
-        const pts = [], v = new THREE.Vector3(), mw = new THREE.Matrix4();
+        // the part's triangles, and points along every triangle edge (a low-poly surface may have vertices only at its
+        // ends, so its leading edge shows up only between them)
+        const tris = [], mw = new THREE.Matrix4();
         (multi ? src.parent : src).traverse(o => {
           if (!o.isMesh) return;
           mw.multiplyMatrices(turn, o.matrixWorld);
-          const a = o.geometry.attributes.position;
-          for (let i = 0; i < a.count; i++) pts.push(v.fromBufferAttribute(a, i).applyMatrix4(mw).clone());
+          const a = o.geometry.attributes.position, ix = o.geometry.index, n3 = ix ? ix.count : a.count;
+          const at = i => new THREE.Vector3().fromBufferAttribute(a, ix ? ix.getX(i) : i).applyMatrix4(mw);
+          for (let i = 0; i + 2 < n3; i += 3) tris.push([at(i), at(i + 1), at(i + 2)]);
         });
         const k = along === 'y' ? 'y' : 'x';
-        let lo = Infinity, hi = -Infinity; for (const p of pts) { lo = Math.min(lo, p[k]); hi = Math.max(hi, p[k]); }
-        const bins = 12, front = new Array(bins).fill(null);
+        let lo = Infinity, hi = -Infinity; for (const t of tris) for (const p of t) { lo = Math.min(lo, p[k]); hi = Math.max(hi, p[k]); }
+        const pts = [], step = Math.max(hi - lo, 0.01) / 96;
+        for (const t of tris) for (let e = 0; e < 3; e++) {
+          const p = t[e], q = t[(e + 1) % 3], n = Math.min(64, Math.ceil(p.distanceTo(q) / step));
+          for (let i = 0; i <= n; i++) pts.push(p.clone().lerp(q, i / Math.max(n, 1)));
+        }
+        const bins = 24, front = new Array(bins).fill(null);
         for (const p of pts) { const b = Math.min(bins - 1, Math.floor((p[k] - lo) / Math.max(hi - lo, 1e-6) * bins)); if (!front[b] || p.z < front[b].z) front[b] = p; }
         const edge = front.filter(Boolean);
         let dir = null;
         if (edge.length >= 3 && hi - lo > 0.2) {
-          // principal direction of the leading-edge points
-          const c = edge.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(edge.length);
+          // the leading edge can have steps in it (a fairing, an end cap cut at an angle): take the straight line that
+          // most of the edge points lie on (within 3% of the part's length), then fit it to just those points
+          const tol = 0.03 * (hi - lo) + 0.02, t = new THREE.Vector3(), u = new THREE.Vector3();
+          let best = null;
+          for (let i = 0; i < edge.length; i++) for (let j = i + 1; j < edge.length; j++) {
+            u.subVectors(edge[j], edge[i]); const len = u.length(); if (len < 0.25 * (hi - lo)) continue; u.divideScalar(len);
+            const ins = edge.filter(p => t.subVectors(p, edge[i]).cross(u).length() < tol);
+            if (!best || ins.length > best.length) best = ins;
+          }
+          const fit = best && best.length >= 3 ? best : edge;
+          const c = fit.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(fit.length);
           const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-          for (const p of edge) { const q = [p.x - c.x, p.y - c.y, p.z - c.z]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i][j] += q[i] * q[j]; }
+          for (const p of fit) { const q = [p.x - c.x, p.y - c.y, p.z - c.z]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i][j] += q[i] * q[j]; }
           let d = k === 'y' ? [0, 1, 0] : [1, 0, 0];
           for (let it = 0; it < 50; it++) { const e = [0, 1, 2].map(i => C[i][0] * d[0] + C[i][1] * d[1] + C[i][2] * d[2]); const l = Math.hypot(...e) || 1; d = e.map(x => x / l); }
           dir = new THREE.Vector3(...d);
           if (dir[k] < 0) dir.negate();
           if (dir[k] < 0.5) dir = null; // not a line along the span (or height): leave the part on its plain axis
+          else dir = { dir, at: c }; // the line: its direction and a point on it (the leading edge's middle)
         }
         hingeLines.set(key, dir);
         return dir;
       };
       const onHinge = (pivot, along) => {
-        const dir = hingeLine(along);
-        if (!dir) return pivot;
+        const line = hingeLine(along);
+        if (!line) return pivot;
+        const dir = line.dir;
+        // the pivot moves onto the line (the point on it nearest the part's origin), and the mesh moves back to match
+        const h = pivot.position.clone(), onLine = line.at.clone().addScaledVector(dir, h.clone().sub(line.at).dot(dir));
+        for (const c of pivot.children) c.position.add(h).sub(onLine);
+        pivot.position.copy(onLine);
         const q = new THREE.Quaternion().setFromUnitVectors(along === 'y' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0), dir);
         const frame = new THREE.Group(); frame.quaternion.copy(q); plane.add(frame);
         plane.remove(pivot); frame.add(pivot);
@@ -3052,7 +3075,13 @@ function buildFromGltf(model) {
       }
       else if (/^aileron_/.test(n)) { m.name = 'wing' + side; parts.ailerons.push(onHinge(hinged(), 'x')); }
       else if (/^flap_/.test(n)) { m.name = 'wing' + side + ' flap'; parts.flaps.push(onHinge(hinged(), 'x')); }
-      else if (/^elevator_/.test(n)) { m.name = 'F-15 stabilator ' + (side === 'L' ? 'left' : 'right'); parts['stab' + side] = hinged(); }
+      else if (/^elevator_/.test(n)) {
+        // a fighter's all-moving stabilator turns on its spindle; an airliner's elevator on its hinge line. A part in
+        // several material pieces has one pivot per piece: the extra ones follow the first
+        m.name = 'F-15 stabilator ' + (side === 'L' ? 'left' : 'right');
+        const p = A.weapons ? hinged() : onHinge(hinged(), 'x');
+        if (parts['stab' + side]) parts.stabMore.push({ p, side }); else parts['stab' + side] = p;
+      }
       // the Typhoon's all-moving canards are its pitch surfaces (stabSign -1); its flaperons pitch and roll
       else if (/^canard_/.test(n)) { m.name = 'canard ' + (side === 'L' ? 'left' : 'right'); if (A.canards) parts.canards.push(hinged()); else parts['stab' + side] = hinged(); }
       else if (/^nozzle_/.test(n)) parts.tvc.push(hinged()); // thrust-vectoring nozzles pivot at their front
@@ -3323,7 +3352,7 @@ function setAircraft(id) {
   for (const mark of parts.damageMarks || []) mark.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.fans = []; parts.reversers = []; parts.dragRudders = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
+  parts.bombs = []; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.fans = []; parts.reversers = []; parts.dragRudders = []; parts.stabMore = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
   ({ f15: buildF15, typhoon: buildTyphoon, su34: buildSU30, b737: build757, b748: build748, b2: buildB2, ac130: buildAC130, su30: buildSU30, concorde: buildConcorde })[A.id]();
   buildExteriorLights();
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
@@ -7208,6 +7237,7 @@ function updateVisuals(dt) {
   }
   parts.stabL.rotation.x = -inp.pitch * 0.3 * A.stabSign + inp.roll * A.stabRoll;
   parts.stabR.rotation.x = -inp.pitch * 0.3 * A.stabSign - inp.roll * A.stabRoll;
+  for (const e of parts.stabMore) e.p.rotation.x = parts['stab' + e.side].rotation.x;
   for (const a of parts.ailerons) a.rotation.x = ((a.userData.x ?? a.position.x) < 0 ? 1 : -1) * inp.roll * 0.28;
   for (const r of parts.rudders) r.rotation.y = inp.yaw * 0.3;
   for (const c of parts.canards) c.rotation.x = inp.pitch * 0.35; // foreplanes lead the pitch the other way
