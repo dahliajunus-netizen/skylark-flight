@@ -2442,7 +2442,7 @@ const AC = {
     id: 'b2', mass: 150000, wing: 478, thrust: 308000, thrustAB: 0,
     CL0: 0.12, CLA: 4.2, stallA: 0.3, cd0: 0.0095, k: 0.06, wave: [0.8, 0.95, 0.06],
     gLimit: 2.5, effV: 95, rates: [0.3, 0.14, 0.45], stabRoll: 0, tailStrike: 0.12, gear: 3.0, strutHinges: true, noseAft: true, weapons: true, gearTime: 9, mainRetract: 'fwd', travel: 0.45,
-    airOnly: true, // it always starts airborne, at 50,000 ft
+    // its air start is at 50,000 ft
     lowObs: { radar: 0.6, lock: 2 },
     ammo: 0, muzzle: [0, 0, 0], stabSign: 1, model: 'b2_split.glb', split: 21.0, splitAxis: 'z', podEngines: true,
     loadouts: [{ id: 'mk82', name: '80 × MK-82', spec: '80 × MK-82', bombs: B2_RACK('mk82') },
@@ -2456,9 +2456,9 @@ const AC = {
     fireball: 2.2, crashBlast: [60, 2000],
     sound: { whine: [300, 760, 1.3], roar: [85, 250, 1.5] },
     eyebrow: 'NORTHROP GRUMMAN B-2 SPIRIT · STEALTH BOMBER',
-    desc: 'Fly the B-2 Spirit, starting at 50,000 ft over the island. Its Low Observable shape is always working: enemy radar picks it up at only 60% of the usual range and takes twice as long to lock it, though it can still be seen and still be hit. Everything rides inside: eighty Mk-82s, sixteen Mk-84s, two GBU-57 bunker busters, or sixteen B83 nuclear bombs. Only one player at a time can fly it.',
-    specs: ['START 50,000 FT', 'MACH 0.8', '2.5 G LIMIT', 'LOW OBSERVABLE', 'INTERNAL BAYS', 'ONE PILOT AT A TIME'],
-    tip: 'It starts at 50,000 ft. Drop from up high: the bay doors open for each release. The B83s go one at a time (N): after the last of the sixteen, they need 4 minutes before you can carry them again. Hold the brake to open the drag rudders as speed brakes.'
+    desc: 'Fly the B-2 Spirit from the runway, or start airborne at 50,000 ft over the island. Its Low Observable shape is always working: enemy radar picks it up at only 60% of the usual range and takes twice as long to lock it, though it can still be seen and still be hit. Everything rides inside: eighty Mk-82s, sixteen Mk-84s, two GBU-57 bunker busters, or sixteen B83 nuclear bombs. Only one player at a time can fly it.',
+    specs: ['MACH 0.8', '2.5 G LIMIT', 'LOW OBSERVABLE', 'INTERNAL BAYS', 'ONE PILOT AT A TIME'],
+    tip: 'Start airborne to begin at 50,000 ft. Drop from up high: the bay doors open for each release. The B83s go one at a time (N): after the last of the sixteen, they need 4 minutes before you can carry them again. Hold the brake to open the drag rudders as speed brakes.'
   },
   b737: {
     // Boeing 737 MAX 8: ~65 t at a typical weight, 127 m² wing, two CFM LEAP-1B (~130 kN each), Mach 0.79 cruise
@@ -3716,7 +3716,7 @@ function bellyDown(why) {
     plane.updateMatrixWorld(true);
     ripZone(z, z.pts[0], z.pts[0].clone().applyMatrix4(plane.matrixWorld));
   }
-  S.gearT = 0; S.gearDown = false;
+  S.gearT = 0; S.doorT = 0; S.gearDown = false;
   S.hull = Math.max(0.05, S.hull - 0.25);
   toast(why + '. Belly landing: hold it level and let it slide');
 }
@@ -5724,7 +5724,6 @@ function reset(mode) {
   clearWeapons();
   S.ang.set(0, 0, 0);
   inp.pitch = inp.roll = inp.yaw = 0;
-  if (A.airOnly) mode = 'air'; // the B-2 starts at 50,000 ft, whatever start was picked
   if (mode === 'runway') {
     const R = RUNWAYS[0]; // lined up on runway 36, facing north toward the city
     S.pos.set(R.x, CITY_H + 0.1 + GEAR, R.z + R.len / 2 - 80);
@@ -5762,7 +5761,7 @@ function reset(mode) {
     S.vel.copy(F).multiplyScalar(A.airStart[0]);
     S.throttle = A.airStart[1];
     S.onGround = false;
-    S.gearDown = false; S.gearT = 0;
+    S.gearDown = false; S.gearT = 0; S.doorT = 0;
   }
   plane.visible = true;
   clearTimeout(crashTimer);
@@ -5874,7 +5873,7 @@ function waterContact(point) {
     0.025 * clamp((impactDown - 1) / 4, 0, 1) + (gearDown ? 0.018 : 0);
   S.hitBuilding = -1; S.hull = Math.max(0.25, S.hull - 0.12);
   S.onGround = false; S.throttle = 0; S.firing = false; S.brake = false;
-  S.gearDown = false; S.gearT = 0;
+  S.gearDown = false; S.gearT = 0; S.doorT = 0;
   S.pos.y = Math.max(1.2, A.gear * 0.68);
   S.vel.y = Math.min(0, S.vel.y * 0.18);
   const splashCount = Math.min(180, 50 + Math.round(horizontalSpeed * 1.1));
@@ -6843,7 +6842,7 @@ function updateGearOverspeed(dt) {
     const worldPoint = z.pts[0].clone().applyMatrix4(plane.matrixWorld);
     ripZone(z, z.pts[0], worldPoint);
   }
-  S.gearDown = false; S.gearT = 0; S.gearOverT = 0;
+  S.gearDown = false; S.gearT = 0; S.doorT = 0; S.gearOverT = 0;
   toast('LANDING GEAR TORN OFF BY OVERSPEED');
 }
 const LOW_ALT_WING_LIMIT_KT = { su30: 700, f15: 700, typhoon: 700, su34: 700, b2: 500, b737: 450, b748: 450, concorde: 600, ac130: 360 };
@@ -7199,8 +7198,10 @@ function updateVisuals(dt) {
   for (const f of parts.flaps) f.rotation.x = 0.52 * gk; // F-15 flaps: 30° down with the gear, up with it
   for (const D of parts.gearDoors) D.pivot.rotation.z = D.sign * ga; // hanging open with the gear down, folded flat when up
   // the open bay (hinge arms, links) shows until the doors are mostly shut; then the closed skin stands in behind them
+  // panels shut flat stay on show unless the model has a closed-door skin of its own to stand in for them
+  const closedSkin = parts.doorSets.some(D => !D.open);
   const dk = S.doorT * S.doorT * (3 - 2 * S.doorT);
-  for (const D of parts.doorPanels) { D.pivot.quaternion.setFromAxisAngle(D.axis, (1 - dk) * D.angle); D.pivot.visible = S.doorT > 0; }
+  for (const D of parts.doorPanels) { D.pivot.quaternion.setFromAxisAngle(D.axis, (1 - dk) * D.angle); D.pivot.visible = S.doorT > 0 || !closedSkin; }
   for (const D of parts.doorSets) D.m.visible = D.open === (doors ? S.doorT > 0.35 : S.gearT > 0.01);
   S.noseDip += ((S.onGround && S.brake && S.V > 1 ? 0.35 * A.travel : 0) - S.noseDip) * Math.min(1, dt * 4);
   for (const L of parts.gearLegs) {
