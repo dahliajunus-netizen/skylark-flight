@@ -92,3 +92,15 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - Source: [Concorde 3D Model](https://sketchfab.com/3d-models/concorde-3d-model-d2222f34152d4850afff0124872fc9ba)
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: `concorde_split.glb` bakes the model's object transforms; cuts the droop nose, six elevons and rudder out of the airframe skin; splits each engine's nozzle bucket into upper and lower thrust-reverser eyelids; separates the visor, landing gear legs, bogies and wheels, and gives the gear covers hinges; gives the flight-deck windows a see-through glass material; paints the airframe (the export made it fully metallic); and downsizes the largest textures to 2048 px.
+
+## B-2 Spirit
+
+- Creator: [Kevin Love](https://sketchfab.com/Tyler_Kevin)
+- Source: [B-2 Spirit](https://sketchfab.com/3d-models/b-2-spirit-06464acbeca94381893c037b6dfa3d12)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: `b2_split.glb` bakes the model's object transforms; separates the six elevons, the beavertail, the four split drag-rudder halves, the four bomb-bay doors (with their inner faces), the nose and main gear struts, bogies and wheels, and the nose and main gear doors, each on its own hinge; and turns the model to face -Z.
+
+## GBU-57 MOP and B83
+
+- Source: models supplied by the project owner.
+- Changes: `gbu57.glb` and `b83.glb` are decimated from about 150,000 triangles to about 12,600 and 10,000 by vertex clustering, with smooth normals added; the game paints them (the files have no materials).
