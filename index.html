@@ -1659,8 +1659,10 @@ float pvN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f)
           vColor = color; vA = a;
           // never smaller than a few pixels, so the lit runway reads from far out; brighter when it's shrunk
           float px = size * uScale / max(dist, 1.0);
-          gl_PointSize = clamp(px, mix(1.0, 3.2, uNight), 64.0);
-          vA *= clamp(px / gl_PointSize * 0.6 + 0.55, 0.55, 1.0);
+          gl_PointSize = clamp(px, mix(1.0, 2.4, uNight), 48.0);
+          vA *= clamp(px / gl_PointSize * 0.6 + 0.45, 0.45, 1.0);
+          // full within 5 km, gone by 12 km: from across the map the airfield doesn't sit there like a beacon
+          vA *= 1.0 - smoothstep(5000.0, 12000.0, dist);
           gl_Position = projectionMatrix * mv;
           #include <logdepthbuf_vertex>
         }`,
@@ -1672,7 +1674,7 @@ float pvN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f)
           float r = length(gl_PointCoord - 0.5) * 2.0;
           if (r > 1.0) discard;
           float core = exp(-r * r * 9.0), halo = exp(-r * r * 2.5) * 0.35;
-          gl_FragColor = vec4(vColor * (core * 1.6 + halo) * vA, 1.0);
+          gl_FragColor = vec4(vColor * (core * 1.15 + halo * 0.8) * vA, 1.0);
         }`
     }));
     glowPts.frustumCulled = false;
