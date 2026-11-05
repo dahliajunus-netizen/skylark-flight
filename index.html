@@ -2949,7 +2949,7 @@ function buildFromGltf(model) {
     turn.multiplyMatrices(orient, uniformScale).multiply(centerAtOrigin);
   }
   const gear = new THREE.Group(); plane.add(gear);
-  const meshes = [];
+  const meshes = [], hingeLines = new Map();
   model.traverse(o => { if (o.isMesh) meshes.push(o); });
   const splitModel = !!A.split;
   for (const src of meshes) {
@@ -2986,6 +2986,54 @@ function buildFromGltf(model) {
       const hinged = () => {
         const pivot = new THREE.Group(); pivot.position.copy(hinge); plane.add(pivot);
         m.position.sub(hinge); pivot.add(m);
+        pivot.userData.x = hinge.x; // which side it is on, wherever its frame ends up
+        return pivot;
+      };
+      // A flap, aileron, elevon, spoiler or rudder turns about its hinge line, which is swept along the wing (or raked
+      // and canted on a fin), not about the model's x (or y) axis through one point. The line is fitted through the
+      // part's leading edge: the most forward point in each slice along its span (x) or height (y), for the whole part
+      // (all its material pieces). The pivot then sits in a frame turned so that its own x (or y) is that line, and the
+      // mesh is turned back inside it, so the animation's rotation.x (or .y) swings the surface on its real hinge.
+      const hingeLine = along => {
+        const key = n + '|' + along;
+        if (hingeLines.has(key)) return hingeLines.get(key);
+        const pts = [], v = new THREE.Vector3(), mw = new THREE.Matrix4();
+        (multi ? src.parent : src).traverse(o => {
+          if (!o.isMesh) return;
+          mw.multiplyMatrices(turn, o.matrixWorld);
+          const a = o.geometry.attributes.position;
+          for (let i = 0; i < a.count; i++) pts.push(v.fromBufferAttribute(a, i).applyMatrix4(mw).clone());
+        });
+        const k = along === 'y' ? 'y' : 'x';
+        let lo = Infinity, hi = -Infinity; for (const p of pts) { lo = Math.min(lo, p[k]); hi = Math.max(hi, p[k]); }
+        const bins = 12, front = new Array(bins).fill(null);
+        for (const p of pts) { const b = Math.min(bins - 1, Math.floor((p[k] - lo) / Math.max(hi - lo, 1e-6) * bins)); if (!front[b] || p.z < front[b].z) front[b] = p; }
+        const edge = front.filter(Boolean);
+        let dir = null;
+        if (edge.length >= 3 && hi - lo > 0.2) {
+          // principal direction of the leading-edge points
+          const c = edge.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(edge.length);
+          const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+          for (const p of edge) { const q = [p.x - c.x, p.y - c.y, p.z - c.z]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i][j] += q[i] * q[j]; }
+          let d = k === 'y' ? [0, 1, 0] : [1, 0, 0];
+          for (let it = 0; it < 50; it++) { const e = [0, 1, 2].map(i => C[i][0] * d[0] + C[i][1] * d[1] + C[i][2] * d[2]); const l = Math.hypot(...e) || 1; d = e.map(x => x / l); }
+          dir = new THREE.Vector3(...d);
+          if (dir[k] < 0) dir.negate();
+          if (dir[k] < 0.5) dir = null; // not a line along the span (or height): leave the part on its plain axis
+        }
+        hingeLines.set(key, dir);
+        return dir;
+      };
+      const onHinge = (pivot, along) => {
+        const dir = hingeLine(along);
+        if (!dir) return pivot;
+        const q = new THREE.Quaternion().setFromUnitVectors(along === 'y' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0), dir);
+        const frame = new THREE.Group(); frame.quaternion.copy(q); plane.add(frame);
+        plane.remove(pivot); frame.add(pivot);
+        pivot.position.applyQuaternion(q.clone().invert());
+        const back = new THREE.Group(); back.quaternion.copy(q).invert();
+        for (const c of [...pivot.children]) { pivot.remove(c); back.add(c); }
+        pivot.add(back);
         return pivot;
       };
       const gearPart = /^(nose|main)gear(?:_[lr])?_(strut|wheel|bogie)\d*$/.exec(n);
@@ -3002,23 +3050,24 @@ function buildFromGltf(model) {
           parts.wheels.push({ m, r: (geometry.boundingBox.max.y - geometry.boundingBox.min.y) / 2, spin: 0 });
         }
       }
-      else if (/^aileron_/.test(n)) { m.name = 'wing' + side; parts.ailerons.push(hinged()); }
-      else if (/^flap_/.test(n)) { m.name = 'wing' + side + ' flap'; parts.flaps.push(hinged()); }
+      else if (/^aileron_/.test(n)) { m.name = 'wing' + side; parts.ailerons.push(onHinge(hinged(), 'x')); }
+      else if (/^flap_/.test(n)) { m.name = 'wing' + side + ' flap'; parts.flaps.push(onHinge(hinged(), 'x')); }
       else if (/^elevator_/.test(n)) { m.name = 'F-15 stabilator ' + (side === 'L' ? 'left' : 'right'); parts['stab' + side] = hinged(); }
       // the Typhoon's all-moving canards are its pitch surfaces (stabSign -1); its flaperons pitch and roll
       else if (/^canard_/.test(n)) { m.name = 'canard ' + (side === 'L' ? 'left' : 'right'); if (A.canards) parts.canards.push(hinged()); else parts['stab' + side] = hinged(); }
       else if (/^nozzle_/.test(n)) parts.tvc.push(hinged()); // thrust-vectoring nozzles pivot at their front
-      else if (/^elevon_/.test(n)) { m.name = 'wing' + side + ' elevon'; const e = hinged(); e.userData.noRoll = /beavertail/.test(n); parts.elevons.push(e); }
+      else if (/^elevon_/.test(n)) { m.name = 'wing' + side + ' elevon'; const e = onHinge(hinged(), 'x'); e.userData.noRoll = /beavertail/.test(n); parts.elevons.push(e); }
       // the B-2's split drag rudders (upper and lower halves) and its bomb-bay doors (hinged on either edge)
-      else if (/^dragrudder_(up|dn)_/.test(n)) parts.dragRudders.push({ pivot: hinged(), up: /_up_/.test(n), side: hinge.x < 0 ? -1 : 1 });
+      else if (/^dragrudder_(up|dn)_/.test(n)) parts.dragRudders.push({ pivot: onHinge(hinged(), 'x'), up: /_up_/.test(n), side: hinge.x < 0 ? -1 : 1 });
       else if (/^baydoor_(p|n)_/.test(n)) parts.bayDoors.push({ pivot: hinged(), sign: /^baydoor_p/.test(n) ? 1 : -1 });
       else if (n === 'droop_nose' || n === 'droop_visor') { // Concorde's nose, hinged at its lower edge; its visor drops further
         const p = hinged(); p.userData.droop = n === 'droop_visor' ? 1.8 : 1; parts.droop.push(p);
       }
       // thrust-reverser eyelids: the upper lid's trailing edge swings down, the lower lid's up
       else if (/^reverser_(up|dn)_/.test(n)) parts.reversers.push({ pivot: hinged(), sign: /^reverser_up/.test(n) ? 1 : -1 });
-      else if (/^rudder(_|$)/.test(n)) { m.name = 'vertical_tail'; parts.rudders.push(hinged()); }
-      else if (n === 'airbrake' || /^spoiler_/.test(n)) parts.spoilers.push(hinged());
+      else if (/^rudder(_|$)/.test(n)) { m.name = 'vertical_tail'; parts.rudders.push(onHinge(hinged(), 'y')); }
+      else if (/^spoiler_/.test(n)) parts.spoilers.push(onHinge(hinged(), 'x'));
+      else if (n === 'airbrake') parts.spoilers.push(hinged());
       else if (/^fan_face_/.test(n)) { m.name = n; parts.fans.push(hinged()); } // turbofan faces spin about the engine axis
       // Typhoon gear doors: one set drawn open (gear down or moving), the other closed (gear up)
       else if (/^geardoors(open|closed)$/.test(n)) { plane.add(m); parts.doorSets.push({ m, open: n.endsWith('open') }); }
@@ -7159,11 +7208,11 @@ function updateVisuals(dt) {
   }
   parts.stabL.rotation.x = -inp.pitch * 0.3 * A.stabSign + inp.roll * A.stabRoll;
   parts.stabR.rotation.x = -inp.pitch * 0.3 * A.stabSign - inp.roll * A.stabRoll;
-  for (const a of parts.ailerons) a.rotation.x = (a.position.x < 0 ? 1 : -1) * inp.roll * 0.28;
+  for (const a of parts.ailerons) a.rotation.x = ((a.userData.x ?? a.position.x) < 0 ? 1 : -1) * inp.roll * 0.28;
   for (const r of parts.rudders) r.rotation.y = inp.yaw * 0.3;
   for (const c of parts.canards) c.rotation.x = inp.pitch * 0.35; // foreplanes lead the pitch the other way
   for (const z of parts.tvc) z.rotation.x = -inp.pitch * 0.26; // thrust vectoring: up to 15° with the stick
-  for (const e of parts.elevons) e.rotation.x = -inp.pitch * 0.3 + (e.userData.noRoll ? 0 : (e.position.x < 0 ? 1 : -1) * inp.roll * 0.3); // pitch and roll together
+  for (const e of parts.elevons) e.rotation.x = -inp.pitch * 0.3 + (e.userData.noRoll ? 0 : ((e.userData.x ?? e.position.x) < 0 ? 1 : -1) * inp.roll * 0.3); // pitch and roll together
   // split drag rudders: the halves open apart on the side the nose is yawed toward, and both sides open as speed brakes
   for (const D of parts.dragRudders) {
     const open = clamp(0.6 * inp.yaw * D.side, 0, 0.6) + (S.brake && running ? 0.7 : 0);
