@@ -2653,28 +2653,68 @@ function toggleVision() {
     toast(nvgOn ? 'Night vision on' : 'Night vision off');
   }
 }
+// Exterior lights where the real ones are, found on the airframe itself: red and green navigation lights on the
+// wingtips, a white one on the tail cone, red anti-collision beacons on top of and under the fuselage (about once a
+// second), white strobes on the wingtips (a double flash every 1.2 s), and two landing lights in the nose. Each
+// lamp is a small additive glow, not a lit ball, and only the landing lights light anything up.
+const lampGlowMat = colour => new THREE.SpriteMaterial({ map: papiGlowMap, color: colour, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false });
 function buildExteriorLights() {
   if (!isAirliner()) return;
   const group = exteriorLightGroup = new THREE.Group();
   group.visible = exteriorLightsOn;
-  plane.add(group);
-  const halfSpan = A.box.max.x * 0.92, noseZ = A.box.min.z + 2;
-  const bulb = (color, x, y, z, radius = 0.28) => {
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), new THREE.MeshBasicMaterial({ color, toneMapped: false }));
-    lamp.position.set(x, y, z); group.add(lamp);
-    const glow = new THREE.PointLight(color, 3, 260, 2);
-    glow.position.copy(lamp.position); group.add(glow);
+  // the airframe's extreme points, from its meshes (not the gear)
+  plane.updateMatrixWorld(true);
+  const inv = plane.matrixWorld.clone().invert(), v = new THREE.Vector3(), mw = new THREE.Matrix4();
+  const tipL = new THREE.Vector3(Infinity), tipR = new THREE.Vector3(-Infinity), tail = new THREE.Vector3(0, 0, -Infinity);
+  const top = new THREE.Vector3(0, -Infinity), belly = new THREE.Vector3(0, Infinity), zMid = [A.box.min.z + 0.3 * (A.box.max.z - A.box.min.z), A.box.min.z + 0.55 * (A.box.max.z - A.box.min.z)];
+  plane.traverse(o => {
+    if (!o.isMesh || /gear|wheel|strut|bogie|door/i.test(o.name) || (parts.gear && o.parent === parts.gear)) return;
+    mw.multiplyMatrices(inv, o.matrixWorld);
+    const a = o.geometry.attributes.position;
+    for (let i = 0; i < a.count; i++) {
+      v.fromBufferAttribute(a, i).applyMatrix4(mw);
+      if (v.x < tipL.x) tipL.copy(v);
+      if (v.x > tipR.x) tipR.copy(v);
+      if (Math.abs(v.x) < 0.5 && v.z > zMid[0] && v.z < zMid[1]) { if (v.y > top.y) top.copy(v); if (v.y < belly.y) belly.copy(v); }
+    }
+  });
+  // the tail light sits on the tail cone: the furthest-aft centreline point below the top of the fuselage (not the fin)
+  const coneTop = isFinite(top.y) ? top.y - 0.2 * (top.y - belly.y) : Infinity;
+  plane.traverse(o => {
+    if (!o.isMesh || /gear|wheel|strut|bogie|door/i.test(o.name) || (parts.gear && o.parent === parts.gear)) return;
+    mw.multiplyMatrices(inv, o.matrixWorld);
+    const a = o.geometry.attributes.position;
+    for (let i = 0; i < a.count; i++) { v.fromBufferAttribute(a, i).applyMatrix4(mw); if (Math.abs(v.x) < 0.6 && v.y < coneTop && v.z > tail.z) tail.copy(v); }
+  });
+  const lamp = (colour, p, size) => {
+    const sp = new THREE.Sprite(lampGlowMat(colour)); sp.position.copy(p); sp.scale.setScalar(size); sp.renderOrder = 3; group.add(sp); return sp;
   };
-  bulb('#ff342b', -halfSpan, 0.2, 0, 0.36);
-  bulb('#39ff78', halfSpan, 0.2, 0, 0.36);
-  bulb('#fff2d0', 0, 0.35, A.box.max.z * 0.92, 0.3);
-  bulb('#fff2d0', 0, -0.15, noseZ, 0.32);
+  const out = (p, dx, dy, dz) => p.clone().add(new THREE.Vector3(dx, dy, dz));
+  group.userData = {
+    steady: [lamp('#ff2a20', out(tipL, -0.1, 0, 0), 0.6), lamp('#30ff70', out(tipR, 0.1, 0, 0), 0.6), lamp('#fff4e0', out(tail, 0, 0, 0.15), 0.5)],
+    beacons: isFinite(top.y) ? [lamp('#ff1a10', out(top, 0, 0.12, 0), 0.8), lamp('#ff1a10', out(belly, 0, -0.12, 0), 0.8)] : [],
+    strobes: [lamp('#ffffff', out(tipL, -0.12, 0, 0.2), 1.4), lamp('#ffffff', out(tipR, 0.12, 0, 0.2), 1.4), lamp('#ffffff', out(tail, 0, 0, 0.25), 1.0)]
+  };
+  // landing lights: a pair of beams from the nose, lighting the runway ahead
+  const noseZ = A.box.min.z + 2;
   for (const x of [-0.65, 0.65]) {
-    const spot = new THREE.SpotLight('#fff0d8', 85, 900, Math.PI / 8, 0.55, 2);
+    const spot = new THREE.SpotLight('#fff0d8', 18, 600, Math.PI / 10, 0.6, 2);
     spot.position.set(x, -0.15, noseZ);
     const target = new THREE.Object3D(); target.position.set(x, -4, noseZ - 600);
     group.add(spot, target); spot.target = target;
+    group.userData.steady.push(lamp('#fff2dc', new THREE.Vector3(x, -0.15, noseZ - 0.1), 0.6));
   }
+  plane.add(group);
+}
+// beacons turn once a second, strobes give a double flash every 1.2 s; dimmer by day, when they matter less
+function updateExteriorLights() {
+  const g = exteriorLightGroup;
+  if (!g || !g.visible || !g.userData.steady) return;
+  const t = performance.now() / 1000, dayDim = 0.35 + 0.65 * runwayGlow.uNight.value;
+  for (const l of g.userData.steady) l.material.opacity = dayDim;
+  const beacon = (t % 1) < 0.12, strobe = (t % 1.2) < 0.05 || ((t % 1.2) > 0.12 && (t % 1.2) < 0.17);
+  for (const l of g.userData.beacons) { l.visible = beacon; l.material.opacity = dayDim; }
+  for (const l of g.userData.strobes) { l.visible = strobe; l.material.opacity = 0.6 + 0.4 * dayDim; }
 }
 const parts = { bombs: [], spoilers: [] };
 const bombTemplates = {};
@@ -7369,10 +7409,12 @@ function updateVisuals(dt) {
   }
   // afterburner: reheat lights over about a third of a second; the nozzle glows from high dry power upwards
   const live = running && !S.crashed;
-  const abTarget = live && A.thrustAB && S.throttle > AB_AT ? 0.35 + 0.65 * (S.throttle - AB_AT) / (1 - AB_AT) : 0;
+  // (none with the thrust reversers deployed: Concorde's buckets close behind the jet pipes)
+  const noRev = 1 - clamp((S.rev || 0) * 4, 0, 1);
+  const abTarget = live && A.thrustAB && S.throttle > AB_AT ? (0.35 + 0.65 * (S.throttle - AB_AT) / (1 - AB_AT)) * noRev : 0;
   for (const ab of [parts.abL, parts.abR, parts.abL2, parts.abR2].filter(Boolean)) {
     ab.userData.k += (abTarget - ab.userData.k) * Math.min(1, dt / 0.12);
-    const k = ab.userData.k, heat = live && A.thrustAB ? clamp((S.throttle - 0.55) / (AB_AT - 0.55), 0, 1) * 0.55 + k * 0.9 : 0;
+    const k = ab.userData.k, heat = live && A.thrustAB ? (clamp((S.throttle - 0.55) / (AB_AT - 0.55), 0, 1) * 0.55 + k * 0.9) * noRev : 0;
     ab.visible = heat > 0.02;
     if (!ab.visible) continue;
     for (const m of ab.userData.plume) {
@@ -9007,6 +9049,7 @@ function frame(now) {
   updateSceneryVisibility(now);
   updateParkedAircraft(now);
   updatePapi();
+  updateExteriorLights();
   const stall = running ? updateHUD() : false;
   updateAudio(stall);
   mpUpdate(dt);
