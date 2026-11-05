@@ -79,6 +79,27 @@ body { background: var(--night); color: var(--fg); font-family: var(--font-ui); 
 .ret.lead { width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid #ff8c2e; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
 .ret.lead::after { background: #ff8c2e; }
 .ret.lead.hot { background: rgba(255,140,46,.35); }
+#cue { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ret.hitmk { width: 26px; height: 26px; margin: -13px 0 0 -13px; border: 0; border-radius: 0; }
+.ret.hitmk::after { display: none; }
+.ret.hitmk span { position: absolute; inset: 0; opacity: 0; }
+.ret.hitmk span::before, .ret.hitmk span::after { content: ""; position: absolute; left: 12px; top: -2px; width: 2px; height: 30px; background: linear-gradient(#fff 0 36%, transparent 36% 64%, #fff 64%); transform: rotate(45deg); filter: drop-shadow(0 0 1px #000); }
+.ret.hitmk span::after { transform: rotate(-45deg); }
+.ret.hitmk span.on { animation: hitmk .32s ease-out forwards; }
+.ret.hitmk span.big { animation-duration: .7s; }
+.ret.hitmk span.big::before, .ret.hitmk span.big::after { background: linear-gradient(var(--red) 0 36%, transparent 36% 64%, var(--red) 64%); }
+@keyframes hitmk { from { opacity: 1; transform: scale(1.35); } to { opacity: 0; transform: scale(1); } }
+#splash { position: fixed; top: 26%; left: 50%; transform: translateX(-50%); pointer-events: none; text-align: center; font: 800 22px var(--font-num); letter-spacing: .22em; color: var(--red); text-shadow: 0 0 2px #000, 0 1px 6px rgba(0,0,0,.7); white-space: pre; opacity: 0; }
+#splash.on { animation: splash 2.6s ease-out forwards; }
+@keyframes splash { 0% { opacity: 0; transform: translateX(-50%) scale(1.4); } 8% { opacity: 1; transform: translateX(-50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+#board { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); z-index: 9; min-width: min(420px, calc(100vw - 32px)); padding: 12px 16px; pointer-events: none; font: 700 12px var(--font-num); letter-spacing: .06em; }
+#board h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .18em; color: var(--dim); font-weight: 700; }
+#board table { width: 100%; border-collapse: collapse; }
+#board td { padding: 3px 6px; white-space: nowrap; }
+#board td.n { text-align: right; width: 3.5em; }
+#board tr.me td { color: var(--amber); }
+#board th { padding: 0 6px 4px; text-align: left; color: var(--dim); font-weight: 700; font-size: 10px; letter-spacing: .14em; }
+#board th.n { text-align: right; }
 #gun.sel, #msl.sel { color: var(--cyan) !important; }
 #cm.out { color: var(--red) !important; }
 .chip.rwr { color: var(--night); background: var(--amber); border-color: var(--amber); }
@@ -274,7 +295,11 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 </div>
 
 <div id="radar" class="glass" hidden><canvas id="rdr"></canvas><div id="rdrInfo"></div></div>
+<canvas id="cue"></canvas>
 <div id="tgtBox" class="ret tgt" hidden><span></span></div>
+<div id="hitMk" class="ret hitmk" hidden><span></span></div>
+<div id="splash" hidden></div>
+<div id="board" class="glass" hidden></div>
 <div id="leadRet" class="ret lead" hidden></div>
 <div id="flash"></div>
 <div id="gunRet" class="ret" hidden></div>
@@ -387,6 +412,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>X with missiles</dt><dd>Fire an air-to-air missile (pick the missile loadout): the heat-seeker inside its reach, the AIM-120 beyond it</dd>
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, B28 or B41 on the B-52); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B28 4 min, B41 8 min. Get 0.3 km from a 0.3 kt B61, 5.1 km from a 1.45 Mt B28, 13.2 km from a 25 Mt B41</dd>
       <dt>K</dt><dd>Countermeasures: one salvo of flares and chaff (not on the airliners)</dd>
+      <dt>Tab (hold)</dt><dd>Scoreboard: kills and deaths of everyone in the room. Arrows at the edge of the screen point to your lock and to players out of view; red arrows are missiles coming at you</dd>
       <dt>1 · 2</dt><dd>Air-to-air weapon: gun (with a radar lock, the orange circle shows the gun lead) or missiles</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb or missile and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
@@ -5161,7 +5187,7 @@ function updateBullets(dt) {
     for (let n = 1; n <= steps && !hit; n++) {
       const x = bul.pos[j] + vx * dt * n / steps, y = bul.pos[j + 1] + vy * dt * n / steps, z = bul.pos[j + 2] + vz * dt * n / steps;
       if (MP.peers.size && ghostHit(bul.pos[j] + vx * dt * (n - 1) / steps, bul.pos[j + 1] + vy * dt * (n - 1) / steps, bul.pos[j + 2] + vz * dt * (n - 1) / steps, x, y, z, A.roundDmg || 1)) {
-        hit = [mpHitP.x, mpHitP.y, mpHitP.z, 'plane']; break;
+        hit = [mpHitP.x, mpHitP.y, mpHitP.z, 'plane']; hitMark(mpHitP, false); break;
       }
       const bi = buildingAt(x, z);
       if (bi >= 0 && solidAt(bi, x, y, z)) { hitAt(bi, tV.set(x, y, z), 0.8, A.roundDmg || 1); hit = [x, y, z, 'building']; }
@@ -5852,7 +5878,7 @@ function crash(msg) {
   MP.stT = 0; // report the crash straight away
   // shot down (or brought down by damage) within 20 s of another player's hit: everyone hears who did it
   const H = MP.lastHitBy;
-  if (H && performance.now() - H.t < 20000) { mpSend('ev', { k: 'kill', by: H.name }); toast(H.name + ' shot you down'); }
+  if (H && performance.now() - H.t < 20000) { mpSend('ev', { k: 'kill', by: H.name }); toast(H.name + ' shot you down'); MP.deaths++; }
   setGunshipCam(false);
   lockPointer.releasing = true; unlockPointer(); aim.fire = false;
   const building = S.hitBuilding >= 0;
@@ -6689,6 +6715,16 @@ function soundFX(kind, strength = 1) {
   } else if (kind === 'countermeasure') {
     // squib pops, then the flares fizz away
     for (const dt of [0, 0.07]) { noiseShot(t + dt, { len: 0.06, peak: 0.24 * k, type: 'highpass', f0: 900, verb: 0.2 }); noiseShot(t + dt + 0.01, { len: 0.5, peak: 0.05 * k, type: 'highpass', f0: 3200, src: 'pink' }); }
+  } else if (kind === 'hit') {
+    // a hit marker's dry tick
+    toneShot(t, { f0: 2400, f1: 1700, len: 0.035, peak: 0.05 }); noiseShot(t, { len: 0.03, peak: 0.05, type: 'highpass', f0: 3000 });
+  } else if (kind === 'hitbig') {
+    toneShot(t, { f0: 1600, f1: 900, len: 0.12, peak: 0.08 }); noiseShot(t, { len: 0.08, peak: 0.08, type: 'highpass', f0: 1800 });
+  } else if (kind === 'kill') {
+    toneShot(t, { f0: 880, f1: 880, len: 0.12, peak: 0.06 }); toneShot(t + 0.13, { f0: 1320, f1: 1320, len: 0.22, peak: 0.06 });
+  } else if (kind === 'mslwarn') {
+    // the missile warning: a fast, high warble
+    toneShot(t, { f0: 1500, f1: 1500, len: 0.07, peak: 0.05, type: 'square' }); toneShot(t + 0.09, { f0: 1100, f1: 1100, len: 0.07, peak: 0.05, type: 'square' });
   } else if (kind === 'lock') {
     toneShot(t, { f0: 980, f1: 990, len: 0.08, peak: 0.06 }); toneShot(t + 0.1, { f0: 1320, f1: 1330, len: 0.1, peak: 0.05 });
   } else if (kind === 'ablight') {
@@ -7664,6 +7700,7 @@ function updateMissiles(dt) {
         const local = _mo.copy(_mc).applyQuaternion(_mq.copy(P.obj.quaternion).invert());
         mpSend('ms', { k: 'hit', id: m.id, o: mpV(local), R: fx.radius, s: fx.visual, n: K.name }, P.id);
         const impact = _mc.clone().add(P.obj.position);
+        hitMark(impact, true);
         lastImpact = { p: impact.clone(), t: clockNow(), nuke: false };
         explode(impact, fx.visual, false);
         m.target = null; endMissile(i); continue;
@@ -7738,11 +7775,128 @@ function updateRwr() {
   const now = performance.now();
   for (const [k, t] of MP.incoming) if (now - t > 75000) MP.incoming.delete(k);
   for (const id of MP.lockedBy) if (!MP.peers.has(id)) MP.lockedBy.delete(id);
-  const c = $('#cRwr'), msl = MP.incoming.size > 0;
+  const c = $('#cRwr'), msl = MP.incoming.size > 0 || CUE.threats > 0;
   c.hidden = !running || (!msl && !MP.lockedBy.size);
   setText(c, msl ? 'MISSILE' : 'LOCKED');
   c.classList.toggle('msl', msl);
 }
+// ---- dogfight cues ----
+MP.kills = 0; MP.deaths = 0;
+// hit marker: a quick X where our rounds or missile hit another player, with a tick
+const hitMk = $('#hitMk');
+let hitMkT = 0;
+function hitMark(p, big) {
+  const now = performance.now();
+  if (!big && now - hitMkT < 70) return;
+  hitMkT = now;
+  placeReticle(hitMk, p);
+  const sp = hitMk.firstChild;
+  sp.className = ''; void sp.offsetWidth; sp.className = big ? 'on big' : 'on';
+  soundFX(big ? 'hitbig' : 'hit');
+}
+// kill confirmation
+function splash(name) {
+  const e = $('#splash');
+  e.textContent = 'SPLASH\n' + name.toUpperCase();
+  e.hidden = false; e.classList.remove('on'); void e.offsetWidth; e.classList.add('on');
+  soundFX('kill');
+}
+// Arrows on a ring around the screen centre: orange for the radar lock, green for other players within 15 km
+// that are out of view, red (with the warning tone) for any missile flying at us. A missile is a threat when it
+// is within 12 km, pointed within 25 degrees of us and closing.
+const CUE = { threats: 0, drawn: false, warnT: 0 };
+const cueCv = $('#cue'), cueCtx = cueCv.getContext('2d'), _cq = new THREE.Quaternion(), _cv = new THREE.Vector3(), _cm = new THREE.Vector3(), _cr = new THREE.Vector3();
+function cueArrow(x, p, color, label, W, H) {
+  prj.copy(p).project(camera);
+  if (prj.z < 1 && Math.abs(prj.x) < 0.92 && Math.abs(prj.y) < 0.92) return false; // in view: no arrow
+  _cv.copy(p).sub(camera.position).applyQuaternion(_cq);
+  let dx = _cv.x, dy = -_cv.y;
+  const l = Math.hypot(dx, dy);
+  if (l < 1e-3) { dx = 0; dy = 1; } else { dx /= l; dy /= l; }
+  const cx = W / 2 + dx * W * 0.4, cy = H / 2 + dy * H * 0.38;
+  x.save(); x.translate(cx, cy); x.rotate(Math.atan2(dy, dx));
+  x.beginPath(); x.moveTo(13, 0); x.lineTo(-7, -9); x.lineTo(-3, 0); x.lineTo(-7, 9); x.closePath();
+  x.fillStyle = color; x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = 2; x.stroke(); x.fill();
+  x.restore();
+  x.fillStyle = color; x.fillText(label, cx - dx * 26, cy - dy * 22 + 4);
+  return true;
+}
+function updateCues() {
+  const W = innerWidth, H = innerHeight;
+  if (cueCv.width !== W || cueCv.height !== H) { cueCv.width = W; cueCv.height = H; }
+  else if (CUE.drawn) cueCtx.clearRect(0, 0, W, H);
+  CUE.drawn = false; CUE.threats = 0;
+  if (!running || paused || S.crashed || !MP.peers.size || $('#hud').hidden) return;
+  const x = cueCtx, now = performance.now();
+  _cq.copy(camera.quaternion).invert();
+  x.font = '700 10px ' + getComputedStyle(document.body).getPropertyValue('--font-num'); x.textAlign = 'center';
+  const lock = RADAR.lock;
+  // players
+  const near = [];
+  for (const P of MP.peers.values()) {
+    if (!P.obj || !P.obj.visible || !P.r || P.c) continue;
+    const d = P.obj.position.distanceTo(S.pos);
+    if (P === lock || d < 15000) near.push([d, P]);
+  }
+  near.sort((a, b) => a[0] - b[0]);
+  for (const [d, P] of near.slice(0, 5)) {
+    const isLock = P === lock;
+    if (cueArrow(x, P.obj.position, isLock ? '#ff8c2e' : 'rgba(126,226,168,.9)', (isLock ? '' : P.name.slice(0, 10) + ' ') + (d / 1000).toFixed(1), W, H)) CUE.drawn = true;
+  }
+  // missiles coming at us
+  let nearest = Infinity;
+  const red = Math.floor(now / 250) % 2 ? '#ff4d4d' : '#ffb0b0';
+  for (const P of MP.peers.values()) {
+    const lag = Math.min(0.5, (now - P.t) / 1000);
+    for (const e of P.ml || []) {
+      _cm.set(e[0] + e[3] * lag, e[1] + e[4] * lag, e[2] + e[5] * lag);
+      _cr.subVectors(S.pos, _cm);
+      const d = _cr.length(), sp = Math.hypot(e[3], e[4], e[5]);
+      if (d > 12000 || d < 1 || sp < 50) continue;
+      _cr.divideScalar(d);
+      const aimed = (e[3] * _cr.x + e[4] * _cr.y + e[5] * _cr.z) / sp;
+      const closing = (e[3] - S.vel.x) * _cr.x + (e[4] - S.vel.y) * _cr.y + (e[5] - S.vel.z) * _cr.z;
+      if (aimed < Math.cos(25 * Math.PI / 180) || closing < 50) continue;
+      CUE.threats++; nearest = Math.min(nearest, d);
+      if (!cueArrow(x, _cm, red, 'MSL ' + (d / 1000).toFixed(1), W, H)) {
+        // in view: a red ring round it
+        prj.copy(_cm).project(camera);
+        const px = (prj.x + 1) / 2 * W, py = (1 - prj.y) / 2 * H;
+        x.strokeStyle = red; x.lineWidth = 2; x.beginPath(); x.arc(px, py, 14, 0, Math.PI * 2); x.stroke();
+        x.fillStyle = red; x.fillText('MSL ' + (d / 1000).toFixed(1), px, py + 28);
+      }
+      CUE.drawn = true;
+    }
+  }
+  // the warning tone quickens as the missile gets closer
+  if (CUE.threats && now - CUE.warnT > clamp(nearest / 12, 180, 700)) { CUE.warnT = now; soundFX('mslwarn'); }
+}
+// scoreboard: hold Tab
+function renderBoard() {
+  const rows = [{ name: MP.name || 'You', ac: A.id, kd: [MP.kills, MP.deaths], me: true }];
+  for (const P of MP.peers.values()) if (P.name !== '…') rows.push({ name: P.name, ac: P.ac, kd: P.kd || [0, 0] });
+  rows.sort((a, b) => b.kd[0] - a.kd[0] || a.kd[1] - b.kd[1] || a.name.localeCompare(b.name));
+  const b = $('#board');
+  b.textContent = '';
+  const h = document.createElement('h3'); h.textContent = 'SCOREBOARD · ' + (MP.roomName || 'OFFLINE').toUpperCase(); b.append(h);
+  const t = document.createElement('table'), hr = t.insertRow();
+  for (const [txt, cls] of [['PILOT', ''], ['AIRCRAFT', ''], ['KILLS', 'n'], ['DEATHS', 'n']]) { const th = document.createElement('th'); th.textContent = txt; th.className = cls; hr.append(th); }
+  for (const r of rows) {
+    const tr = t.insertRow(); if (r.me) tr.className = 'me';
+    for (const [txt, cls] of [[r.name, ''], [acShort(r.ac), ''], [String(r.kd[0]), 'n'], [String(r.kd[1]), 'n']]) { const td = tr.insertCell(); td.textContent = txt; td.className = cls; }
+  }
+  b.append(t);
+}
+let boardT = 0;
+const hideBoard = () => { $('#board').hidden = true; clearInterval(boardT); };
+addEventListener('keydown', e => {
+  if (e.key !== 'Tab' || (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName))) return;
+  e.preventDefault();
+  if (!e.repeat) { renderBoard(); $('#board').hidden = false; clearInterval(boardT); boardT = setInterval(renderBoard, 500); }
+});
+addEventListener('keyup', e => { if (e.key === 'Tab') hideBoard(); });
+addEventListener('blur', hideBoard);
+
 // other players' missiles in flight: drawn from what they report, carried on between reports
 function drawPeerMissiles(P, now) {
   const list = P.ml || [];
@@ -8038,6 +8192,7 @@ function stateMsg() {
     q: [q.x, q.y, q.z, q.w].map(v => Math.round(v * 1e3) / 1e3), g: S.gearT > 0.5 ? 1 : 0, up: Math.round(performance.now() - MP.t0), lf: MP.life
   };
   if (S.crashed) m.c = 1;
+  if (MP.kills || MP.deaths) m.kd = [MP.kills, MP.deaths];
   if (paused) m.ps = 1;
   if (A.id === 'b52') m.cl = MP.claim;
   if (MP.rips.length) m.rp = MP.rips;
@@ -8059,6 +8214,7 @@ function onState(id, d) {
   P.g = d.g ? 1 : 0;
   P.cl = num(d.cl, 1e14) ? d.cl : 0;
   P.up = num(d.up, 1e10) ? d.up : 0;
+  P.kd = Array.isArray(d.kd) && d.kd.length === 2 && d.kd.every(x => num(x, 1e5)) ? d.kd.map(Math.round) : [0, 0];
   // parts torn off: a new flight starts whole; new tears are copied onto our model of the aircraft
   if (d.lf !== P.lf) { P.lf = d.lf; P.rp = []; P.applied = 0; P.rebuild = true; }
   P.ml = Array.isArray(d.ml) && d.ml.length <= 12 ? d.ml.filter(e => Array.isArray(e) && e.length === 6 && e.every(v => num(v, 2e5))) : [];
@@ -8291,7 +8447,7 @@ const TURN_SAVED_MAX_AGE = 5 * 3600e3; // a saved set is only used while its pas
 // sits in a small lobby room and says there which room it is in (unless that room is hidden), so everyone can
 // see a live list of rooms and how many are in each. "Public" uses the original room, so older pages still meet.
 const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
-const BUILD = '2026-11-04d';
+const BUILD = '2026-11-05';
 // a hidden room is a different room from a listed one with the same name
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
@@ -8563,6 +8719,7 @@ function wireGameRoom(room) {
     if (P && d && d.k === 'kill' && typeof d.by === 'string') {
       const by = d.by.replace(/[^\w\- ]/g, '').slice(0, 16);
       toast(by === MP.name ? `You shot down ${P.name}` : `${by} shot down ${P.name}`);
+      if (by === MP.name) { MP.kills++; MP.stT = 0; splash(P.name); }
       chatLine('', by === MP.name ? `You shot down ${P.name}` : `${by} shot down ${P.name}`, 'sys');
     }
   };
@@ -8763,6 +8920,7 @@ function frame(now) {
   mpUpdate(dt);
   updateRadar(dt);
   updateRwr();
+  updateCues();
   renderer.render(scene, camera);
   if (bloom && document.body.dataset.bloom === "true") bloom.apply(dt);
 }
