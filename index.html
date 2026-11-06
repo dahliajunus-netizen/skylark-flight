@@ -663,6 +663,13 @@ function makeTerrainCrater(p, kind) {
   deformTerrainForCrater(crater);
   markCityCrater(crater, true);
 }
+function aircraftCrater(x, z, r) {
+  if (!terrainGeometry || !num(r, 100)) return;
+  const crater = { x, z, radius: r, depth: r * 0.22, rim: r * 0.05 };
+  TERRAIN_CRATERS.push(crater);
+  deformTerrainForCrater(crater);
+  markCityCrater(crater, true);
+}
 function makeNukeCrater(p, nk) {
   if (!terrainGeometry) return;
   const blastRadius = nukeScale(nk.kt).killR;
@@ -2611,6 +2618,8 @@ const AC = {
     // Northrop Grumman B-2 Spirit: ~130 t with fuel, plus its weapons, 478 m² flying wing, four F118-GE-100 (~77 kN each), no
     // afterburner. All its weapons ride inside, in two bomb bays. Low Observable (passive, always on): enemy radar sees
     // it at 60% of the usual range and takes twice as long to lock it; it is still seen by eye and can still be hit.
+    // a flying wing: no tail to lose, and its engines are buried in the wing roots (they go with the centre section)
+    structure: { flyingWing: true, buriedEngines: true, pieces: 3 },
     id: 'b2', mass: 130000, wing: 478, thrust: 308000, thrustAB: 0, bombCd: 0, // ~130 t with fuel; stores add their own weight, and inside the bays no drag
     // a cambered flying wing: lots of lift at small angles, for a lift-off around 150 kt
     CL0: 0.25, CLA: 4.5, stallA: 0.3, cd0: 0.0095, k: 0.05, wave: [0.8, 0.95, 0.06],
@@ -2699,6 +2708,8 @@ const AC = {
   ac130: {
     // Lockheed Martin AC-130J Ghostrider: a C-130J-based gunship, ~62 t on a mission, 162 m² wing, four AE 2100D3
     // turboprops (4,637 shp each) on six-blade Dowty R391 propellers. It flies orbits and fires out of its left side.
+    // a long, deep transport fuselage: four sections, turboprops that tear off as whole nacelles
+    structure: { pieces: 4, wingSplit: 2 },
     id: 'ac130', mass: 62000, wing: 162.1, thrust: 210000, thrustAB: 0,
     CL0: 0.4, CLA: 5.6, stallA: 0.27, cd0: 0.03, k: 0.039, wave: [0.52, 0.66, 0.08],
     gLimit: 3.0, effV: 70, rates: [0.45, 0.18, 0.9], stabRoll: 0, tailStrike: 0.2, gear: 3.2, weapons: false, gearTime: 7, mainRetract: 'fwd', travel: 0.4,
@@ -3913,6 +3924,12 @@ function ripZone(z, pl, pw) {
   const left = z.area0 ? Math.round(100 * z.area / z.area0) : 0;
   toast(z.alive ? `${z.label} damaged: ${left}% left` : `${z.label} torn off`);
 }
+// an engine hit but still on: it smokes past a third of its hit points, and burns past two thirds
+function engineHurt(z, hp) {
+  const k = (z.taken || 0) / hp, at = z.pts.reduce((a, q) => a.add(q), new THREE.Vector3()).divideScalar(z.pts.length);
+  if (k > 0.33 && !z.smoking) { z.smoking = { p: at, fire: false, t: 0, zone: z }; S.stumps.push(z.smoking); toast(z.label + ' damaged'); }
+  if (k > 0.66 && z.smoking && !z.smoking.fire) { z.smoking.fire = true; z.smoking.t = 0; toast(z.label + ' on fire'); }
+}
 function updateDamage() {
   const tough = A.scale > 2 ? 2.5 : 1;
   const frac = (kind, side) => {
@@ -3920,8 +3937,103 @@ function updateDamage() {
     if (!zs.length) return 1;
     return zs.reduce((t, z) => t + (z.area0 ? z.area / z.area0 : z.alive ? 1 : 0) * (1 - 0.35 * clamp((z.taken || 0) / ((ZONE_HP[z.kind] || 1) * tough), 0, 1)), 0) / zs.length;
   };
-  S.dmg = { wingL: frac('wing', 'L'), wingR: frac('wing', 'R'), stab: frac('stab'), fin: frac('fin'), engL: frac('eng', 'L'), engR: frac('eng', 'R'),
+  // the rear fuselage carries the tail (and a fighter's engines): its damage loosens one and costs the other
+  const aft = S.sec ? S.sec[3] : 1, tail = 0.4 + 0.6 * aft, buried = !A.podEngines || structureOf().buriedEngines ? 0.25 + 0.75 * aft : 1;
+  S.dmg = { wingL: frac('wing', 'L'), wingR: frac('wing', 'R'), stab: frac('stab') * tail, fin: frac('fin') * tail, engL: frac('eng', 'L') * buried, engR: frac('eng', 'R') * buried,
     legsLost: parts.zones.filter(z => z.kind === 'gear' && !z.alive).length };
+}
+// ---- fuselage sections and crew ----
+// The core of the airframe (everything that isn't a wing, tail surface, podded engine or gear leg) is four sections
+// along its length: the cockpit, the forward, centre and rear fuselage. Each has its own integrity (S.sec, 1 = intact)
+// and passes through five states. A hit lands on the section it strikes (a little on its neighbours), so damage stays
+// where it happened. What a section's loss means:
+//   cockpit   the crew compartment: hits there hurt the crew (S.pilot); at 0 nobody is flying it
+//   forward   the flight controls run through it: damage dulls the controls, its failure breaks the jet in two
+//   centre    the wing box and main fuel tanks: its failure is the airframe coming apart
+//   rear      the tail and (on fighters) the engines: damage loosens the tail and costs thrust; its failure takes the
+//             tail off, and with it all control
+// An aircraft can be flyable but damaged, critically damaged (smoking, burning, sluggish), uncontrollable (the crew
+// or the controls gone: it flies on, on its own, until it hits something), or destroyed (structural failure, or the
+// crash at the end). Bigger airframes are tougher (A.structure, or from their mass): the same hit does less to them.
+const SEC_NAMES = ['cockpit', 'forward fuselage', 'centre fuselage', 'rear fuselage'];
+const SEC_HUD = ['NOSE', 'FWD FUS', 'CTR FUS', 'AFT FUS'];
+const SEC_STATES = ['intact', 'damaged', 'severely damaged', 'structurally compromised', 'destroyed'];
+const secState = v => v <= 0 ? 4 : v < 0.35 ? 3 : v < 0.6 ? 2 : v < 0.85 ? 1 : 0;
+function structureOf(a = A) {
+  const st = a.structure || {};
+  return {
+    tough: st.tough ?? clamp(Math.sqrt(a.mass / 20000), 0.8, 3.2),
+    pieces: st.pieces ?? (a.mass > 60000 ? 4 : 3),       // fuselage sections in a full breakup
+    wingSplit: st.wingSplit ?? (a.box.max.x > 15 ? 2 : 1), // a long wing breaks in two in the hardest impacts
+    flyingWing: !!st.flyingWing, buriedEngines: !!st.buriedEngines
+  };
+}
+// the section a point in the aircraft's frame belongs to, by its place along the length (nose toward -z)
+function secOf(z) {
+  const f = (z - A.box.min.z) / Math.max(1, A.box.max.z - A.box.min.z);
+  return f < 0.14 ? 0 : f < 0.4 ? 1 : f < 0.72 ? 2 : 3;
+}
+const _cockpit = new THREE.Vector3();
+const cockpitLocal = () => _cockpit.set(A.eye[2] || 0, A.eye[0], -A.eye[1]);
+const crewReach = () => 1.2 * Math.max(1, A.scale);
+let secToastT = 0;
+function secHit(i, amt) {
+  if (i < 0 || i > 3 || !S.sec || amt <= 0) return;
+  const before = secState(S.sec[i]);
+  S.sec[i] = Math.max(0, S.sec[i] - amt);
+  const now = secState(S.sec[i]);
+  if (now > before && now < 4 && performance.now() - secToastT > 1200) { secToastT = performance.now(); toast(`${SEC_NAMES[i].replace(/^./, c => c.toUpperCase())} ${SEC_STATES[now]}`); }
+}
+// damage to the fuselage at a point (aircraft frame): the section struck takes it, its neighbours a quarter; a hit
+// near the cockpit also hurts the crew. amount is before the airframe's toughness. Returns true if it ended the flight.
+function hullDamage(local, amount, cause, spread = true) {
+  if (!S.sec || S.crashed) return S.crashed;
+  const st = structureOf(), amt = amount / st.tough, i = secOf(local.z);
+  secHit(i, amt);
+  if (spread) { secHit(i - 1, amt * 0.25); secHit(i + 1, amt * 0.25); }
+  const dc = local.distanceTo(cockpitLocal()), cr = crewReach() * 2;
+  if (dc < cr) crewHit(amount * 1.8 * (1 - dc / cr) / Math.sqrt(st.tough));
+  S.damaged = true;
+  return hullConsequences(cause);
+}
+function crewHit(amt) {
+  if (amt <= 0 || S.pilot <= 0) return;
+  const was = S.pilot;
+  S.pilot = Math.max(0, S.pilot - amt);
+  if (was >= 0.6 && S.pilot < 0.6 && S.pilot > 0) toast('Cockpit hit: crew injured');
+}
+// what the sections' state now means for the aircraft. Returns true if it broke up.
+function hullConsequences(cause) {
+  if (S.crashed || !S.sec) return S.crashed;
+  const sc = S.sec;
+  S.hull = Math.min(sc[1], sc[2], sc[3]);
+  S.ctrl = clamp((0.25 + 0.75 * Math.min(1, sc[0] * 1.4)) * (0.35 + 0.65 * sc[1]), 0.15, 1);
+  S.dragDmg = 0.014 * (4 - sc[0] - sc[1] - sc[2] - sc[3]);
+  updateDamage();
+  if (sc[2] <= 0 || sc[1] <= 0) {
+    S.hitBuilding = -1; S.airBreak = S.pos.y - Math.max(0, heightAt(S.pos.x, S.pos.z)) > (parts.reach || 20) + 5;
+    crash(cause || (sc[2] <= 0 ? 'The centre fuselage failed and the aircraft broke apart.' : 'The forward fuselage failed and the nose broke away.'));
+    return true;
+  }
+  if (sc[3] <= 0 && !S.tailGone) {
+    // the rear fuselage gives way: the tail goes with it
+    S.tailGone = true;
+    plane.updateMatrixWorld(true);
+    for (const z of parts.zones) if (z.alive && (z.kind === 'fin' || z.kind === 'stab')) ripZone(z, z.pts[0], z.pts[0].clone().applyMatrix4(plane.matrixWorld));
+    loseControl('tail', 'The rear fuselage failed and the tail broke away');
+  }
+  if (sc[0] <= 0.1 && S.pilot > 0) crewHit(1);
+  if (S.pilot <= 0) loseControl('pilot', 'Pilot incapacitated');
+  return false;
+}
+// nobody (or nothing) is flying it: the stick freezes where it was, a little off centre, and the throttle stays put.
+// The aircraft is not destroyed: it flies on until it hits something. A kill is still credited to whoever caused it.
+function loseControl(why, msg) {
+  if (S.noCtrl || S.crashed) return;
+  S.noCtrl = why;
+  S.stuck = { pitch: clamp(inp.pitch * 0.5 + (Math.random() - 0.5) * 0.25, -0.4, 0.4), roll: clamp(inp.roll * 0.5 + (Math.random() - 0.5) * 0.4, -0.5, 0.5), yaw: (Math.random() - 0.5) * 0.2 };
+  if (MP.lastHitBy && performance.now() - MP.lastHitBy.t < 20000) MP.lastHitBy.t = performance.now() + 6e5; // until it comes down
+  toast(msg + ': the aircraft is out of control');
 }
 // Previous pose is saved each physics step so thin buildings cannot be skipped between frames.
 const structurePrevPos = new THREE.Vector3(), structurePrevQuat = new THREE.Quaternion();
@@ -3960,7 +4072,12 @@ function checkStructure() {
           return true;
         }
         // a shallow, wings-level brush with the ground becomes a belly slide; anything steeper is a crash
-        if (S.vel.y > -7 && S.V < 140 && Math.abs(attitude().roll) < 0.5 && slopeAt(tC.x, tC.z) < 0.25) { bellyDown('The fuselage hit the ground'); break; }
+        // a slow, shallow strike is a belly slide that costs the section that hit (and the wings and engines scrape)
+        const vn = Math.max(0, -S.vel.y);
+        if (vn < 9 && S.V < 150 && Math.abs(attitude().roll) < 0.7 && slopeAt(tC.x, tC.z) < 0.3) {
+          if (hullDamage(p, (0.08 + 0.45 * (vn / 9) ** 2) * structureOf().tough, 'The fuselage broke up as it struck the ground.')) return true;
+          bellyDown('The fuselage hit the ground'); break;
+        }
         crash('You flew into the terrain.');
         return true;
       }
@@ -3980,14 +4097,16 @@ function hullHit(bi, p) {
   const lim = A.scale > 2 ? 22 : 32; // m/s into the wall that the airframe survives
   const push = () => { S.pos.addScaledVector(n, 0.6 * A.scale); if (S.vel.dot(n) < 0) S.vel.addScaledVector(n, -S.vel.dot(n) * 1.2); };
   if (S.hitCool > 0) { push(); return false; } // still scraping along the same wall
-  S.hull -= 0.12 + 0.75 * Math.pow(vn / lim, 2);
-  if (vn > lim || S.hull <= 0) {
-    S.hull = Math.max(0, S.hull);
+  const localHit = p.clone().sub(S.pos).applyQuaternion(S.quat.clone().invert());
+  if (vn > lim) {
     S.hitBuilding = bi; S.hitPoint.copy(p);
-    crash(p.y > BLD[bi * 5 + 4] - 3 ? 'You hit a rooftop.' : S.hull <= 0 ? 'One hit too many: the fuselage broke up against the building.' : 'You flew into a building.');
+    crash(p.y > BLD[bi * 5 + 4] - 3 ? 'You hit a rooftop.' : 'You flew into a building.');
     return true;
   }
-  const localHit = p.clone().sub(S.pos).applyQuaternion(S.quat.clone().invert());
+  // a glancing blow: the section that struck the wall takes it (tougher airframes shrug off more)
+  S.hitBuilding = bi; S.hitPoint.copy(p);
+  if (hullDamage(localHit, (0.12 + 0.75 * Math.pow(vn / lim, 2)) * structureOf().tough, 'One hit too many: the fuselage broke up against the building.')) return true;
+  S.hitBuilding = -1;
   addDamageMark(localHit, 'core', parts.zones.find(z => z.kind === 'core'), clamp(0.2 + vn / lim * 0.55, 0.2, 0.8));
   push();
   S.vel.multiplyScalar(0.85);
@@ -4008,14 +4127,40 @@ function bellyDown(why) {
     ripZone(z, z.pts[0], z.pts[0].clone().applyMatrix4(plane.matrixWorld));
   }
   S.gearT = 0; S.doorT = 0; S.gearDown = false;
-  S.hull = Math.max(0.05, S.hull - 0.25);
+  secHit(2, 0.12); secHit(3, 0.12); hullConsequences();
   toast(why + '. Belly landing: hold it level and let it slide');
 }
 function emitStumps(dt) {
   // a battered fuselage smokes, and burns when it is nearly gone
-  if (running && !S.crashed && !paused && S.hull < 0.5) {
-    for (let k = burst(20 * (1 - S.hull), dt); k > 0; k--) emit('smoke', S.pos, 0, 1, 0, 0.6);
-    if (S.hull < 0.25) for (let k = burst(25, dt); k > 0; k--) emit('fire', S.pos, 0, 0, 0, 0.5);
+  if (running && !S.crashed && !paused && S.sec && S.sec.some(v => v < 0.5)) {
+    plane.updateMatrixWorld(true);
+    const z0 = A.box.min.z, L = A.box.max.z - z0;
+    S.sec.forEach((v, i) => {
+      if (v >= 0.5) return;
+      tA.set(0, 0, z0 + L * [0.07, 0.27, 0.56, 0.86][i]).applyMatrix4(plane.matrixWorld);
+      for (let k = burst(18 * (1 - v), dt); k > 0; k--) emit('smoke', tA, 0, 1, 0, 0.6);
+      // the fuel is in the centre and (on fighters) the rear: those burn when they're nearly gone
+      if (v < 0.25 && i >= 2) for (let k = burst(22, dt); k > 0; k--) emit('fire', tA, 0, 0, 0, 0.5);
+    });
+  }
+  // sliding on its belly the airframe wears: the centre and rear sections slowly, faster the faster it goes; a wing
+  // or engine pod low enough to drag on the ground is ground away and comes off (an engine as a whole unit)
+  if (running && !S.crashed && !paused && S.belly && S.onGround && S.V > 6 && S.sec) {
+    const wear = 0.02 * (S.V / 60) * dt;
+    secHit(2, wear); secHit(3, wear);
+    if (hullConsequences('The fuselage broke apart as it slid.')) return;
+    for (const z of parts.zones) {
+      if (!z.alive || (z.kind !== 'eng' && z.kind !== 'wing')) continue;
+      for (const q of z.pts) {
+        tC.copy(q).applyQuaternion(S.quat).add(S.pos);
+        if (tC.y > heightAt(tC.x, tC.z) + 0.1) continue;
+        const hp = (ZONE_HP[z.kind] || 4) * (A.scale > 2 ? 2.5 : 1);
+        z.taken = (z.taken || 0) + dt * S.V * 0.06;
+        for (let k = burst(30, dt); k > 0; k--) emit('spark', tC, (Math.random() - 0.5) * 8, rr([1, 5]), (Math.random() - 0.5) * 8);
+        if (z.taken >= hp) { z.taken = 0; ripZone(z, q, tC.clone()); }
+        break;
+      }
+    }
   }
   // sparks and dust trail from the belly while it slides
   if (running && !S.crashed && !paused && S.belly && S.onGround && S.V > 4) {
@@ -4028,6 +4173,7 @@ function emitStumps(dt) {
   plane.updateMatrixWorld(true);
   for (const st of S.stumps) {
     st.t += dt;
+    if (st.zone && !st.zone.alive) continue;
     tA.copy(st.p).applyMatrix4(plane.matrixWorld);
     for (let k = burst(st.fire && st.t < 30 ? 30 : 0, dt); k > 0; k--) emit('fire', tA, 0, 0, 0, 0.45);
     for (let k = burst(14, dt); k > 0; k--) emit('smoke', tA, 0, 1, 0, 0.5);
@@ -4564,7 +4710,7 @@ function splitFuselage(mesh, wreck, cuts) {
     }
     const m = new THREE.Mesh(geo, doubleSided(mesh.material));
     m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale);
-    m.userData.section = true;
+    m.userData.section = true; m.userData.sec = i;
     mesh.parent.add(m);
     out.push(m);
   });
@@ -4573,6 +4719,105 @@ function splitFuselage(mesh, wreck, cuts) {
   return out;
 }
 
+// How a crash breaks the airframe, by severity level:
+//   0  it slides in one piece; the gear is sheared off (and a dragging engine pod may go)
+//   1  the fuselage breaks in two; the wings and tail stay on their sections; podded engines tear off as units
+//   2  the fuselage breaks into its sections (3 on fighters, 4 on big aircraft); wings come off whole, the tail as one
+//      assembly, engines and gear legs as units
+//   3  as 2, and long wings break in two and the tail surfaces part one by one
+// Groups follow the airframe's structure, found by part name and place: never the model's individual meshes.
+function breakGroups(root, ac, level, rnd) {
+  const a = AC[ac] || A, st = structureOf(a);
+  root.updateMatrixWorld(true);
+  const inv = root.matrixWorld.clone().invert(), M = new THREE.Matrix4(), c = new THREE.Vector3();
+  const meshes = [];
+  root.traverse(o => { if (o.isMesh && o.visible) { let v = true; for (let p = o.parent; p && p !== root; p = p.parent) v = v && p.visible; if (v) meshes.push(o); } });
+  const z0 = a.box.min.z, L = a.box.max.z - z0;
+  const nSec = level <= 1 ? 2 : level === 2 ? Math.max(2, st.pieces - (a.mass > 60000 ? 1 : 0)) : st.pieces;
+  // section boundaries along the length, jittered so no two breakups are the same
+  const bounds = [];
+  for (let i = 1; i < nSec; i++) bounds.push(z0 + L * (i / nSec + (rnd() - 0.5) * 0.08));
+  const secAt = z => bounds.filter(b => z > b).length;
+  // the core's long skins are cut through at those boundaries (with ragged edges)
+  const coreRe = /fuselage|body|cent(re|er)_?\s?body|^$/i;
+  const kindOf = (n, cx) => {
+    if (/wheel|strut|bogie|gear(?!door)|landing/.test(n)) return 'gear';
+    if (a.podEngines && !st.buriedEngines && /nacelle|fan_face|exhaust_cone|engine_pylon|reverser|propeller|spinner|prop/.test(n)) return 'eng';
+    if (/dragrudder/.test(n)) return 'wing';
+    // a flying wing has no tail: its trailing-edge surfaces belong to the wing they're on
+    if (/stabilator|stabili[sz]er|canard|elevator/.test(n)) return st.flyingWing ? 'wing' : 'stab';
+    if (/vertical_tail|^fin$|rudder/.test(n)) return st.flyingWing ? 'wing' : 'fin';
+    if (/wing(?!_body)|spoiler|flap|aileron|elevon|slat|dragrudder|flaperon/.test(n)) return 'wing';
+    return 'core';
+  };
+  const groups = new Map(), put = (key, kind, m) => { if (!groups.has(key)) groups.set(key, { kind, meshes: [] }); groups.get(key).meshes.push(m); };
+  const big = [];
+  for (const m of meshes) {
+    M.multiplyMatrices(inv, m.matrixWorld);
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    m.geometry.boundingBox.getCenter(c).applyMatrix4(M);
+    const size = m.geometry.boundingBox.getSize(tA).applyMatrix4(new THREE.Matrix4().extractRotation(M));
+    const n = nameOf(m), kind = kindOf(n, c.x), side = Math.abs(c.x) < 0.3 ? 'C' : c.x < 0 ? 'L' : 'R';
+    m.userData.bc = c.clone();
+    if (kind === 'core' && Math.abs(size.z) > L * 0.35 && nSec > 1) { big.push(m); continue; }
+    if (kind === 'gear') put('gear' + side + Math.round(c.z / 4), 'gear', m);
+    else if (kind === 'eng') put('eng' + side + Math.round(Math.abs(c.x) / 5), 'eng', m);
+    else if (kind === 'wing' && side !== 'C') put('wing' + side, 'wing', m);
+    else if (kind === 'wing') put('sec' + secAt(c.z), 'core', m);
+    else if (kind === 'stab' || kind === 'fin') put(level >= 3 ? kind + side : 'tail', 'tail', m);
+    else put('sec' + secAt(c.z), 'core', m);
+  }
+  for (const m of big) {
+    const cuts = bounds.map(z => ({ z, a: (rnd() - 0.5) * 0.5, b: (rnd() - 0.5) * 0.7, rag: 0.12 + L * 0.003 }));
+    for (const piece of splitFuselage(m, root, cuts)) put('sec' + (piece.userData.sec ?? secAt(m.userData.bc.z)), 'core', piece);
+  }
+  // at the hardest impacts a long wing breaks in two, near mid-span
+  if (level >= 3 && st.wingSplit > 1) for (const sd of ['L', 'R']) {
+    const g = groups.get('wing' + sd);
+    if (!g) continue;
+    const span = Math.max(...g.meshes.map(m => Math.abs(m.userData.bc.x))), cx = (sd === 'L' ? -1 : 1) * span * (0.45 + rnd() * 0.15);
+    const outer = [];
+    for (const m of [...g.meshes]) {
+      M.multiplyMatrices(inv, m.matrixWorld);
+      if (SURFACE.test(nameOf(m)) && Math.abs(m.userData.bc.x) < Math.abs(cx) * 1.6) {
+        const sp = splitGeometry(m.geometry, M, 'x', Math.abs(cx));
+        if (sp.outer && sp.inner) {
+          const o = new THREE.Mesh(sp.outer, m.material); o.position.copy(m.position); o.quaternion.copy(m.quaternion); o.scale.copy(m.scale); o.name = m.name;
+          m.parent.add(o); m.geometry = sp.inner; outer.push(o); continue;
+        }
+      }
+      if (Math.abs(m.userData.bc.x) > Math.abs(cx)) { g.meshes.splice(g.meshes.indexOf(m), 1); outer.push(m); }
+    }
+    if (outer.length) groups.set('wingtip' + sd, { kind: 'wing', meshes: outer });
+  }
+  // below level 2 the wings, tail and engines that stay on ride with the fuselage section they're fixed to
+  if (level <= 1) {
+    const host = k => { const g = groups.get(k); if (!g) return; groups.delete(k); const zc = g.meshes.reduce((t, m) => t + (m.userData.bc ? m.userData.bc.z : 0), 0) / g.meshes.length; const key = 'sec' + secAt(zc); if (!groups.has(key)) groups.set(key, { kind: 'core', meshes: [] }); groups.get(key).meshes.push(...g.meshes); };
+    host('wingL'); host('wingR'); host('wingC'); host('tail');
+    // the engines tear off at level 1 only if they hang in pods (and not every time)
+    for (const k of [...groups.keys()]) if (k.startsWith('eng') && (level === 0 || rnd() < 0.35)) host(k);
+  }
+  return [...groups.values()].filter(g => g.meshes.length);
+}
+// Turn the groups into tumbling pieces: each group becomes one rigid body at its own place, keeping its parts together.
+function groupsToPieces(groups, parent, list) {
+  const out = [], box = new THREE.Box3(), mb = new THREE.Box3();
+  for (const g of groups) {
+    box.makeEmpty();
+    for (const m of g.meshes) { m.updateMatrixWorld(true); if (!m.geometry.boundingBox) m.geometry.computeBoundingBox(); box.union(mb.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld)); }
+    if (box.isEmpty()) continue;
+    const grp = new THREE.Group();
+    box.getCenter(grp.position);
+    parent.add(grp);
+    grp.updateMatrixWorld(true);
+    for (const m of g.meshes) { grp.attach(m); m.castShadow = true; }
+    const local = box.clone().translate(grp.position.clone().negate());
+    const p = addPiece(grp, local, false, list);
+    p.kind = g.kind;
+    out.push(p);
+  }
+  return out;
+}
 function buildWreck(mode, wet, n, building) {
   clearWreck();
   W.mode = mode;
@@ -4611,15 +4856,16 @@ function buildWreck(mode, wet, n, building) {
         p.v.addScaledVector(tA, spread).addScaledVector(impactDir, (2 + vn * 0.1) * Math.random() / (0.6 + p.size * 0.08));
       } else {
         // Ground and water impacts still bounce their normal velocity away from the surface.
-        const into = p.v.dot(n);
+        // (a breakup in the air keeps its momentum: nothing to bounce off)
+        const into = S.airBreak ? 0 : p.v.dot(n);
         if (into < 0) p.v.addScaledVector(n, -into * (1 + rr([0.1, 0.4])));
-        const keep = clamp(1 - vn / 60, 0.15, 0.7) * rr([0.6, 1]);
+        const keep = S.airBreak ? rr([0.85, 1]) : clamp(1 - vn / 60, 0.15, 0.7) * rr([0.6, 1]);
         tV.copy(n).multiplyScalar(p.v.dot(n));
         p.v.sub(tV).multiplyScalar(keep).add(tV);
         tA.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).addScaledVector(n, rr([0.5, 1.2])).normalize();
-        p.v.addScaledVector(tA, (4 + vn * 0.8) * Math.random() / (0.6 + p.size * 0.08));
+        p.v.addScaledVector(tA, (4 + vn * 0.8) * Math.random() * (0.3 + 0.25 * (S.wreckLevel || 2)) / (0.6 + p.size * 0.08));
       }
-      p.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2 * (3 + V / 25) / (0.5 + p.size * 0.15));
+      p.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2 * (3 + V / 25) * (0.4 + 0.2 * (S.wreckLevel || 2)) / (0.5 + p.size * 0.15));
     } else {
       p.v.y = Math.max(0, -p.v.y * 0.1);
       p.w.copy(omega);
@@ -4627,21 +4873,15 @@ function buildWreck(mode, wet, n, building) {
   };
 
   if (mode === 'break') {
-    let meshes = [];
-    wreck.traverse(o => { if (o.isMesh && o.visible && o.parent.visible) meshes.push(o); });
-    // the fuselage tears into 3 or 4 sections (the stand-in models have no names: use their biggest mesh)
-    let fus = meshes.filter(m => /fuselage|cent(re|er)_?\s?body/i.test(m.name));
-    const len = m => { if (!m.geometry.boundingBox) m.geometry.computeBoundingBox(); return m.geometry.boundingBox.getSize(tA).length() * m.scale.x; };
-    if (!fus.length) fus = [meshes.reduce((a, b) => (len(b) > len(a) ? b : a))];
-    const z0 = A.box.min.z, L = A.box.max.z - z0, N = Math.random() < 0.5 ? 3 : 4, cuts = [];
-    for (let i = 1; i < N; i++) cuts.push({ z: z0 + L * (i / N + rr([-0.06, 0.06])), a: rr([-0.3, 0.3]), b: rr([-0.4, 0.4]), rag: 0.4 + L * 0.012 });
-    meshes = meshes.flatMap(m => (fus.includes(m) ? splitFuselage(m, wreck, cuts) : [m]));
-    for (const m of meshes) {
-      const p = breakOff(m);
+    const level = S.wreckLevel || 2, rnd = mulberry(S.wreckSeed || 1);
+    for (const p of groupsToPieces(breakGroups(wreck, A.id, level, rnd), debris, W.pieces)) {
       launch(p, true);
-      if (Math.random() < 0.5) m.material = m.userData.section ? charredDS : charred;
-      if (!wet && p.size > 4) { p.burn = rr([10, 25]); p.fireRate = 25; p.smokeRate = 4; }
-      else if (!wet && p.size > 1.5 && Math.random() < 0.5) { p.burn = rr([3, 10]); p.fireRate = 12; p.smokeRate = 2; }
+      // fuel is in the wings, the centre section and the engines: those pieces burn, the bigger the longer
+      const fuel = p.kind === 'wing' || p.kind === 'eng' || (p.kind === 'core' && p.size > 0.25 * (A.box.max.z - A.box.min.z));
+      if (!wet && fuel && level >= 1) {
+        p.burn = rr([8, 16]) * (0.6 + 0.3 * level) * Math.sqrt(A.fireball); p.fireRate = 10 + 6 * level; p.smokeRate = 2 + level;
+        p.obj.traverse(o => { if (o.isMesh && Math.random() < 0.4) o.material = o.userData.section ? charredDS : charred; });
+      }
     }
     debris.remove(wreck);
     W.main = W.pieces.reduce((a, b) => (b.size > a.size ? b : a));
@@ -4652,29 +4892,31 @@ function buildWreck(mode, wet, n, building) {
     const p = addPiece(wreck, A.box, false);
     p.I = A.slideI; p.mu = 0.4;
     launch(p, false);
-    if (!wet) { p.burn = 40; p.fireRate = V > 80 ? 14 : 0; p.smokeRate = 3; }
+    // a slide only burns when it's fast (or the wings have been torn open)
+    if (!wet) { p.burn = 40; p.fireRate = V > 80 || S.dmg.wingL < 0.7 || S.dmg.wingR < 0.7 ? 12 : 0; p.smokeRate = 3; }
     W.main = p;
   }
 
   // impact effects
   const k = clamp(V / 120, 0.6, 1.6) * A.fireball; // more fuel, bigger fire
   if (building) W.site.copy(S.hitPoint).addScaledVector(n, 2); // the building itself catches fire
-  else { W.site.copy(S.pos); W.site.y = Math.max(0, heightAt(S.pos.x, S.pos.z)); }
+  else { W.site.copy(S.pos); if (!S.airBreak) W.site.y = Math.max(0, heightAt(S.pos.x, S.pos.z)); }
   if (wet) {
     for (let i = 0; i < 160 * k; i++) emit('splash', W.site, S.vel.x * 0.15 + (Math.random() - 0.5) * 14, rr([8, 34]) * k, S.vel.z * 0.15 + (Math.random() - 0.5) * 14, k);
     for (let i = 0; i < 30; i++) emit('steam', W.site, (Math.random() - 0.5) * 6, 2, (Math.random() - 0.5) * 6, k);
     W.shake = 0.8 * k;
   } else if (mode === 'break') {
-    for (let i = 0; i < 100; i++) {
+    const lv = S.wreckLevel || 2;
+    for (let i = 0; i < 35 * lv; i++) {
       tA.set(Math.random() - 0.5, rr([0, 0.9]), Math.random() - 0.5).normalize().multiplyScalar(rr([5, 35]) * k);
       emit('fire', W.site, tA.x + S.vel.x * 0.1, tA.y, tA.z + S.vel.z * 0.1, 1.8 * k);
     }
-    for (let i = 0; i < 45; i++) emit('smoke', W.site, (Math.random() - 0.5) * 20, rr([2, 10]), (Math.random() - 0.5) * 20, 1.2 * k);
-    for (let i = 0; i < 40; i++) emit('dust', W.site, (Math.random() - 0.5) * 30, rr([1, 8]), (Math.random() - 0.5) * 30, 1.4);
+    for (let i = 0; i < 15 * lv; i++) emit('smoke', W.site, (Math.random() - 0.5) * 20, rr([2, 10]), (Math.random() - 0.5) * 20, 1.2 * k);
+    for (let i = 0; i < 20 * lv; i++) emit('dust', W.site, (Math.random() - 0.5) * 10 * lv, rr([1, 8]), (Math.random() - 0.5) * 10 * lv, 0.8 + 0.3 * lv);
     boomLight.position.copy(W.site).y += 10;
-    boomLight.intensity = 9 * k;
-    W.siteFire = 30; W.siteSmoke = 120;
-    W.shake = 1.6 * k;
+    boomLight.intensity = 3 * lv * k;
+    W.siteFire = 10 * lv; W.siteSmoke = 40 * lv;
+    W.shake = 0.55 * lv * k;
   } else {
     for (let i = 0; i < 30; i++) emit('dust', W.site, (Math.random() - 0.5) * 12, rr([1, 5]), (Math.random() - 0.5) * 12);
     W.shake = 0.5;
@@ -5154,7 +5396,7 @@ function blast(p, R, power, from = '') {
 function blastPlane(p, R, from, warhead = false) {
   const who = from ? MP.blastBy || 'Another player' : '';
   if (from) MP.lastHitBy = { name: who, t: performance.now() };
-  const Rs = R * 0.3, tough = A.scale > 2 ? 2.5 : 1, tears = [];
+  const Rs = R * 0.3, tough = A.scale > 2 ? 2.5 : 1, tough2 = structureOf().tough, tears = [];
   const kill = warhead ? 0.25 : 0.6, reach = warhead ? 1 : 1.2;
   for (const z of parts.zones) {
     if (!z.alive || !z.pts || !z.pts.length || (z.kind === 'gear' && S.gearT < 0.5)) continue;
@@ -5165,22 +5407,41 @@ function blastPlane(p, R, from, warhead = false) {
       if (d < Rs && z.cut) { const c = coordOf(z.cut, q); if (c < innerC) { innerC = c; inner = q; } }
     }
     if (z.kind === 'core') {
-      if (bd < R * kill) {
+      // a bomb's blast (not a missile's small warhead) close to the fuselage is the end of it
+      if (!warhead && bd < R * kill) {
         S.hitBuilding = -1;
         crash(from ? `You were caught in ${who}'s blast.` : 'You flew through your own bomb blast. Release from higher up, at least 500 ft.');
         return;
       }
-      if (bd < R * reach) {
-        const f = 1 - bd / (R * reach);
-        S.hull -= warhead ? 1.1 * f * f : 0.5 * f; S.damaged = true;
-        addDamageMark(best, 'core', z, clamp(f, 0.15, 0.8));
+      // Otherwise each section takes the blast by its own distance from it: falling off with the square of the
+      // distance, half again for a direct hit (within 12% of the radius). A fighter's fuselage section caught by a
+      // direct hit is gone; an airliner's is badly hurt; the sections further away hardly notice.
+      const near = [Infinity, Infinity, Infinity, Infinity], nearP = [];
+      for (const q of z.pts) {
+        const d = tC.copy(q).applyQuaternion(S.quat).add(S.pos).distanceTo(p), i = secOf(q.z);
+        if (d < near[i]) { near[i] = d; nearP[i] = q; }
       }
-      if (S.hull <= 0) { S.hitBuilding = -1; crash(from ? `${who}'s blast tore your aircraft apart.` : 'Your own bomb blast tore the aircraft apart.'); return; }
-    } else if (bd < Rs) tears.push([z, inner || best]); // engines and gear legs have no tear line: they go whole
+      const cause = from ? `${who}'s ${warhead ? 'missile' : 'blast'} tore your aircraft apart.` : 'Your own bomb blast tore the aircraft apart.';
+      let hit = false;
+      for (let i = 0; i < 4; i++) {
+        if (near[i] >= R * reach) continue;
+        const f = 1 - near[i] / (R * reach), amt = (warhead ? 1.25 : 0.9) * f * f * (near[i] < R * 0.12 ? 1.5 : 1);
+        secHit(i, amt / tough2); addDamageMark(nearP[i], 'core', z, clamp(f, 0.15, 0.8)); hit = true;
+      }
+      const dc = tC.copy(cockpitLocal()).applyQuaternion(S.quat).add(S.pos).distanceTo(p);
+      if (dc < R * 0.6) crewHit((warhead ? 1.6 : 1) * (1 - dc / (R * 0.6)) ** 2 / Math.sqrt(tough2));
+      if (hit) { S.damaged = true; if (hullConsequences(cause)) return; }
+    } else if (bd < (warhead ? Rs / Math.sqrt(tough2) * (z.kind === 'eng' || z.kind === 'gear' ? 1 : 0.6) : Rs)) {
+      // a bomb's blast takes the part from its innermost point that close; a missile's small warhead tears it where it
+      // burst (outboard of that goes, the rest stays), and a bigger airframe needs the burst closer to tear at all.
+      // Engines and gear legs have no tear line: they go whole.
+      tears.push([z, warhead ? best : (inner || best)]);
+    }
     else if (bd < R) {
       const hp = (ZONE_HP[z.kind] || 4) * tough, f = 1 - bd / R;
       z.taken = Math.min(hp * 0.9, (z.taken || 0) + hp * 0.6 * f);
       addDamageMark(best, z.kind, z, clamp(f, 0.12, 0.5));
+      if (z.kind === 'eng') engineHurt(z, hp);
     }
   }
   for (const [z, q] of tears) if (z.alive) ripZone(z, q, tC.copy(q).applyQuaternion(S.quat).add(S.pos));
@@ -6031,7 +6292,7 @@ function reset(mode) {
   if (S.damaged) { S.damaged = false; setAircraft(A.id); } // put the torn-off parts back
   S.stumps = [];
   updateDamage();
-  Object.assign(S, { hull: 1, belly: false, hitCool: 0, bellyStopped: false, ditched: false, ditchTime: 0, ditchFlood: 0, ditchLeak: 0, gearOverT: 0, wingOverT: 0, wingOverFailed: false });
+  Object.assign(S, { sec: [1, 1, 1, 1], pilot: 1, ctrl: 1, dragDmg: 0, noCtrl: '', stuck: null, tailGone: false, airBreak: false, wreckLevel: 0, wreckSeed: 0, hull: 1, belly: false, hitCool: 0, bellyStopped: false, ditched: false, ditchTime: 0, ditchFlood: 0, ditchLeak: 0, gearOverT: 0, wingOverT: 0, wingOverFailed: false });
   initGunship(); // a fresh flight: full ammunition
   CM.left = CM_LOAD[A.id] || 0; CM.cool = 0;
   aaSel = A.ammo ? 'gun' : 'msl';
@@ -6086,6 +6347,8 @@ function reset(mode) {
   clearTimeout(crashTimer);
   // the old wreck stays where it fell, as scenery, until the city is rebuilt
   for (const p of W.pieces) { rubbleGroup.attach(p.obj); p.burn = 0; rubble.push(p); }
+  // old wrecks stay where they fell, but only so many pieces of them (the oldest go first)
+  while (rubble.length > (isTouch ? 160 : 350)) rubbleGroup.remove(rubble.shift().obj);
   W.pieces.length = 0;
   clearWreck();
   camSnap = true;
@@ -6150,21 +6413,32 @@ function crash(msg) {
   const impactEnergy = building ? clamp((A.mass / 26000) * (vn / 100) ** 2, 0.025, 40) : 1;
   const crashBlastRadius = building ? clamp(0.2 + 0.22 * Math.sqrt(impactEnergy), 0.2, 1.8) : 1;
   const wet = !building && heightAt(S.pos.x, S.pos.z) < 0;
-  // shallow, slow impacts leave the airframe in one piece and it skids; anything harder breaks it up
-  const gentle = !building && vn < 7 && V < (wet ? 70 : 115);
+  // How hard it hit: the speed into the surface counts in full, the speed along it a little (a slide scrubs it off).
+  // Big airframes give way at lower speeds than fighters. A breakup in the air (a failed section) is level 2.
+  const vt = Math.sqrt(Math.max(0, V * V - vn * vn)), hit = Math.sqrt(vn * vn + 0.05 * vt * vt) * (A.mass > 60000 ? 1.25 : 1);
+  const level = S.airBreak ? 2 : hit < 18 && !building ? 0 : hit < 38 ? 1 : hit < 85 ? 2 : 3;
+  const gentle = level === 0 && V < (wet ? 70 : 115);
   S.crashed = true;
   S.firing = false;
+  S.wreckLevel = gentle ? 0 : Math.max(1, level); S.wreckSeed = 1 + Math.floor(Math.random() * 1e6);
   buildWreck(gentle ? 'slide' : 'break', wet, n, building);
+  // a hard, steep hit on open ground digs a crater, bigger for heavier aircraft and faster impacts
+  if (!wet && !building && !S.airBreak && level === 3) {
+    const r = clamp(1.3 * Math.cbrt((A.mass / 1000) * (vn / 40) ** 2), 4, 70);
+    aircraftCrater(W.site.x, W.site.z, r);
+    mpFx({ k: 'ac', p: mpV(W.site), r: Math.round(r * 10) / 10 });
+  }
   plane.visible = false;
-  // the impact (and any bombs still on the pylons) wrecks what's around it
-  if (!wet) {
+  // the impact (and any bombs still on the pylons) wrecks what's around it (not for a breakup high in the air)
+  if (!wet && !S.airBreak) {
     if (building) {
       const breachRadius = (3 + 2.5 * Math.sqrt(impactEnergy)) * A.scale;
       hitAt(S.hitBuilding, S.hitPoint, breachRadius, 4 * impactEnergy);
     }
-    if (!gentle || S.bombs > 0) {
-      const crashRadius = A.crashBlast[0] * crashBlastRadius + S.bombs * 6;
-      const crashPower = A.crashBlast[1] * impactEnergy + S.bombs * 900;
+    if ((!gentle && S.wreckLevel >= 2) || S.bombs > 0) {
+      const lv = Math.max(1, S.wreckLevel - 1);
+      const crashRadius = A.crashBlast[0] * crashBlastRadius * (0.5 + 0.3 * lv) + S.bombs * 6;
+      const crashPower = A.crashBlast[1] * impactEnergy * lv * 0.6 + S.bombs * 900;
       blast(W.site, crashRadius, crashPower);
     }
     if (S.bombs > 0) explode(W.site, 1 + S.bombs * 0.25, false);
@@ -6204,7 +6478,7 @@ function waterContact(point) {
   S.ditched = true; S.ditchTime = 0; S.ditchFlood = 0;
   S.ditchLeak = 0.018 + 0.035 * clamp((horizontalSpeed - 50) / 60, 0, 1) +
     0.025 * clamp((impactDown - 1) / 4, 0, 1) + (gearDown ? 0.018 : 0);
-  S.hitBuilding = -1; S.hull = Math.max(0.25, S.hull - 0.12);
+  S.hitBuilding = -1; secHit(2, 0.1); secHit(3, 0.1); hullConsequences();
   S.onGround = false; S.throttle = 0; S.firing = false; S.brake = false;
   S.gearDown = false; S.gearT = 0; S.doorT = 0;
   S.pos.y = Math.max(1.2, A.gear * 0.68);
@@ -6314,7 +6588,7 @@ function physics(dt) {
       force.addScaledVector(liftDir, qS * liftCL / ll * wingFactor); // a damaged wing carries less load
     }
     const CD = A.cd0 + A.k * liftCL * liftCL + (Math.abs(alpha) > A.stallA ? 0.15 : 0) + A.wave[2] * smooth(A.wave[0], A.wave[1], mach) // transonic drag rise
-      + 0.015 * S.gearT + (S.brake ? 0.10 + 0.025 * smooth(0.75, 1.2, mach) : 0) + (S.belly && S.onGround ? 0.35 : 0) + (S.bombs * (A.bombCd ?? 0.0015) + S.nukes * (A.rig.nukeInternal ? 0 : 0.0015)) + Math.abs(beta) * 0.2
+      + 0.015 * S.gearT + (S.brake ? 0.10 + 0.025 * smooth(0.75, 1.2, mach) : 0) + (S.belly && S.onGround ? 0.35 : 0) + (S.dragDmg || 0) + (S.bombs * (A.bombCd ?? 0.0015) + S.nukes * (A.rig.nukeInternal ? 0 : 0.0015)) + Math.abs(beta) * 0.2
       + (hiG ? A.hiG.cd * postStallBlend * Math.sin(alpha) ** 2 : 0); // post-stall: the whole airframe meets the air
     force.addScaledVector(vhat, -qS * CD);
     // sideslip side force; on the ground the tires carry the side load, so only a quarter of it pushes the jet sideways
@@ -6435,11 +6709,15 @@ function physics(dt) {
       else if (S.dmg.legsLost) fail = 'A gear leg had been torn off and the rest folded';
       else if (att.pitch < -0.12) fail = 'The nose gear hit first and folded';
       if (fail) {
-        // too hard, too fast or too banked to slide it in
-        if (vs < -7.5) return crash(`${fail}, and at ${Math.round(-vs * 196.85)} ft/min the fuselage broke. Keep the descent under about 800 ft/min.`);
+        // Too fast or too banked to slide it in is the end of it. Otherwise how hard it came down costs the belly:
+        // up to about 800 ft/min hardly anything, then more and more, until past about 2,000 ft/min (sooner for a
+        // heavy airframe, which takes it worse) the centre or rear fuselage gives way and it breaks up.
         if (V > 150) return crash(`${fail}, and at ${Math.round(V * 1.94384)} kt the belly slide tore the jet apart.`);
-        if (Math.abs(att.roll) > 0.45) return crash(`${fail}, and a wing dug in. Keep the wings level on a belly landing.`);
-        if (!S.belly) bellyDown(fail); else S.hull = Math.max(0.05, S.hull - 0.1);
+        if (Math.abs(att.roll) > 0.6) return crash(`${fail}, and a wing dug in. Keep the wings level on a belly landing.`);
+        const sink = Math.max(0, -vs - 4) / 6.5, hard = 0.06 + 0.9 * sink * sink * (A.mass > 60000 ? 1.35 : 1);
+        secHit(2, hard); secHit(3, hard * 0.8); secHit(1, hard * 0.4);
+        if (hullConsequences(`${fail}, and at ${Math.round(-vs * 196.85)} ft/min the fuselage broke. Keep the descent under about 800 ft/min.`)) return;
+        if (!S.belly) bellyDown(fail);
       } else {
         const fpm = Math.round(-vs * 196.85);
         toast(`Touchdown ${fpm} ft/min · ${fpm < 200 ? 'Butter' : fpm < 450 ? 'Smooth' : fpm < 700 ? 'Firm' : 'Hard'}${g.runway ? '' : ' · off-runway'}`);
@@ -6570,9 +6848,12 @@ function updateInputs(dt) {
     if (!(keys.q || keys.e)) ty = my * 0.6;
   }
   const ramp = (cur, tgt, rate) => cur + clamp(tgt - cur, -rate * dt, rate * dt);
+  if (S.noCtrl && S.stuck) { tp = S.stuck.pitch; tr = S.stuck.roll; ty = S.stuck.yaw; }
+  else { const c = S.ctrl ?? 1; tp *= c; tr *= c; ty *= c; }
   inp.pitch = ramp(inp.pitch, tp, 3.5);
   inp.roll = ramp(inp.roll, tr, 4.5);
   inp.yaw = ramp(inp.yaw, ty, 3);
+  if (S.noCtrl) { S.brake = false; S.firing = false; return; }
   if (keys.r) S.throttle = Math.min(1, S.throttle + 0.5 * dt);
   if (keys.f) S.throttle = Math.max(0, S.throttle - 0.5 * dt);
   if (keys.r || keys.f) setThrottleUI();
@@ -7280,7 +7561,9 @@ function updateHUD() {
   if (Dh.engL < 0.995) dm.push(Dh.engL < 0.01 ? 'L ENG OUT' : 'L ENG ' + pct(Dh.engL));
   if (Dh.engR < 0.995) dm.push(Dh.engR < 0.01 ? 'R ENG OUT' : 'R ENG ' + pct(Dh.engR));
   if (Dh.legsLost) dm.push('GEAR LEG LOST');
-  if (S.hull < 0.995) dm.push('HULL ' + pct(S.hull));
+  if (S.sec) S.sec.forEach((v, i) => { const st = secState(v); if (st) dm.push(SEC_HUD[i] + ' ' + ['', 'DMG', 'SEVERE', 'CRITICAL', 'GONE'][st]); });
+  if (S.pilot < 0.6 && S.pilot > 0) dm.push('CREW INJURED');
+  if (S.noCtrl) dm.push(S.noCtrl === 'pilot' ? 'PILOT INCAPACITATED' : 'CONTROLS LOST');
   const dmEl = document.getElementById('cDmg');
   dmEl.hidden = !dm.length;
   setText(dmEl, 'DMG ' + dm.join(' · '));
@@ -8364,6 +8647,7 @@ function applyFx(ev, P, replay) {
   if (!ev || typeof ev !== 'object') return;
   const p = ev.k === 'h' ? null : vec(ev.p);
   if (ev.k === 'c' && p && BOMB_KINDS[ev.b]) makeTerrainCrater(p, ev.b);
+  else if (ev.k === 'ac' && p && num(ev.r, 100)) aircraftCrater(p.x, p.z, ev.r);
   else if (ev.k === 'b' && p && num(ev.R, 400) && num(ev.pw, 1e5)) { MP.blastBy = P ? P.name : ''; blast(p, ev.R, ev.pw, replay ? 'replay' : 'remote'); }
   else if (ev.k === 'e' && p && num(ev.s, 10)) {
     if (replay) {
@@ -8524,15 +8808,37 @@ function onPlaneHits(id, d) {
     for (let k = 0; k < 4; k++) emit('spark', _hw, S.vel.x + (Math.random() - 0.5) * 20, S.vel.y + rr([0, 10]), S.vel.z + (Math.random() - 0.5) * 20);
     addDamageMark(_hl, best.kind, best, best.kind === 'core' ? 0.18 : clamp(dmg / (ZONE_HP[best.kind] * tough), 0.12, 0.55));
     if (best.kind === 'core') {
-      S.hull -= dmg * 0.03 / tough; S.damaged = true;
-      if (S.hull <= 0) { S.hitBuilding = -1; crash(by + ' shot you down.'); }
+      S.hitBuilding = -1;
+      hullDamage(_hl, dmg * 0.05, by + ' shot you down.');
       continue;
     }
     best.taken = (best.taken || 0) + dmg;
+    if (best.kind === 'eng') engineHurt(best, ZONE_HP.eng * tough);
     updateDamage();
     if (best.taken >= ZONE_HP[best.kind] * tough) { best.taken = 0; ripZone(best, _hl.clone(), _hw); }
   }
   if (!S.crashed && performance.now() - (MP.hitToast || 0) > 1500) { MP.hitToast = performance.now(); toast(`${by} is hitting you · fuselage ${Math.max(0, Math.round(S.hull * 100))}%`); }
+}
+// Another player's aircraft crashed: break our copy of it the way theirs broke (same level, same random draw), so
+// everyone sees the same wreck. The pieces join the city's rubble, which is capped, and sleep once they settle.
+function ghostWreck(P, [level, seed]) {
+  const g = P.obj, wet = heightAt(g.position.x, g.position.z) < 0 && g.position.y < 2;
+  if (level < 1) { for (let i = 0; i < 20; i++) emit('dust', g.position, (Math.random() - 0.5) * 10, rr([1, 4]), (Math.random() - 0.5) * 10); return; }
+  g.updateMatrixWorld(true);
+  const copy = g.clone(true);
+  g.matrixWorld.decompose(copy.position, copy.quaternion, copy.scale);
+  rubbleGroup.add(copy);
+  copy.updateMatrixWorld(true);
+  const pieces = groupsToPieces(breakGroups(copy, P.ac, Math.min(3, level), mulberry(seed)), rubbleGroup, rubble);
+  rubbleGroup.remove(copy);
+  for (const p of pieces) {
+    p.v.copy(P.v).multiplyScalar(0.6);
+    p.v.x += (Math.random() - 0.5) * 6 * level; p.v.y += Math.random() * 3 * level; p.v.z += (Math.random() - 0.5) * 6 * level;
+    p.w.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(3 * level / (0.5 + p.size * 0.15));
+  }
+  while (rubble.length > (isTouch ? 160 : 350)) rubbleGroup.remove(rubble.shift().obj);
+  if (level >= 2) explode(g.position, 0.5 + 0.35 * level * Math.sqrt((AC[P.ac] || A).fireball || 1), wet, true);
+  else for (let i = 0; i < 30; i++) emit('dust', g.position, (Math.random() - 0.5) * 12, rr([1, 5]), (Math.random() - 0.5) * 12);
 }
 // Another player lost a part: tear the same part off our copy of their aircraft, at the same place.
 function ghostRip(P, [kind, side, cut, ex]) {
@@ -8596,7 +8902,7 @@ function stateMsg() {
     n: MP.name, ac: A.id, r: running ? 1 : 0, p: mpV(S.pos), v: still ? [0, 0, 0] : mpV(S.vel),
     q: [q.x, q.y, q.z, q.w].map(v => Math.round(v * 1e3) / 1e3), g: S.gearT > 0.5 ? 1 : 0, up: Math.round(performance.now() - MP.t0), lf: MP.life
   };
-  if (S.crashed) m.c = 1;
+  if (S.crashed) { m.c = 1; m.cw = [S.wreckLevel, S.wreckSeed]; }
   if (MP.kills || MP.deaths) m.kd = [MP.kills, MP.deaths];
   if (paused) m.ps = 1;
   if (A.id === 'b2') m.cl = MP.claim;
@@ -8612,7 +8918,7 @@ function onState(id, d) {
   P.name = String(d.n || 'Pilot').replace(/[^\w\- ]/g, '').slice(0, 16) || 'Pilot';
   if (!wasIn) { toast(P.name + ' joined'); chatLine('', P.name + ' joined', 'sys'); }
   P.ac = AC.hasOwnProperty(d.ac) ? d.ac : 'f15';
-  if (d.c && !P.c && P.r && P.obj && P.obj.visible) explode(P.obj.position, 1.2, heightAt(P.obj.position.x, P.obj.position.z) < 0 && P.obj.position.y < 2, true);
+  if (d.c && !P.c && P.r && P.obj && P.obj.visible) ghostWreck(P, Array.isArray(d.cw) && d.cw.length === 2 && d.cw.every(x => num(x, 1e7)) ? d.cw : [2, 1]);
   if (P.p.distanceTo(p) > 300 || !P.r) P.snap = true;
   P.r = d.r ? 1 : 0; P.c = d.c ? 1 : 0; P.ps = d.ps ? 1 : 0;
   P.p.copy(p); P.v.copy(v); P.q.set(d.q[0], d.q[1], d.q[2], d.q[3]).normalize();
