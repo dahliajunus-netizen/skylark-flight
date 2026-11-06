@@ -933,6 +933,29 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.04;
 scene.add(sun, sun.target);
 
+// Solar eclipse: one day in ten (drawn from the day's number, so every player gets the same days) the moon crosses
+// the sun around noon. The partial phases last about a minute either side of a 50 s totality; the light only
+// really goes in the last few per cent of coverage, when the sky turns to twilight, the stars and the corona come
+// out and the airfield lights glow.
+const ECL = { cover: 0, dark: 0, day: -1, told: -1, moonDir: new THREE.Vector3(), on: false };
+const ECL_R = 0.037, ECL_TOTAL = 25, ECL_PARTIAL = 65; // moon radius (rad); half of totality, each partial phase (s)
+function updateEclipse() {
+  const sec = Date.now() / 1000, day = Math.round(sec / DAY_SECONDS), dt = sec - day * DAY_SECONDS; // noon is a whole number of days
+  if (ECL.day !== day) { ECL.day = day; ECL.on = mulberry(day * 977 + 31)() < 0.1; }
+  const off = ECL.on ? Math.sign(dt) * Math.max(0, Math.abs(dt) - ECL_TOTAL) / ECL_PARTIAL * 2.2 * ECL_R : 1;
+  ECL.cover = clamp(1 - Math.abs(off) / (2 * ECL_R), 0, 1);
+  ECL.dark = smooth(0.82, 1, ECL.cover);
+  // the moon slides across the sun's face from west to east
+  const t = _eclT.crossVectors(SUN_DIR, _eclUp).normalize();
+  ECL.moonDir.copy(SUN_DIR).addScaledVector(t, Math.abs(off) < 1 ? off : 1).normalize();
+  if (ECL.cover > 0.02 && ECL.told !== day) {
+    ECL.told = day;
+    toast('A total solar eclipse is beginning');
+    if (typeof chatLine === 'function') chatLine('', 'A total solar eclipse is beginning', 'sys');
+  }
+}
+const _eclT = new THREE.Vector3(), _eclUp = new THREE.Vector3(0, 1, 0);
+
 // Day and night sky palettes blend through a short dawn and dusk.
 const SKY_DAY = { top: new THREE.Color('#203a5b'), horizon: new THREE.Color('#788997'), bottom: new THREE.Color('#596a70'), sun: new THREE.Color('#f6dfbd') };
 const SKY_NIGHT = { top: new THREE.Color('#050b17'), horizon: new THREE.Color('#1b2635'), bottom: new THREE.Color('#0c1119'), sun: new THREE.Color('#d6a575') };
@@ -944,10 +967,10 @@ const sky = new THREE.Mesh(
     uniforms: {
       top: { value: SKY_DAY.top.clone() }, horizon: { value: SKY_DAY.horizon.clone() },
       bottom: { value: SKY_DAY.bottom.clone() }, sunDir: { value: SUN_DIR },
-      sunColor: { value: SKY_DAY.sun.clone() }
+      sunColor: { value: SKY_DAY.sun.clone() }, moonDir: { value: ECL.moonDir }, ecl: { value: 0 }
     },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform vec3 top, horizon, bottom, sunDir, sunColor; varying vec3 vDir;
+    fragmentShader: `uniform vec3 top, horizon, bottom, sunDir, sunColor, moonDir; uniform float ecl; varying vec3 vDir;
       void main(){
         vec3 d = normalize(vDir);
         float h = d.y;
@@ -959,7 +982,16 @@ const sky = new THREE.Mesh(
         c = mix(c, horizon * vec3(1.04, 1.02, 0.98), horizonBand * 0.22);
         float sunAmount = max(dot(d, sunDir), 0.0);
         float halo = pow(sunAmount, 8.0) * 0.13 + pow(sunAmount, 32.0) * 0.28 + pow(sunAmount, 420.0) * 1.8;
-        c += sunColor * halo;
+        float moon = 0.0;
+        if (ecl > 0.0) {
+          // the moon blots out the sun as it covers it; at totality only the pale corona is left round its black disc
+          moon = smoothstep(0.99929, 0.99934, dot(d, moonDir));
+          halo *= 1.0 - ecl * ecl;
+          float sunAng = acos(clamp(dot(d, sunDir), -1.0, 1.0));
+          c += vec3(0.82, 0.88, 1.0) * pow(ecl, 10.0) * (0.6 * exp(-max(sunAng - 0.036, 0.0) / 0.018) + 0.12 * exp(-max(sunAng - 0.036, 0.0) / 0.09)) * (1.0 - moon);
+        }
+        c += sunColor * halo * (1.0 - moon);
+        c = mix(c, vec3(0.004, 0.005, 0.008), moon * smoothstep(0.0, 0.05, ecl));
         // c is a display colour: decode it to linear and encode for the target. On screen that round-trips to
         // the same colour; baked into the RGBE environment map it becomes proper linear sky radiance.
         gl_FragColor = linearToOutputTexel(sRGBToLinear(vec4(c, 1.0)));
@@ -976,10 +1008,10 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 const envScene = new THREE.Scene();
 envScene.add(new THREE.Mesh(sky.geometry, sky.material));
 const envSun = new THREE.Vector3(9, 9, 9);
-let envTarget = null, envWx = -1;
+let envTarget = null, envWx = -1, envEcl = -1;
 function updateEnvironment() {
-  if (envTarget && (WX.flash > 0 || envSun.distanceToSquared(SUN_DIR) < 4e-4 && Math.abs(envWx - WX.overcast) < 0.04)) return; // re-bake every ~1° of sun travel, or as the overcast changes
-  envSun.copy(SUN_DIR); envWx = WX.overcast;
+  if (envTarget && (WX.flash > 0 || envSun.distanceToSquared(SUN_DIR) < 4e-4 && Math.abs(envWx - WX.overcast) < 0.04 && Math.abs(envEcl - ECL.cover) < 0.03)) return; // re-bake every ~1° of sun travel, or as the overcast or an eclipse changes the sky
+  envSun.copy(SUN_DIR); envWx = WX.overcast; envEcl = ECL.cover;
   const next = pmrem.fromScene(envScene, 0, 1, 30000);
   if (envTarget) envTarget.dispose();
   envTarget = next;
@@ -1007,9 +1039,11 @@ function updateDayNight() {
   const elevation = Math.sin(phase) * 0.78;
   const azimuth = phase * 0.5 + 0.35;
   SUN_DIR.set(Math.cos(azimuth) * Math.cos(elevation), Math.sin(elevation), Math.sin(azimuth) * Math.cos(elevation)).normalize();
+  updateEclipse();
   const daylight = smooth(-0.16, 0.24, elevation);
   const twilight = smooth(-0.32, 0.08, elevation);
-  const night = 1 - twilight;
+  const night = Math.max(1 - twilight, ECL.dark); // totality is a short night: twilight sky, stars, lights on
+  sky.material.uniforms.ecl.value = ECL.cover * smooth(-0.05, 0.1, elevation);
   starMaterial.opacity = 0.88 * smooth(0.28, 0.82, night);
   runwayGlow.uNight.value = night;
   stars.visible = starMaterial.opacity > 0.005;
@@ -1019,8 +1053,8 @@ function updateDayNight() {
   uniforms.bottom.value.copy(SKY_DAY.bottom).lerp(SKY_NIGHT.bottom, night);
   uniforms.sunColor.value.copy(SKY_DAY.sun).lerp(SKY_NIGHT.sun, night);
   sun.color.copy(SKY_DAY.sun).lerp(SUN_WARM, 1 - smooth(-0.02, 0.4, elevation));
-  sun.intensity = SUN_BASE * daylight;
-  hemi.intensity = HEMI_BASE * (0.3 + daylight * 0.7);
+  sun.intensity = SUN_BASE * daylight * (1 - 0.985 * ECL.dark);
+  hemi.intensity = HEMI_BASE * (0.3 + daylight * 0.7) * (1 - 0.6 * ECL.dark);
   WX.daylight = daylight;
   applyWeatherSky(daylight);
   HORIZON.copy(uniforms.horizon.value);
@@ -5661,6 +5695,7 @@ function dropNuke() {
   const left = coolLeft(nukeId(nk));
   if (left > 0) { toast(`The ${nk.name} is cooling down: ${mmss(left)} left`); return; }
   releaseStore(parts.nuke, 'nuke');
+  sirenStart(''); mpSend('ev', { k: 'siren' }); // the sirens sound for everyone
   S.nukes--;
   // a rack moves on to its next bomb, and only the last one starts the cooldown
   if (parts.nukeRack) parts.nuke = parts.nukeRack.find(b => b.visible) || parts.nuke;
@@ -5692,7 +5727,7 @@ function updateBombs(dt) {
       scene.remove(o);
       bombsFlying.splice(b, 1);
       const wet = hit === 'water';
-      if (B.kind === 'nuke') { detonateNuke(p, wet, B.nk); continue; }
+      if (B.kind === 'nuke') { detonateNuke(p, wet, B.nk); sirenDone(''); continue; }
       if (B.kind === 'shell') { explode(p, 0.55, wet); blast(p, hit === 'water' ? 8 : 14, 520); continue; } // 105 mm HE, ~2 kg of Comp B
       // Conventional bombs use their tuned blast profiles; CBU-87 spreads small impacts across an area.
       const fx = bombBlastProfile(B.kind);
@@ -5736,6 +5771,7 @@ function ccipPoint(out) {
 }
 function clearWeapons() {
   bul.life.fill(0); trPos.fill(0); bul.acc = 0;
+  SIREN.src.delete(''); // our bombs in the air are gone
   for (const B of bombsFlying) scene.remove(B.obj);
   bombsFlying.length = 0;
   parts.bombs.forEach(b => { b.visible = true; });
@@ -6005,10 +6041,13 @@ function reset(mode) {
   S.ang.set(0, 0, 0);
   inp.pitch = inp.roll = inp.yaw = 0;
   if (mode === 'runway') {
-    const R = RUNWAYS[0]; // lined up on runway 36, facing north toward the city
-    S.pos.set(R.x, CITY_H + 0.1 + GEAR, R.z + R.len / 2 - 80);
+    // lined up on runway 36, facing north toward the city, unless another player is sitting there: then the first
+    // free runway end
+    const sp = runwaySpawn();
+    S.pos.set(sp.x, ground(sp.x, sp.z).h + 0.1 + GEAR, sp.z);
     S.vel.set(0, 0, 0);
-    S.quat.identity();
+    S.quat.setFromEuler(eul.set(0, -sp.hdg, 0, 'YXZ'));
+    if (sp.name !== '36') toast(`Runway 36 is occupied: lined up on runway ${sp.name}`);
     S.throttle = 0;
     S.onGround = true;
     S.gearDown = true; S.gearT = 1;
@@ -6051,6 +6090,20 @@ function reset(mode) {
   clearWreck();
   camSnap = true;
   setThrottleUI();
+}
+
+// Runway ends in the order a spawn tries them: the long runway 36 first, then the parallels and the others, each
+// 80 m in from its threshold. An end is taken when another player's aircraft is on the ground (or just above it)
+// within 300 m of the spot.
+function runwaySpawn() {
+  const order = [[0, 0], [1, 0], [2, 0], [3, 0], [0, 1], [1, 1], [2, 1], [3, 1], [4, 0], [4, 1]];
+  const spots = order.map(([i, end]) => {
+    const R = RUNWAYS[i], hdg = (R.hdg + (end ? 180 : 0)) * Math.PI / 180, ux = Math.sin(hdg), uz = -Math.cos(hdg), back = R.len / 2 - 80;
+    return { name: R.names[end], x: R.x - ux * back, z: R.z - uz * back, hdg };
+  });
+  const taken = sp => [...MP.peers.values()].some(P => P.r && !P.c && P.obj && P.obj.visible &&
+    Math.hypot(P.p.x - sp.x, P.p.z - sp.z) < 300 && P.p.y - ground(P.p.x, P.p.z).h < 30);
+  return spots.find(sp => !taken(sp)) || spots[0];
 }
 
 // A random airborne start over the main island (or just off its coast): out of the airbase's traffic, well away
@@ -8019,6 +8072,82 @@ function updateRwr() {
   setText(c, msl ? 'MISSILE' : 'LOCKED');
   c.classList.toggle('msl', msl);
 }
+// ---- mid-air collisions ----
+// Each page checks its own airframe against the other aircraft as it draws them: a point of one of our parts
+// inside one of their parts' boxes is a collision. A wing, tail or engine that hits is torn off there (it may still
+// fly); the fuselage hitting anything is the end of the flight. The other player's page does the same for their
+// aircraft, so both take the damage. A slow nudge (taxiing side by side, under 15 m/s apart) does nothing, and a
+// fresh spawn gets three seconds' grace.
+const _ci = new THREE.Quaternion(), _cp = new THREE.Vector3();
+function checkCollisions() {
+  if (!MP.peers.size || !running || paused || S.crashed || !parts.zones.length || S.time < 3) return;
+  const reach = parts.reach || 25;
+  for (const P of MP.peers.values()) {
+    const o = P.obj;
+    if (!o || !o.visible || !P.r || P.c || !o.userData.boxes) continue;
+    const lim = reach + o.userData.rad;
+    if (o.position.distanceToSquared(S.pos) > lim * lim) continue;
+    if (tV.subVectors(S.vel, P.v).length() < 15) continue;
+    _ci.copy(o.quaternion).invert();
+    for (const z of parts.zones) {
+      if (!z.alive || !z.pts || (z.kind === 'gear' && S.gearT < 0.5)) continue;
+      let hit = null;
+      for (const p of z.pts) {
+        _cp.copy(p).applyQuaternion(S.quat).add(S.pos).sub(o.position).applyQuaternion(_ci);
+        if (o.userData.boxes.some(b => b.containsPoint(_cp))) { hit = p; break; }
+      }
+      if (!hit) continue;
+      if (z.kind === 'core') { S.hitBuilding = -1; crash(`You collided with ${P.name}.`); return; }
+      ripZone(z, hit, tC.copy(hit).applyQuaternion(S.quat).add(S.pos));
+    }
+  }
+}
+
+// ---- air-raid sirens ----
+// While a nuclear bomb is falling, anywhere, the city's sirens wail: two rotors a fifth apart, rising and falling
+// over eight seconds. Each bomb in the air is counted by who dropped it ('' for ours); its detonation takes it off,
+// and the sirens wind down when none is left. A bomb never heard of again is dropped from the count after 2 min.
+const SIREN = { src: new Map(), node: null };
+function sirenStart(id) {
+  const e = SIREN.src.get(id);
+  SIREN.src.set(id, { n: (e ? e.n : 0) + 1, t: performance.now() });
+}
+function sirenDone(id) {
+  const e = SIREN.src.get(id);
+  if (e && --e.n > 0) return;
+  SIREN.src.delete(id);
+}
+function updateSirens() {
+  const now = performance.now();
+  for (const [id, e] of SIREN.src) if (now - e.t > 120000) SIREN.src.delete(id);
+  if (!audio) return;
+  const ctx = audio.ctx, t = ctx.currentTime, want = SIREN.src.size > 0;
+  if (want && !SIREN.node) {
+    const g = ctx.createGain(), lp = ctx.createBiquadFilter(), lfo = ctx.createOscillator(), oscs = [];
+    g.gain.value = 0.0001;
+    lp.type = 'lowpass'; lp.frequency.value = 2200;
+    lfo.type = 'sine'; lfo.frequency.value = 1 / 8;
+    for (const [f0, depth, type] of [[460, 240, 'sawtooth'], [690, 360, 'triangle']]) {
+      const o = ctx.createOscillator(), d = ctx.createGain();
+      o.type = type; o.frequency.value = f0; d.gain.value = depth;
+      lfo.connect(d).connect(o.frequency); o.connect(lp); o.start(t); oscs.push(o);
+    }
+    lp.connect(g); g.connect(audio.master);
+    if (audio.verbIn) { const v = ctx.createGain(); v.gain.value = 0.6; g.connect(v).connect(audio.verbIn); } // echoing off the city
+    lfo.start(t);
+    SIREN.node = { g, lfo, oscs };
+  }
+  if (!SIREN.node) return;
+  const vol = want && !muted ? 0.07 : 0.0001;
+  SIREN.node.g.gain.setTargetAtTime(vol, t, want ? 0.6 : 0.8);
+  if (!want) {
+    // wind down, then let the rotors go
+    const nd = SIREN.node; SIREN.node = null;
+    nd.g.gain.setTargetAtTime(0.0001, t, 0.8);
+    for (const o of [...nd.oscs, nd.lfo]) o.stop(t + 4);
+  }
+}
+
 // ---- dogfight cues ----
 MP.kills = 0; MP.deaths = 0;
 // hit marker: a quick X where our rounds or missile hit another player, with a tick
@@ -8243,6 +8372,7 @@ function applyFx(ev, P, replay) {
         const times = (P.lastNuke[ev.id] = [].concat(P.lastNuke[ev.id] || []).filter(t => now - t < win));
         if (times.length >= (nk.salvo || 1)) return;
         times.push(now);
+        sirenDone(P.id);
       }
       detonateNuke(p, !!ev.w, nk, true);
     }
@@ -8708,7 +8838,7 @@ const TURN_SAVED_MAX_AGE = 5 * 3600e3; // a saved set is only used while its pas
 // sits in a small lobby room and says there which room it is in (unless that room is hidden), so everyone can
 // see a live list of rooms and how many are in each. "Public" uses the original room, so older pages still meet.
 const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
-const BUILD = '2026-11-06b';
+const BUILD = '2026-11-06c';
 // a hidden room is a different room from a listed one with the same name
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
@@ -8977,6 +9107,7 @@ function wireGameRoom(room) {
   MP.act.pw.onMessage = (d, { peerId }) => onPlaneHits(peerId, d);
   MP.act.ev.onMessage = (d, { peerId }) => {
     const P = MP.peers.get(peerId);
+    if (d && d.k === 'siren') { sirenStart(peerId); return; }
     if (P && d && d.k === 'kill' && typeof d.by === 'string') {
       const by = d.by.replace(/[^\w\- ]/g, '').slice(0, 16);
       toast(by === MP.name ? `You shot down ${P.name}` : `${by} shot down ${P.name}`);
@@ -9280,6 +9411,7 @@ function frame(now) {
   runwayGlow.uTime.value = now / 1000;
   updateWeather(dt);
   updateDayNight();
+  updateSirens();
   if (waterWaves) { waterWaves.offset.x = (waterWaves.offset.x + dt * 0.012) % 1; waterWaves.offset.y = (waterWaves.offset.y + dt * 0.005) % 1; }
   if (cloudField) cloudField.position.addScaledVector(WX.wind, dt * 0.25); // the clouds drift with the wind
   updateLowAltitudeOverspeed(dt);
@@ -9293,6 +9425,7 @@ function frame(now) {
   updateExteriorLights();
   const stall = running ? updateHUD() : false;
   updateAudio(stall);
+  checkCollisions();
   mpUpdate(dt);
   updateRadar(dt);
   updateRwr();
