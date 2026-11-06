@@ -17,3 +17,16 @@ Everyone who has the page open flies in the same world under a callsign picked o
 - After a nuclear bomb is dropped, that bomb needs to cool down before the next one: B61 2 minutes; the B-2's B83s 4 minutes, counted from when the last of the sixteen is dropped.
 - With other players online, Rebuild city starts a vote (Y votes yes). The city is rebuilt for everyone when at least 2/3 of the players vote yes.
 
+
+## The city
+
+- The city is zoned. A downtown of towers and supertalls is ringed by shopping and office streets, which also run along the avenues. Apartment districts come next (some built around courtyards), then suburbs of houses on lawns, then fields at the edge. Industrial belts of warehouses, tank farms and container yards follow the river and the south edge. There is a central park beside downtown, about twenty other big parks, a green belt along the river, plazas, and surface parking.
+- Buildings have styles: house, apartment block, office tower, shop, hotel, warehouse, parking garage and civic building. Each style has its own windows and ground floor. Rooftops carry stair and lift houses, air-conditioning plant, water tanks, antennas, dishes, solar panels and the odd billboard, and houses have pitched roofs. Rooftop pieces disappear when their building is damaged and come back when the city is rebuilt.
+- Streets have kerbs, sidewalks and lane markings by type:
+  - avenues: a planted median, three lanes each way and parking bays;
+  - streets: a dashed centre line, two lanes and parking bays;
+  - lanes: one lane each way.
+- Crossings carry zebra stripes and stop lines. Some avenue crossings are roundabouts. Other street crossings have traffic signals on a 24 s cycle.
+- Traffic keeps right in its lanes, stops and queues at red lights, and goes round the roundabouts. It runs mostly in the busy districts around wherever you are.
+- At night, street lamps light pools on the ground (warm in residential streets, white downtown and in the shopping streets, sodium orange in industry). Parking lots, yards, plazas, park paths and bridges have their own lights. Lit shopfronts and signs (some animated), floodlit warehouses and civic buildings, lit garage decks and hotel lobbies add to the windows. Cars show head and tail lights, tall buildings carry red aviation lights, and signal heads change colour. From altitude the districts stay recognisable: downtown and the shopping streets bright, suburbs warm and sparse, industry orange, parks dark.
+- The building layout is identical on every machine and graphics setting, so collisions and shared damage match in multiplayer. The graphics setting (applied on the next load) only changes how many trees and parked cars there are and how far detail is drawn.
