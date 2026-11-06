@@ -285,6 +285,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <span class="chip" id="cAb">AB</span>
     <span class="chip" id="cHiG" hidden>HI-G</span>
     <span class="small" id="gload">1.0 G</span>
+    <span class="small" id="wx">WIND CALM</span>
     <span class="rwy" id="rwy">RWY 36</span>
     <span class="chip cy" id="cGear">GEAR DN</span>
     <span class="chip on" id="cDmg" hidden>DMG</span>
@@ -412,6 +413,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>X with missiles</dt><dd>Fire an air-to-air missile (pick the missile loadout): the heat-seeker inside its reach, the AIM-120 beyond it</dd>
       <dt>N</dt><dd>Drop the nuclear bomb (B61 loadout on the F-15, sixteen B83s on the B-2, one at a time); it lands on the dashed amber marker. After a drop each needs to cool down: B61 2 min, B83 4 min after the last of the sixteen. Get 0.3 km from a 0.3 kt B61 and 4.8 km from a 1.2 Mt B83</dd>
       <dt>K</dt><dd>Countermeasures: one salvo of flares and chaff (not on the airliners)</dd>
+      <dt>Weather</dt><dd>Wind and weather change every few minutes, the same for everyone: clear, scattered or broken cloud, overcast, rain and thunderstorms. The HUD shows the wind (from, in degrees, and knots; G is the gusts) and the windsocks point downwind. Expect crosswinds on the runway, bumps in turbulence, poor visibility in rain and bombs drifting downwind</dd>
       <dt>Tab (hold)</dt><dd>Scoreboard: kills and deaths of everyone in the room. Arrows at the edge of the screen point to your lock and to players out of view; red arrows are missiles coming at you</dd>
       <dt>1 · 2</dt><dd>Air-to-air weapon: gun (with a radar lock, the orange circle shows the gun lead) or missiles</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb or missile and watch it go off; hold the right mouse and drag to look around it</dd>
@@ -863,6 +865,53 @@ function updatePapi() {
     }
   }
 }
+// ---------------- weather ----------------
+// The weather changes every WX_SLOT seconds, on the world clock like the time of day, so every player has the same
+// sky and the same wind. Each period's weather is drawn from its number (the same draw on every page) and blends in
+// from the last over its first WX_BLEND seconds. Wind is given the way pilots read it: the direction it blows from
+// (true degrees) and its speed in knots, at 10 m above the ground; higher up it is stronger (wind shear). On top of
+// the mean wind come gusts and turbulence, which vary from place to place and moment to moment.
+const WX_SLOT = 420, WX_BLEND = 120, KT = 0.514444;
+//                name          weight cover overcast rain storm  wind kt    gust  turb  visibility m
+const WX_TYPES = [['CLEAR',       30,   0.15, 0,      0,   0,    [0, 10],   0.2,  0.1,  26000],
+                  ['SCATTERED',   26,   0.55, 0,      0,   0,    [4, 16],   0.35, 0.25, 22000],
+                  ['BROKEN',      16,   0.9,  0.4,    0,   0,    [8, 22],   0.5,  0.4,  15000],
+                  ['OVERCAST',    10,   1,    0.85,   0.1, 0,    [6, 18],   0.35, 0.3,  10000],
+                  ['RAIN',        11,   1,    0.92,   0.8, 0,    [10, 25],  0.55, 0.5,  6000],
+                  ['THUNDERSTORM', 7,   1,    1,      1,   1,    [18, 35],  0.9,  1,    3500]];
+const WX = { name: 'CLEAR', from: 200, kt: 0, gust: 0, turb: 0, cover: 0.15, overcast: 0, rain: 0, storm: 0, vis: 26000,
+  wind: new THREE.Vector3(), flash: 0, daylight: 1, nextFlash: 0, slots: new Map() };
+function wxSlot(k) {
+  let w = WX.slots.get(k);
+  if (w) return w;
+  const r = mulberry(k * 7919 + 12345), total = WX_TYPES.reduce((t, T) => t + T[1], 0);
+  let pick = r() * total, i = 0;
+  while (pick > WX_TYPES[i][1]) pick -= WX_TYPES[i++][1];
+  const T = WX_TYPES[i];
+  // the prevailing wind is a sea breeze from the south-southwest that wanders over the hours
+  const from = (200 + 70 * Math.sin(k * 0.41) + (r() - 0.5) * 50 + 720) % 360, kt = T[6][0] + r() * (T[6][1] - T[6][0]);
+  const to = (from + 180) * Math.PI / 180; // north is -z, east +x
+  w = { name: T[0], cover: T[2], overcast: T[3], rain: T[4], storm: T[5], gust: T[7] * (0.7 + 0.6 * r()), turb: T[8], vis: T[9],
+    wind: new THREE.Vector3(Math.sin(to), 0, -Math.cos(to)).multiplyScalar(kt * KT) };
+  WX.slots.set(k, w);
+  if (WX.slots.size > 8) WX.slots.delete(WX.slots.keys().next().value);
+  return w;
+}
+const smoothNoise = (t, s) => Math.sin(t + s) * 0.5 + Math.sin(t * 2.3 + s * 1.7) * 0.3 + Math.sin(t * 5.1 + s * 2.9) * 0.2;
+const windShear = h => clamp(Math.log(Math.max(2, h) / 0.5) / Math.log(20), 0.3, 1.6); // 1 at 10 m, 1.6 by ~1 km
+// the mean wind at height h (m/s, the way it blows), without gusts: what a bomb drifts in
+function meanWind(h, out) { return out.copy(WX.wind).multiplyScalar(windShear(h)); }
+// the air's velocity at p, gusts and turbulence included: what the aircraft flies through
+function windAt(p, out) {
+  const t = performance.now() / 1000, gust = WX.gust * Math.max(0, smoothNoise(t * 0.35, 1.3));
+  out.copy(WX.wind).multiplyScalar(windShear(p.y) * (1 + 0.7 * gust));
+  // turbulence: eddies a few tens of metres across, so a jet at speed feels bumps about once a second
+  const a = WX.turb * (2 + 0.18 * WX.kt) * Math.min(1, 0.3 + p.y / 60); // m/s, calmer right at the ground
+  const sx = p.x * 0.04, sz = p.z * 0.037, sy = p.y * 0.05;
+  out.x += a * 0.6 * smoothNoise(t * 0.9 + sx, 0.7 + sz); out.y += a * smoothNoise(t * 2.1 + sz, 2.1 + sy + sx); out.z += a * 0.6 * smoothNoise(t * 0.8 + sy, 4.3 + sx);
+  return out;
+}
+let windsocks = null, stratus = null, rain = null;
 const HORIZON = new THREE.Color('#788997');
 scene.fog = new THREE.Fog(HORIZON, 2600, 23000);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 60000); // far enough to see a 44 km mushroom cloud
@@ -927,10 +976,10 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 const envScene = new THREE.Scene();
 envScene.add(new THREE.Mesh(sky.geometry, sky.material));
 const envSun = new THREE.Vector3(9, 9, 9);
-let envTarget = null;
+let envTarget = null, envWx = -1;
 function updateEnvironment() {
-  if (envTarget && envSun.distanceToSquared(SUN_DIR) < 4e-4) return; // re-bake every ~1° of sun travel
-  envSun.copy(SUN_DIR);
+  if (envTarget && (WX.flash > 0 || envSun.distanceToSquared(SUN_DIR) < 4e-4 && Math.abs(envWx - WX.overcast) < 0.04)) return; // re-bake every ~1° of sun travel, or as the overcast changes
+  envSun.copy(SUN_DIR); envWx = WX.overcast;
   const next = pmrem.fromScene(envScene, 0, 1, 30000);
   if (envTarget) envTarget.dispose();
   envTarget = next;
@@ -972,7 +1021,9 @@ function updateDayNight() {
   sun.color.copy(SKY_DAY.sun).lerp(SUN_WARM, 1 - smooth(-0.02, 0.4, elevation));
   sun.intensity = SUN_BASE * daylight;
   hemi.intensity = HEMI_BASE * (0.3 + daylight * 0.7);
-  HORIZON.copy(SKY_DAY.horizon).lerp(SKY_NIGHT.horizon, night);
+  WX.daylight = daylight;
+  applyWeatherSky(daylight);
+  HORIZON.copy(uniforms.horizon.value);
   scene.fog.color.copy(HORIZON);
   uniforms.sunDir.value.copy(SUN_DIR);
   Object.assign(FOG_SUN.dir, { x: SUN_DIR.x, y: SUN_DIR.y, z: SUN_DIR.z });
@@ -1145,6 +1196,28 @@ function updateSceneryVisibility(now) {
   }
   flushSceneryChunks(buckets, geometry, material);
 })();
+
+// Overcast greys the sky and takes the sun's direct light (the grey sky lights everything instead), cloud hides
+// the stars, and a lightning flash lights up sky and ground for a moment.
+const OVC_TOP = new THREE.Color('#5d656c'), OVC_HOR = new THREE.Color('#858c92'), OVC_BOT = new THREE.Color('#4d5459'), _wc = new THREE.Color();
+function applyWeatherSky(daylight) {
+  const u = sky.material.uniforms, oc = WX.overcast, lum = 0.1 + 0.9 * daylight;
+  if (oc > 0.001) {
+    u.top.value.lerp(_wc.copy(OVC_TOP).multiplyScalar(lum), oc * 0.9);
+    u.horizon.value.lerp(_wc.copy(OVC_HOR).multiplyScalar(lum), oc * 0.85);
+    u.bottom.value.lerp(_wc.copy(OVC_BOT).multiplyScalar(lum), oc * 0.8);
+    u.sunColor.value.multiplyScalar(1 - 0.92 * oc);
+    sun.intensity *= 1 - 0.7 * oc;
+    hemi.intensity *= 1 + 0.3 * oc;
+  }
+  if (WX.flash > 0) {
+    const f = WX.flash;
+    u.top.value.lerp(_wc.setRGB(0.62, 0.66, 0.78), f * 0.55); u.horizon.value.lerp(_wc.setRGB(0.75, 0.78, 0.88), f * 0.6);
+    hemi.intensity += 1.6 * f;
+  }
+  starMaterial.opacity *= 1 - 0.9 * WX.cover;
+  stars.visible = starMaterial.opacity > 0.005;
+}
 
 // Scattered cumulus: fewer, lower-poly cloud lobes reduce transparent overdraw.
 (function buildClouds() {
@@ -1495,8 +1568,8 @@ const BASE_BOXES = [];
   }
 
   // ---- field equipment ----
-  // Windsocks beside each touchdown zone. There is no wind in the sim, so they show the usual sea breeze, from the
-  // south-southwest (they point downwind, toward 020°), drooping a little.
+  // Windsocks beside each touchdown zone. They point downwind and fill out with the wind (see updateWeather);
+  // until the weather is worked out they show the usual sea breeze, from the south-southwest.
   const socks = [], WIND_TO = 20 * Math.PI / 180;
   // ILS: a localizer antenna array 345 m beyond the far end of each instrument runway (between the reciprocal
   // runway's approach-light poles), and a glideslope mast beside each touchdown zone, each with its equipment hut.
@@ -1718,6 +1791,7 @@ float pvN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f)
   const sockMesh = new THREE.InstancedMesh(sockGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide }), socks.length);
   const sockQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2 - WIND_TO, -0.12, 'YXZ'));
   socks.forEach(([x, z], i) => sockMesh.setMatrixAt(i, m.compose(p.set(x, Y + 6.1, z), sockQ, sc.set(1, 1, 1))));
+  windsocks = { mesh: sockMesh, socks, y: Y + 6.1 };
   sockMesh.castShadow = true;
   scene.add(sockMesh);
   // arresting-gear markings: yellow discs across the runway at each cable
@@ -5600,7 +5674,8 @@ function updateBombs(dt) {
     const B = bombsFlying[b], o = B.obj, v = B.v;
     B.t += dt;
     v.y -= G * dt;
-    v.multiplyScalar(Math.exp(-(B.drag ?? BOMB_DRAG) * dt));
+    meanWind(o.position.y, _wb); // drag works on the bomb's speed through the air, so it drifts downwind
+    v.sub(_wb).multiplyScalar(Math.exp(-(B.drag ?? BOMB_DRAG) * dt)).add(_wb);
     // the fins swing the tail into the airflow
     o.quaternion.slerp(tQ.setFromUnitVectors(NOSE, tA.copy(v).normalize()), Math.min(1, dt * 2));
     const steps = Math.max(1, Math.ceil(v.length() * dt / 4));
@@ -5652,7 +5727,8 @@ function ccipPoint(out) {
   const dt = 0.1, d = Math.exp(-BOMB_DRAG * dt);
   for (let i = 0; i < 1500; i++) {
     vy -= G * dt;
-    vx *= d; vy *= d; vz *= d;
+    meanWind(y, _wb);
+    vx = _wb.x + (vx - _wb.x) * d; vy *= d; vz = _wb.z + (vz - _wb.z) * d;
     x += vx * dt; y += vy * dt; z += vz * dt;
     if (y <= Math.max(0, floorAt(x, z))) return out.set(x, y, z);
   }
@@ -6117,13 +6193,18 @@ function waterPhysics(dt) {
     crash('The fuselage flooded and sank after ditching.');
   }
 }
+const _wa = new THREE.Vector3(), _wb = new THREE.Vector3();
 function physics(dt) {
   if (S.ditched) { waterPhysics(dt); return; }
   const q = S.quat, v = S.vel;
   structurePrevPos.copy(S.pos); structurePrevQuat.copy(q);
   axes(q);
-  const V = v.length();
-  const vf = v.dot(F), vu = v.dot(U), vr = v.dot(R);
+  // The air moves (wind, gusts, turbulence), so the wings work on the velocity through the air, not over the ground.
+  // Parked and taxiing slowly the wind is left out, so a crosswind can't weathervane a jet standing on its wheels.
+  const wk = S.onGround ? smooth(8, 35, v.length()) : 1;
+  const va = wk > 0 ? windAt(S.pos, _wa).multiplyScalar(-wk).add(v) : _wa.copy(v);
+  const V = va.length();
+  const vf = va.dot(F), vu = va.dot(U), vr = va.dot(R);
   const alpha = V > 2 ? Math.atan2(-vu, Math.max(vf, 0.1)) : 0;
   const beta = V > 2 ? Math.atan2(vr, Math.max(vf, 0.1)) : 0;
   const alt = Math.max(0, S.pos.y);
@@ -6158,7 +6239,7 @@ function physics(dt) {
   force.addScaledVector(F, (thrust * (1 - S.rev) - reverse) * (S.dmg.engL + S.dmg.engR) / 2);
   if (A.recoil && S.firing && S.ammo > 0) force.addScaledVector(F, -A.recoil); // the GAU-8 pushes back
   if (V > 0.5) {
-    vhat.copy(v).divideScalar(V);
+    vhat.copy(va).divideScalar(V);
     liftDir.crossVectors(R, vhat);
     const ll = liftDir.length();
     const wingFactor = 0.15 + 0.85 * (S.dmg.wingL + S.dmg.wingR) / 2;
@@ -6207,6 +6288,7 @@ function physics(dt) {
   }
   let ty = inp.yaw * A.rates[1] * eff * Dm.fin + beta * 2.0 * stab * (0.15 + 0.85 * Dm.fin);
   let tr = inp.roll * A.rates[2] * eff0 * (Dm.wingL + Dm.wingR) / 2; // roll comes from the wings, not the nozzles
+  if (!S.onGround && WX.turb > 0) tr += WX.turb * 0.3 * eff0 * smoothNoise(S.time * 1.7, 3.1) / Math.max(1, A.scale); // turbulence rocks the wings, heavies less
   if (S.onGround) {
     ty += (inp.yaw * 0.5 + inp.roll * 0.3) * Math.min(1, V / 6);
     tr = 0;
@@ -6857,6 +6939,10 @@ function soundFX(kind, strength = 1) {
   } else if (kind === 'mslwarn') {
     // the missile warning: a fast, high warble
     toneShot(t, { f0: 1500, f1: 1500, len: 0.07, peak: 0.05, type: 'square' }); toneShot(t + 0.09, { f0: 1100, f1: 1100, len: 0.07, peak: 0.05, type: 'square' });
+  } else if (kind === 'thunder') {
+    // a near strike cracks first; every strike rolls on for seconds
+    if (k > 0.75) noiseShot(t, { len: 0.5, peak: 0.28 * k, type: 'lowpass', f0: 1400, f1: 250, src: 'pink', verb: 0.5 });
+    noiseShot(t + 0.05, { len: 4.5, peak: 0.32 * k, type: 'lowpass', f0: 220, f1: 55, attack: 0.25, src: 'brown', verb: 0.7, curve: 0.6 });
   } else if (kind === 'lock') {
     toneShot(t, { f0: 980, f1: 990, len: 0.08, peak: 0.06 }); toneShot(t + 0.1, { f0: 1320, f1: 1330, len: 0.1, peak: 0.05 });
   } else if (kind === 'ablight') {
@@ -8622,7 +8708,7 @@ const TURN_SAVED_MAX_AGE = 5 * 3600e3; // a saved set is only used while its pas
 // sits in a small lobby room and says there which room it is in (unless that room is hidden), so everyone can
 // see a live list of rooms and how many are in each. "Public" uses the original room, so older pages still meet.
 const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
-const BUILD = '2026-11-06';
+const BUILD = '2026-11-06b';
 // a hidden room is a different room from a listed one with the same name
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
@@ -9053,6 +9139,117 @@ applyGraphicsQuality(graphicsQuality, false);
 // ---------------- loop ----------------
 let last = performance.now(), acc = 0;
 let fpsFrames = 0, fpsLast = performance.now();
+// a deck of stratus at 2 km for overcast skies: a world-anchored noise texture on a plane that follows the camera
+function buildStratus() {
+  const N = 256, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const cx = cv.getContext('2d'), img = cx.createImageData(N, N), rnd = mulberry(5151);
+  const grids = [8, 16, 32].map(g => Array.from({ length: g * g }, rnd));
+  const val = (gi, u, v) => { const g = [8, 16, 32][gi], G = grids[gi], x = u * g, y = v * g, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+    const at = (i, j) => G[((j % g + g) % g) * g + ((i % g + g) % g)], sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    return (at(x0, y0) * (1 - sx) + at(x0 + 1, y0) * sx) * (1 - sy) + (at(x0, y0 + 1) * (1 - sx) + at(x0 + 1, y0 + 1) * sx) * sy; };
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const u = i / N, v = j / N, a = clamp((val(0, u, v) * 0.55 + val(1, u, v) * 0.3 + val(2, u, v) * 0.15 - 0.22) * 1.8, 0, 1) * 255, k = (j * N + i) * 4;
+    img.data[k] = img.data[k + 1] = img.data[k + 2] = a; img.data[k + 3] = 255;
+  }
+  cx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  const SIZE = 60000, TILE = 3000; tex.repeat.set(SIZE / TILE, SIZE / TILE);
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE); geo.rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: '#a3aab1', alphaMap: tex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  mesh.renderOrder = 2; mesh.visible = false; mesh.userData.tile = TILE;
+  scene.add(mesh);
+  return mesh;
+}
+// rain: streaks in a box around the camera, falling with the wind and drawn along the rain's motion past the camera
+function buildRain() {
+  const N = 1800, pos = new Float32Array(N * 6), drops = new Float32Array(N * 3), rnd = mulberry(777);
+  for (let i = 0; i < N; i++) { drops[i * 3] = (rnd() - 0.5) * 90; drops[i * 3 + 1] = (rnd() - 0.5) * 70; drops[i * 3 + 2] = (rnd() - 0.5) * 90; }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mesh = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: '#b8c2cc', transparent: true, opacity: 0, depthWrite: false }));
+  mesh.frustumCulled = false; mesh.visible = false; mesh.renderOrder = 3;
+  scene.add(mesh);
+  return { mesh, drops, N, last: new THREE.Vector3(), camV: new THREE.Vector3(), placed: false };
+}
+const CLOUD_WHITE = new THREE.Color('#f9fbff'), CLOUD_GREY = new THREE.Color('#7f868d'), _sockM = new THREE.Matrix4(), _sockQ = new THREE.Quaternion(), _sockE = new THREE.Euler(0, 0, 0, 'YXZ'),
+  _sockP = new THREE.Vector3(), _sockS = new THREE.Vector3(1, 1, 1);
+let wxTextT = 0;
+function updateWeather(dt) {
+  const sec = Date.now() / 1000, k = Math.floor(sec / WX_SLOT), a = wxSlot(k - 1), b = wxSlot(k);
+  const f = smooth(0, WX_BLEND, sec - k * WX_SLOT), mix = key => a[key] + (b[key] - a[key]) * f;
+  for (const key of ['cover', 'overcast', 'rain', 'storm', 'gust', 'turb', 'vis']) WX[key] = mix(key);
+  WX.wind.copy(a.wind).lerp(b.wind, f);
+  WX.kt = WX.wind.length() / KT;
+  WX.from = (Math.atan2(-WX.wind.x, WX.wind.z) * 180 / Math.PI + 360) % 360; // where it blows from
+  WX.name = f > 0.5 ? b.name : a.name;
+  scene.fog.far = WX.vis; scene.fog.near = Math.min(2600, WX.vis * 0.12);
+  // cumulus: more of the field shows the more cover there is, greyer under overcast; they drift with the wind
+  if (cloudField) {
+    if (!cloudField.userData.n) cloudField.userData.n = cloudField.count;
+    cloudField.count = Math.round(cloudField.userData.n * clamp(WX.cover, 0.05, 1));
+    cloudField.material.color.copy(CLOUD_WHITE).lerp(CLOUD_GREY, WX.overcast * 0.75 + WX.storm * 0.15);
+  }
+  if (!stratus) stratus = buildStratus();
+  stratus.visible = WX.overcast > 0.02;
+  if (stratus.visible) {
+    const T = stratus.userData.tile;
+    stratus.position.set(Math.round(camera.position.x / T) * T, 2000, Math.round(camera.position.z / T) * T);
+    stratus.material.opacity = 0.97 * smooth(0, 0.7, WX.overcast);
+    stratus.material.color.copy(CLOUD_GREY).lerp(CLOUD_WHITE, 0.35 - 0.3 * WX.storm);
+  }
+  // lightning: a flicker of two or three strokes now and then, thunder a few seconds later
+  WX.flash = Math.max(0, WX.flash - dt * 5);
+  if (WX.storm > 0.5) {
+    if (!WX.nextFlash) WX.nextFlash = sec + 3 + Math.random() * 10;
+    if (sec > WX.nextFlash) {
+      const near = Math.random(), strokes = 1 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < strokes; i++) setTimeout(() => { WX.flash = 0.6 + 0.4 * near; }, i * (70 + Math.random() * 90));
+      setTimeout(() => soundFX('thunder', 0.35 + 0.65 * near), (1 - near) * 4500 + 300);
+      WX.nextFlash = sec + 5 + Math.random() * 14;
+    }
+  } else WX.nextFlash = 0;
+  // windsocks: point downwind, swing a little in the gusts, and hang limp in a calm
+  if (windsocks) {
+    const g = 1 + 0.25 * WX.gust * smoothNoise(sec * 0.8, 0.4), kt = WX.kt * g, to = (WX.from + 180) * Math.PI / 180;
+    _sockE.set(0, Math.PI / 2 - to + 0.06 * WX.gust * smoothNoise(sec * 1.3, 2), -(1.3 - 1.25 * smooth(1, 15, kt)));
+    _sockQ.setFromEuler(_sockE);
+    windsocks.socks.forEach(([x, z], i) => windsocks.mesh.setMatrixAt(i, _sockM.compose(_sockP.set(x, windsocks.y, z), _sockQ, _sockS)));
+    windsocks.mesh.instanceMatrix.needsUpdate = true;
+  }
+  // the HUD: wind from / speed, gusts when they are strong, and the weather when it isn't fair
+  if ((wxTextT -= dt) <= 0) {
+    wxTextT = 0.25;
+    const kt = Math.round(WX.kt), gk = Math.round(WX.kt * (1 + 0.7 * WX.gust));
+    const wind = kt < 3 ? 'WIND CALM' : `WIND ${String(Math.round(WX.from / 10) * 10 || 360).padStart(3, '0')}/${kt}${gk - kt >= 8 ? 'G' + gk : ''}`;
+    setText($('#wx'), wind + (/CLEAR|SCATTERED/.test(WX.name) ? '' : ' · ' + (WX.name === 'THUNDERSTORM' ? 'TSTORM' : WX.name)));
+  }
+}
+function updateRain(dt) {
+  if (!rain) rain = buildRain();
+  const cam = camera.position, R = rain;
+  if (dt > 0) R.camV.copy(cam).sub(R.last).divideScalar(dt);
+  if (R.camV.lengthSq() > 1e6) R.camV.set(0, 0, 0); // a camera jump, not motion
+  R.last.copy(cam);
+  const show = WX.rain > 0.02 && cam.y < 1900;
+  R.mesh.visible = show;
+  if (!show) { R.placed = false; return; }
+  R.mesh.material.opacity = (0.1 + 0.22 * WX.rain) * smooth(1900, 1500, cam.y);
+  R.mesh.material.color.setRGB(0.72, 0.76, 0.8).multiplyScalar(0.25 + 0.75 * WX.daylight + WX.flash);
+  const fall = -9 - 2 * WX.storm, wx = WX.wind.x * 1.2, wz = WX.wind.z * 1.2, d = R.drops, p = R.mesh.geometry.attributes.position.array;
+  // drops are held in world space; any that leave the box around the camera come back in on the other side
+  if (!R.placed) { for (let i = 0; i < R.N; i++) { d[i * 3] += cam.x; d[i * 3 + 1] += cam.y; d[i * 3 + 2] += cam.z; } R.placed = true; }
+  const sx = (wx - R.camV.x) * 0.03, sy = (fall - R.camV.y) * 0.03, sz = (wz - R.camV.z) * 0.03; // the streak: 30 ms of motion past the lens
+  const wrap = (v, c, h) => v - c > h ? v - 2 * h : v - c < -h ? v + 2 * h : v;
+  const shown = Math.round(R.N * 0.75 * clamp(WX.rain, 0.15, 1));
+  for (let i = 0; i < R.N; i++) {
+    const j = i * 3;
+    d[j] = wrap(d[j] + wx * dt, cam.x, 45); d[j + 1] = wrap(d[j + 1] + fall * dt, cam.y, 35); d[j + 2] = wrap(d[j + 2] + wz * dt, cam.z, 45);
+    const o = i * 6;
+    if (i >= shown) { p[o] = p[o + 3] = cam.x; p[o + 1] = p[o + 4] = cam.y - 1e4; p[o + 2] = p[o + 5] = cam.z; continue; }
+    p[o] = d[j]; p[o + 1] = d[j + 1]; p[o + 2] = d[j + 2];
+    p[o + 3] = d[j] - sx; p[o + 4] = d[j + 1] - sy; p[o + 5] = d[j + 2] - sz;
+  }
+  R.mesh.geometry.attributes.position.needsUpdate = true;
+}
 function frame(now) {
   requestAnimationFrame(frame);
   fpsFrames++;
@@ -9081,13 +9278,15 @@ function frame(now) {
   const pScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
   glow.mat.uniforms.uScale.value = haze.mat.uniforms.uScale.value = runwayGlow.uScale.value = pScale;
   runwayGlow.uTime.value = now / 1000;
+  updateWeather(dt);
   updateDayNight();
   if (waterWaves) { waterWaves.offset.x = (waterWaves.offset.x + dt * 0.012) % 1; waterWaves.offset.y = (waterWaves.offset.y + dt * 0.005) % 1; }
-  if (cloudField) { cloudField.position.x += dt * 1.7; cloudField.position.z += dt * 0.65; }
+  if (cloudField) cloudField.position.addScaledVector(WX.wind, dt * 0.25); // the clouds drift with the wind
   updateLowAltitudeOverspeed(dt);
   updateVisuals(dt);
   updateGearOverspeed(dt);
   updateCamera(dt, now);
+  updateRain(paused ? 0 : dt);
   updateSceneryVisibility(now);
   updateParkedAircraft(now);
   updatePapi();
