@@ -6308,7 +6308,8 @@ function physics(dt) {
       + 0.015 * S.gearT + (S.brake ? 0.10 + 0.025 * smooth(0.75, 1.2, mach) : 0) + (S.belly && S.onGround ? 0.35 : 0) + (S.bombs * (A.bombCd ?? 0.0015) + S.nukes * (A.rig.nukeInternal ? 0 : 0.0015)) + Math.abs(beta) * 0.2
       + (hiG ? A.hiG.cd * postStallBlend * Math.sin(alpha) ** 2 : 0); // post-stall: the whole airframe meets the air
     force.addScaledVector(vhat, -qS * CD);
-    force.addScaledVector(R, -qS * 0.5 * Math.sin(beta));
+    // sideslip side force; on the ground the tires carry the side load, so only a quarter of it pushes the jet sideways
+    force.addScaledVector(R, -qS * 0.5 * Math.sin(beta) * (S.onGround && !S.belly ? 0.25 : 1));
   }
   S.g = force.dot(U) / (MASS * G);
   force.y -= MASS * G;
@@ -6460,7 +6461,10 @@ function physics(dt) {
     // strut compression adds normal force. This keeps braking and crosswind recovery speed-dependent.
     const normalG = clamp(1 - Math.max(0, S.g) + Math.max(0, springK * comp - damperC * v.y) / (MASS * G), 0, 4);
     const mu = S.belly ? (g.paved ? 0.78 : 0.60) : (g.paved ? 0.78 : 0.48);
-    const gripDv = mu * normalG * G * dt;
+    // sideways the tires grip harder than they brake (cornering stiffness), and keep at least 40% of their load at
+    // speed while lift unloads them, so a crosswind roll or a quick steer doesn't slide the jet off the runway
+    const sideMu = S.belly ? mu : (g.paved ? 1.0 : 0.65);
+    const gripDv = sideMu * Math.max(normalG, 0.4) * G * dt;
     let lx, lz;
     if (S.belly) {
       // A sliding fuselage scrapes across its full contact patch. Apply Coulomb friction
