@@ -2674,8 +2674,16 @@ function B2_RACK(kind) {
   for (const y of ys) for (const z of zs) for (const x of xs) out.push([-x, y, z, kind === 'b83' ? undefined : kind], [x, y, z, kind === 'b83' ? undefined : kind]);
   return out;
 }
+// 100 R-77s: ten across the span, five deep, two layers, under the Su-30SM's wings and belly
+function R77_HUNDRED() {
+  const out = [];
+  for (const y of [-0.85, -1.4]) for (let k = 0; k < 5; k++) for (let i = 0; i < 10; i++) out.push([-6.3 + i * 1.4, y, -2 + k * 1.0, 'r77']);
+  return out;
+}
 const loadout = { f15: 'mk82', b2: 'mk82' };
-const curLoadout = () => (A.loadouts || []).find(l => l.id === loadout[A.id]) || (A.loadouts || [])[0] || null;
+// a loadout with a secret is only there for the callsign that is its secret
+const loadoutOk = l => !l.secret || String(MP.name || '').trim().toUpperCase() === l.secret;
+const curLoadout = () => (A.loadouts || []).find(l => l.id === loadout[A.id] && loadoutOk(l)) || (A.loadouts || [])[0] || null;
 const nukeKind = () => { const l = curLoadout(); return l && l.nuke ? NUKE_KINDS[l.nuke] : null; };
 const AC = {
   su30: {
@@ -2690,7 +2698,9 @@ const AC = {
     tvc: 0.85, canards: true,
     ammo: 150, gunRate: 25, roundDmg: 2.2, muzzle: [-0.81, 0.75, 2.96], stabSign: 1, model: 'su30_split.glb', split: 21.94, // GSh-30-1, 30 mm: the model has it beside the left LERX
     loadouts: [{ id: 'fab', name: 'FAB-500 · FAB-250', spec: '4 × FAB-500 · 8 × FAB-250' },
-      { id: 'aam', name: 'R-77 · R-73', aam: true, spec: '6 × R-77 · 4 × R-73' }],
+      { id: 'aam', name: 'R-77 · R-73', aam: true, spec: '6 × R-77 · 4 × R-73' },
+      // only for the callsign POOPMASTER (hidden from everyone else): a hundred R-77s, packed under the wings and belly
+      { id: 'r77x100', name: '100 × R-77', aam: true, spec: '100 × R-77', secret: 'POOPMASTER', rack: R77_HUNDRED() }],
     radar: { name: 'N011M BARS', range: 120000, cone: 1.1 },
     // bombs in release order: the outer and mid wing pylons, the inner pylons (two each, in tandem), then the
     // FAB-500s in the tunnel between the engines and under the intakes. On the model the wing underside is at
@@ -7232,7 +7242,7 @@ function updateAircraftUI() {
     g.hidden = !A.loadouts;
     const sec = g.closest('.lo-sec'); if (sec) sec.hidden = !A.loadouts;
     g.textContent = '';
-    for (const l of A.loadouts || []) {
+    for (const l of (A.loadouts || []).filter(loadoutOk)) {
       const b = document.createElement('button');
       b.className = 'pickb';
       // the loadout's name, and what it carries (when that says more than the name)
@@ -8180,7 +8190,8 @@ function makeMissile(kind) {
   return g;
 }
 function addMissiles() {
-  for (const [x, y, z, kind] of A.rig.aam || []) {
+  const lo = curLoadout();
+  for (const [x, y, z, kind] of (lo && lo.rack) || A.rig.aam || []) {
     if (!mslTemplates[kind]) mslTemplates[kind] = makeMissile(kind);
     const m = mslTemplates[kind].clone();
     m.position.set(x, y, z); m.userData.mkind = kind;
@@ -9754,7 +9765,9 @@ $('#nameForm').onsubmit = e => {
   e.preventDefault();
   const v = $('#nameIn').value.trim().replace(/\s+/g, ' ');
   if (!NAME_OK.test(v)) { $('#nameErr').hidden = false; return; }
+  const hadSecret = (A.loadouts || []).some(l => l.secret && loadoutOk(l));
   MP.name = v;
+  if (hadSecret !== (A.loadouts || []).some(l => l.secret && loadoutOk(l))) { if (running) updateAircraftUI(); else { setAircraft(A.id); reset('runway'); } }
   try { localStorage.setItem('skylark.user', v); } catch (err) {}
   $('#nameGate').hidden = true;
   if (MP.room) { updateMpBar(); mpSend('st', stateMsg()); } else { if (!MP.connecting) mpConnect(); showLobby(); }
