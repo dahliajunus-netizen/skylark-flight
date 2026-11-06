@@ -12,171 +12,347 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&family=B612+Mono:wght@400;700&display=swap">
 <style>
-/* Layout: full-bleed 3D canvas; a glass-cockpit instrument strip (PFD conventions: magenta = selected, cyan = guidance, amber = caution) floats over it. Single dark look by design. */
+/* ======================================================================================================
+   SKYLARK FLIGHT — interface design system
+   One look for every screen: graphite panels on the 3D world, hairline borders, square corners, B612 (the
+   typeface designed for cockpit displays) for text and B612 Mono for numbers. Colour carries meaning only:
+     green  selected, normal, HUD symbology        amber  caution, radar lock, selected weapon
+     red    warning, failure, incoming missile      grey   everything else
+   No blur (it costs the GPU every frame the 3D view needs), no gradients, no glow.
+   Spacing is a 4 px scale. Type: 10/11 labels (caps, tracked), 13 body, 15 headings, 22/26 numbers.
+   ====================================================================================================== */
 :root {
   color-scheme: dark;
-  --night: #0a1017;
-  --glass: rgba(9, 15, 22, 0.66);
-  --glass-edge: rgba(190, 215, 235, 0.16);
-  --fg: #eef3f6;
-  --dim: #8fa1af;
-  --cyan: #4fd8ea;
-  --magenta: #ef6fe0;
-  --amber: #ffb547;
-  --red: #ff5b4e;
-  --go: #78e08f;
+  --bg0: #0b0d0e;  --bg1: #0f1214;  --bg2: #1a1f22;  --bg3: #222a2e;
+  --hud-bg: rgba(8, 10, 11, 0.58);
+  --line: #2a3135;  --line2: #3a4348;
+  --tx: #dfe3dc;  --tx2: #a2aaa3;  --tx3: #6b746e;
+  --acc: #9fca6e;  --acc-dim: rgba(159, 202, 110, 0.16);  --hud: #b4e692;
+  --amb: #e0a948;  --amb-dim: rgba(224, 169, 72, 0.16);  --red: #e05a4c;  --red-dim: rgba(224, 90, 76, 0.18);
   --font-ui: "B612", "Segoe UI", system-ui, sans-serif;
   --font-num: "B612 Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r: 2px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+  --halo: 0 0 2px #000, 0 1px 2px rgba(0, 0, 0, 0.85);
+  --hs: 1; /* HUD module scale, set by the screen size below */
+  /* legacy names, still read by script */
+  --night: #0b0d0e; --fg: var(--tx); --dim: var(--tx3); --amber: var(--amb); --cyan: var(--hud); --magenta: var(--amb); --go: var(--acc); --glass-edge: var(--line);
 }
 html, body { height: 100%; }
-body { background: var(--night); color: var(--fg); font-family: var(--font-ui); overflow: hidden; -webkit-user-select: none; user-select: none; }
+body { background: var(--bg0); color: var(--tx); font-family: var(--font-ui); font-size: 13px; overflow: hidden; -webkit-user-select: none; user-select: none; }
 #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+button { font-family: inherit; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 1px solid var(--acc); outline-offset: 2px; }
+kbd { font-family: var(--font-num); }
 
-.glass { background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 10px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+/* ---------- base surfaces ---------- */
+.glass, .panel { background: var(--bg1); border: 1px solid var(--line); border-radius: var(--r); }
+.lab, .lbl { font-size: 10px; letter-spacing: .16em; color: var(--tx3); text-transform: uppercase; }
+.eyebrow { font: 700 10px var(--font-num); letter-spacing: .2em; color: var(--acc); text-transform: uppercase; }
+h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: .02em; line-height: 1.1; }
+h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: .02em; }
+.reason { color: var(--amb) !important; }
+body:not(.touch) .touch-only { display: none; }
+body.touch .key-only { display: none; }
 
-/* ---------- instrument strip ---------- */
-#hud { position: fixed; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: scale(.72); display: grid; gap: 8px; justify-items: start; pointer-events: none; transform-origin: bottom left; }
-@media (max-width: 1100px) { #hud { transform: scale(.6); } }
-.pfd { display: grid; grid-template-columns: 96px 168px 96px; gap: 10px; align-items: center; padding: 10px; }
-.box { display: grid; gap: 2px; justify-items: center; padding: 8px 4px; border-radius: 6px; background: rgba(0,0,0,.35); }
-.lab { font-size: 10px; letter-spacing: .14em; color: var(--dim); }
-.big { font-family: var(--font-num); font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.05; }
-.unit { font-size: 10px; letter-spacing: .1em; color: var(--dim); }
-.small { font-family: var(--font-num); font-size: 13px; font-variant-numeric: tabular-nums; }
-.side { display: grid; gap: 8px; }
-#ai, #hdg { display: block; }
-#ai { width: 168px; height: 168px; }
-#hdg { width: 300px; height: 34px; }
-.strip2 { display: flex; gap: 10px; align-items: center; padding: 6px 10px; flex-wrap: wrap; justify-content: center; }
+/* ---------- buttons: primary (filled), secondary (outline), ghost (text) ---------- */
+.btn { font: 700 12px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; padding: 10px 14px; border-radius: var(--r); border: 1px solid var(--line2); background: var(--bg2); color: var(--tx); cursor: pointer; }
+.btn:hover { border-color: var(--tx3); background: var(--bg3); }
+.btn.primary { background: var(--acc); border-color: var(--acc); color: #0d120a; }
+.btn.primary:hover { background: #b0d784; border-color: #b0d784; }
+.btn.ghost { background: none; border-color: transparent; color: var(--tx2); padding: 8px 10px; }
+.btn.ghost:hover { color: var(--tx); border-color: var(--line2); }
+.btn.danger { color: var(--red); border-color: rgba(224, 90, 76, .45); background: none; }
+.btn.danger:hover { background: var(--red-dim); }
+.actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
+
+/* ---------- selectable rows and segments (aircraft, loadouts, controls, graphics) ---------- */
+.pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); }
+.ctlpick { grid-template-columns: repeat(2, 1fr); }
+.lopick { grid-template-columns: 1fr; }
+.pickb { font: 700 12px var(--font-ui); letter-spacing: .04em; padding: 9px 10px; border: 0; border-radius: 0; background: var(--bg1); color: var(--tx2); cursor: pointer; text-align: left; position: relative; }
+.pickb:hover { color: var(--tx); background: var(--bg2); }
+.pickb[aria-pressed="true"] { color: var(--tx); background: var(--bg3); box-shadow: inset 2px 0 0 var(--acc); }
+.pickb .nm { display: block; }
+.pickb .ds { display: block; margin-top: 2px; font: 400 10px var(--font-num); letter-spacing: .06em; color: var(--tx3); text-transform: uppercase; }
+.pickb[aria-pressed="true"] .ds { color: var(--acc); }
+.pickb.busy { color: var(--tx3); cursor: not-allowed; }
+.pickb.busy::after { content: "IN USE"; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font: 700 9px var(--font-num); letter-spacing: .14em; color: var(--amb); }
+.ctlpick .pickb, #vote .pickb { text-align: center; }
+
+/* ---------- modal panels (graphics, rooms, callsign, keys, lobby) ---------- */
+.overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: var(--s5) max(var(--s4), env(safe-area-inset-right, 0px)) var(--s5) max(var(--s4), env(safe-area-inset-left, 0px)); background: rgba(5, 6, 7, .72); overflow-y: auto; z-index: 30; }
+.card { width: min(480px, 100%); padding: var(--s5); display: grid; gap: var(--s4); background: var(--bg1); border: 1px solid var(--line); border-radius: var(--r); }
+.card > .eyebrow + h2 { margin-top: calc(var(--s1) * -2); }
+.card p { margin: 0; line-height: 1.55; color: var(--tx2); font-size: 13px; max-width: 62ch; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; font-size: 12px; color: var(--tx2); margin: 0; }
+.keys dt { font: 700 11px var(--font-num); color: var(--tx); white-space: nowrap; }
+.keys dd { margin: 0; line-height: 1.45; }
+#keysPanel .card { width: min(760px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; }
+#keysBody .keys { grid-template-columns: 150px 1fr; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.stats div { display: grid; gap: 4px; padding: 10px 12px; background: var(--bg1); }
+.stats b { font: 700 20px var(--font-num); font-variant-numeric: tabular-nums; }
+input[type="text"], #nameIn, #roomIn, #chatIn { font: 14px var(--font-ui); color: var(--tx); background: var(--bg0); border: 1px solid var(--line2); border-radius: var(--r); padding: 9px 11px; }
+#nameIn:focus, #roomIn:focus, #chatIn:focus { outline: 0; border-color: var(--acc); }
+#nameGate { z-index: 50; }
+#nameForm { display: flex; gap: var(--s2); }
+#nameIn { flex: 1; min-width: 0; font-size: 15px; }
+#graphicsPanel, #roomsPanel { z-index: 40; }
+#roomsPanel.gate { background: rgba(5, 6, 7, .9); }
+#roomsPanel .card, #graphicsPanel .card { width: min(520px, 100%); }
+#roomNow { color: var(--tx2); }
+#roomNow b { color: var(--acc); }
+.room-list { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); max-height: 40vh; overflow-y: auto; }
+.room-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; background: var(--bg1); color: var(--tx); font: 700 13px var(--font-ui); text-align: left; cursor: pointer; }
+.room-row:hover { background: var(--bg2); }
+.room-row span { margin-left: auto; color: var(--tx3); font: 11px var(--font-num); }
+.room-row[aria-current="true"] { box-shadow: inset 2px 0 0 var(--acc); background: var(--bg3); cursor: default; }
+.room-empty { color: var(--tx3); font-size: 12px; padding: 10px 12px; background: var(--bg1); }
+#roomForm { display: flex; gap: var(--s2); }
+#roomIn { flex: 1; min-width: 0; }
+.room-hide { display: flex; gap: var(--s2); align-items: center; color: var(--tx2); font-size: 12px; }
+#roomInviteNote { color: var(--amb); }
+#roomDiag { color: var(--tx3); font: 10px var(--font-num); letter-spacing: .04em; line-height: 1.7; }
+#roomDiag b { font-weight: 700; } #roomDiag .ok { color: var(--acc); } #roomDiag .bad { color: var(--amb); }
+.graphics-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.graphics-option { min-height: 64px; text-align: left; padding: 12px; border: 0; background: var(--bg1); color: var(--tx); cursor: pointer; font: 700 13px var(--font-ui); }
+.graphics-option:hover { background: var(--bg2); }
+.graphics-option span { display: block; margin-top: 5px; color: var(--tx3); font: 400 11px var(--font-ui); }
+.graphics-option[aria-pressed="true"] { background: var(--bg3); box-shadow: inset 2px 0 0 var(--acc); }
+#graphicsStatus { color: var(--tx3); font-size: 12px; }
+
+/* ======================================================================================================
+   HANGAR: the start screen. Top bar (identity, network, settings), aircraft list on the left, the selected
+   aircraft's data and spawn on the right; the aircraft itself turns in the 3D view between them.
+   ====================================================================================================== */
+.screen { position: fixed; inset: 0; z-index: 20; display: grid; grid-template-rows: auto 1fr; pointer-events: none; }
+.screen > * { pointer-events: auto; }
+.topbar { display: flex; align-items: center; gap: var(--s4); padding: 0 var(--s4); height: 48px; background: var(--bg1); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top, 0px); }
+.brand { display: flex; align-items: baseline; gap: 8px; font: 700 15px var(--font-ui); letter-spacing: .32em; }
+.brand small { font: 400 10px var(--font-num); letter-spacing: .24em; color: var(--tx3); }
+.net { display: flex; gap: var(--s4); align-items: center; font: 11px var(--font-num); letter-spacing: .06em; color: var(--tx2); margin-left: var(--s4); }
+.net b { color: var(--tx); font-weight: 700; }
+.net .led { width: 7px; height: 7px; border-radius: 50%; background: var(--tx3); display: inline-block; margin-right: 6px; }
+.net .led.on { background: var(--acc); } .net .led.wait { background: var(--amb); }
+.topbar nav { margin-left: auto; display: flex; gap: var(--s1); }
+.hangar-body { display: grid; grid-template-columns: 260px 1fr 380px; min-height: 0; pointer-events: none; }
+.hangar-body > * { pointer-events: auto; }
+.hg-list { background: var(--bg1); border-right: 1px solid var(--line); overflow-y: auto; padding: var(--s3) 0 var(--s4); }
+.hg-cat { padding: var(--s3) var(--s4) var(--s1); font: 700 10px var(--font-num); letter-spacing: .2em; color: var(--tx3); }
+.hg-list .pick { display: block; background: none; border: 0; }
+.hg-list .pickb { display: block; width: 100%; padding: 9px var(--s4); background: none; border-bottom: 0; }
+.hg-list .pickb:hover { background: var(--bg2); }
+.hg-list .pickb[aria-pressed="true"] { background: var(--bg3); }
+.hg-view { pointer-events: none; display: flex; align-items: flex-end; justify-content: flex-start; padding: var(--s5); }
+.hg-view .plate { font: 700 11px var(--font-num); letter-spacing: .2em; color: var(--tx2); text-shadow: var(--halo); }
+.hg-detail { background: var(--bg1); border-left: 1px solid var(--line); overflow-y: auto; display: flex; flex-direction: column; }
+.hg-detail .sec { padding: var(--s4); border-bottom: 1px solid var(--line); display: grid; gap: var(--s2); }
+.hg-detail .sec:last-child { border-bottom: 0; }
+.hg-detail p { margin: 0; color: var(--tx2); line-height: 1.55; font-size: 12px; }
+.specs { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.specs span { font: 700 11px var(--font-num); letter-spacing: .06em; padding: 7px 9px; background: var(--bg1); color: var(--tx); }
+.specs:empty { display: none; }
+.tip { font-size: 12px !important; color: var(--tx3) !important; }
+.spawn { margin-top: auto; padding: var(--s4); border-top: 1px solid var(--line); display: grid; gap: var(--s2); background: var(--bg1); position: sticky; bottom: 0; }
+.spawn .btn { width: 100%; padding: 12px; }
+.spawn .row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.roster { display: grid; gap: 0; }
+.roster .r { display: grid; grid-template-columns: 1fr auto auto; gap: var(--s3); padding: 6px 0; border-bottom: 1px solid var(--line); font: 11px var(--font-num); color: var(--tx2); }
+.roster .r:last-child { border-bottom: 0; }
+.roster .r b { color: var(--tx); font-weight: 700; }
+.roster .r.me b { color: var(--acc); }
+.roster .none { color: var(--tx3); font-size: 11px; }
+.hg-keys summary { cursor: pointer; font: 700 10px var(--font-num); letter-spacing: .2em; color: var(--tx3); list-style: none; }
+.hg-keys summary::-webkit-details-marker { display: none; }
+.hg-keys summary::before { content: "+ "; }
+.hg-keys[open] summary::before { content: "− "; }
+.hg-keys .keys { margin-top: var(--s3); }
+@media (max-width: 980px) { .hangar-body { grid-template-columns: 220px 1fr 320px; } }
+@media (max-width: 760px) {
+  .screen { overflow-y: auto; }
+  .hangar-body { grid-template-columns: 1fr; grid-auto-rows: auto; }
+  .hg-view { display: none; }
+  .hg-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 38vh; }
+  .hg-list .pick { display: grid; grid-template-columns: 1fr 1fr; }
+  .net { display: none; }
+}
+
+/* pause and debrief: the same panel, docked left over the paused (or crashed) world */
+.dock { position: fixed; inset: 0; z-index: 20; display: flex; pointer-events: none; }
+.dock > .panel { pointer-events: auto; width: min(560px, 100%); height: 100%; border-width: 0 1px 0 0; border-radius: 0; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+.dock .head { padding: var(--s4); border-bottom: 1px solid var(--line); display: grid; gap: var(--s1); padding-top: calc(var(--s4) + env(safe-area-inset-top, 0px)); }
+.dock .body { overflow-y: auto; display: grid; grid-template-columns: 200px 1fr; align-content: start; }
+.dock .body .hg-list { border-right: 1px solid var(--line); padding-top: 0; }
+.dock .body .col { padding: var(--s4); display: grid; gap: var(--s3); align-content: start; }
+.dock .foot { padding: var(--s4); border-top: 1px solid var(--line); display: grid; gap: var(--s2); padding-bottom: calc(var(--s4) + env(safe-area-inset-bottom, 0px)); }
+.dock .foot .row { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.dock .foot .row .btn { flex: 1; }
+#crash .panel { width: min(440px, 100%); grid-template-rows: auto 1fr auto; }
+#crash .body { display: block; padding: var(--s4); }
+#crash .body > * + * { margin-top: var(--s3); }
+@media (max-width: 620px) { .dock .body { grid-template-columns: 1fr; } .dock .body .hg-list { border-right: 0; } .dock .body .hg-list .pick { display: grid; grid-template-columns: 1fr 1fr; } }
+
+/* ======================================================================================================
+   IN-FLIGHT HUD. Modules sit in fixed places: flight instruments bottom centre, aircraft systems bottom
+   left (with damage above them when there is any), weapons bottom right beside the radar, identity and chat
+   top left, tools and combat feed top right. Thin dark plates so they read over sky and terrain.
+   ====================================================================================================== */
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
+.hm { position: absolute; background: var(--hud-bg); border: 1px solid rgba(255, 255, 255, .06); border-radius: var(--r); font: 700 12px var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: .04em; color: var(--tx); text-shadow: var(--halo); }
+.hm .lab { text-shadow: none; }
+.big { font: 700 26px var(--font-num); font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: 0; }
+.small { font-family: var(--font-num); font-size: 12px; font-variant-numeric: tabular-nums; }
+.unit { font-size: 10px; letter-spacing: .1em; color: var(--tx3); }
+/* flight instruments */
+.h-pfd { left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) scale(var(--hs)); transform-origin: bottom center; padding: 6px 10px 10px; display: grid; gap: 6px; justify-items: center; }
+#hdg { width: 300px; height: 34px; display: block; }
+.h-pfd-row { display: grid; grid-template-columns: 104px 150px 104px; gap: 12px; align-items: center; }
+#ai { width: 150px; height: 150px; display: block; }
+.h-tape { display: grid; gap: 5px; padding: 8px 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .35); }
+.h-tape.r { text-align: right; }
+.h-tape .sub { font-size: 11px; color: var(--tx2); display: flex; justify-content: space-between; gap: 6px; }
+.h-tape .sub .lab { font-size: 9px; }
+/* aircraft systems */
+.h-left { position: absolute; left: calc(14px + env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: scale(var(--hs)); transform-origin: bottom left; display: flex; flex-direction: column; gap: 8px; width: 250px; }
+.h-left .hm { position: static; }
+.h-sys { padding: 8px 10px; display: grid; gap: 6px; }
+.h-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 18px; }
+.h-row.dim { color: var(--tx2); font-size: 11px; font-weight: 400; }
 .thr { display: flex; gap: 8px; align-items: center; }
-.thr-bar { width: 90px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
-.thr-bar i { display: block; height: 100%; width: 0; background: var(--go); }
-.thr-bar i.ab { background: var(--amber); }
-.chip { font-size: 10px; letter-spacing: .12em; padding: 3px 7px; border-radius: 4px; border: 1px solid var(--glass-edge); color: var(--dim); }
-.chip.on { color: var(--night); background: var(--amber); border-color: var(--amber); }
-.chip.cy { color: var(--cyan); border-color: rgba(79,216,234,.4); }
-.rwy { font-family: var(--font-num); font-size: 12px; color: var(--cyan); }
+.thr-bar { width: 96px; height: 6px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.thr-bar i { display: block; height: 100%; width: 0; background: var(--acc); }
+.thr-bar i.ab { background: var(--amb); }
+.chip { font: 700 10px var(--font-num); letter-spacing: .1em; padding: 2px 6px; border: 1px solid var(--line2); border-radius: var(--r); color: var(--tx3); text-shadow: none; }
+.chip.on { color: #120d05; background: var(--amb); border-color: var(--amb); }
+.chip.cy { color: var(--acc); border-color: rgba(159, 202, 110, .45); }
+.chip.warn { color: #fff; background: var(--red); border-color: var(--red); }
+.rwy { color: var(--tx2); }
+/* damage, above the systems: one row per part, a bar and its state */
+.h-dmg { padding: 8px 10px; display: grid; gap: 3px; }
+.h-dmg .hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+.h-dmg .dr { display: grid; grid-template-columns: 62px 1fr 64px; gap: 8px; align-items: center; font-size: 10px; letter-spacing: .08em; }
+.h-dmg .dr i { height: 4px; background: rgba(255, 255, 255, .08); position: relative; }
+.h-dmg .dr i b { position: absolute; inset: 0 auto 0 0; background: var(--acc); }
+.h-dmg .dr em { font-style: normal; text-align: right; color: var(--tx2); }
+.h-dmg .dr.c1 i b { background: var(--acc); } .h-dmg .dr.c1 em { color: var(--tx2); }
+.h-dmg .dr.c2 i b { background: var(--amb); } .h-dmg .dr.c2 em { color: var(--amb); }
+.h-dmg .dr.c3 i b { background: var(--red); } .h-dmg .dr.c3 em { color: var(--red); }
+.h-dmg .dr.c4 em { color: var(--red); } .h-dmg .dr.c4 { color: var(--red); }
+/* weapons, beside the radar */
+.h-wpn { right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: scale(var(--hs)); transform-origin: bottom right; padding: 8px 10px; display: grid; gap: 4px; min-width: 170px; }
+#radar:not([hidden]) + #hud .h-wpn { right: calc(14px + 206px * var(--hs) + 8px + env(safe-area-inset-right, 0px)); }
+/* narrower screens: the stores stack above the radar instead of beside it, clear of the instruments */
+@media (max-width: 1180px) { #radar:not([hidden]) + #hud .h-wpn { right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(14px + 176px * var(--hs) + 8px + env(safe-area-inset-bottom, 0px)); } }
+.h-wpn .w { display: flex; justify-content: space-between; gap: 12px; padding-left: 12px; position: relative; }
+.h-wpn .w.sel, #gun.sel, #msl.sel { color: var(--amb) !important; }
+.h-wpn .w.sel::before { content: ""; position: absolute; left: 0; top: 50%; margin-top: -4px; border: 4px solid transparent; border-left: 6px solid var(--amb); }
+#cm.out { color: var(--red) !important; }
+.chip.rwr { color: #120d05; background: var(--amb); border-color: var(--amb); justify-self: start; }
+.chip.rwr.msl { background: var(--red); border-color: var(--red); color: #fff; animation: blink .5s steps(2) infinite; }
+/* radar scope */
+#radar { position: fixed; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); padding: 6px 6px 5px; display: grid; gap: 3px; pointer-events: none; z-index: 4; background: var(--hud-bg); border: 1px solid rgba(255, 255, 255, .06); border-radius: var(--r); transform: scale(var(--hs)); transform-origin: bottom right; }
+#rdr { width: 192px; height: 140px; display: block; }
+#rdrInfo { font: 700 10px var(--font-num); letter-spacing: .08em; color: var(--hud); text-align: center; max-width: 192px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 0; text-shadow: var(--halo); }
+#rdrInfo.shoot { color: #120d05; background: var(--amb); text-shadow: none; }
+@media (max-height: 820px), (max-width: 1280px) { :root { --hs: .86; } }
+@media (max-height: 680px), (max-width: 1000px) { :root { --hs: .74; } }
+@media (max-height: 540px) { :root { --hs: .62; } }
 
-#warn { position: fixed; top: calc(18% + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); font-family: var(--font-num); font-weight: 700; font-size: 22px; letter-spacing: .2em; padding: 6px 16px; border-radius: 6px; pointer-events: none; animation: blink .5s steps(2) infinite; }
-#warn.stall { color: var(--night); background: var(--red); }
-#warn.terrain { color: var(--night); background: var(--amber); }
-#warn.gear { color: var(--night); background: var(--amber); font-size: clamp(11px, 2.1vw, 17px); letter-spacing: .06em; white-space: nowrap; }
-#warn.structural { color: #fff; background: #c62322; font-size: clamp(11px, 2.1vw, 17px); letter-spacing: .08em; white-space: nowrap; }
+/* warnings: a master-warning box under the top of the view */
+#warn { position: fixed; top: calc(16% + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); font: 700 18px var(--font-num); letter-spacing: .22em; padding: 6px 16px; border-radius: var(--r); pointer-events: none; animation: blink .6s steps(2) infinite; z-index: 6; }
+#warn.stall { color: #fff; background: var(--red); }
+#warn.terrain { color: #120d05; background: var(--amb); }
+#warn.gear { color: #120d05; background: var(--amb); font-size: clamp(11px, 1.6vw, 15px); letter-spacing: .1em; white-space: nowrap; }
+#warn.structural { color: #fff; background: var(--red); font-size: clamp(11px, 1.6vw, 15px); letter-spacing: .1em; white-space: nowrap; }
 @keyframes blink { 50% { opacity: .35; } }
-#toast { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; pointer-events: none; transition: opacity .3s; white-space: nowrap; }
+/* notices: one line, top centre */
+#toast { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 7px 14px; font: 12px var(--font-ui); letter-spacing: .02em; pointer-events: none; transition: opacity .25s; white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; background: var(--bg1); border: 1px solid var(--line); border-left: 2px solid var(--acc); border-radius: var(--r); z-index: 8; }
 
-/* ---------- buttons ---------- */
-#radar { position: fixed; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); padding: 6px 6px 5px; display: grid; gap: 3px; pointer-events: none; }
-#rdr { width: 180px; height: 132px; display: block; }
-#rdrInfo { font: 700 9px var(--font-num); letter-spacing: .1em; color: #7ee2a8; text-align: center; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#rdrInfo.shoot { color: var(--night); background: #7ee2a8; border-radius: 3px; }
-/* radar lock: an orange box sized to the target, its identity and range beside it */
-.ret.tgt { width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 1.5px solid #ff8c2e; border-radius: 0; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+/* identity, top left: callsign, room, players */
+#mpBar { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); padding: 6px 10px; font: 700 11px var(--font-num); letter-spacing: .08em; color: var(--tx2); background: var(--hud-bg); border: 1px solid rgba(255, 255, 255, .06); border-radius: var(--r); cursor: pointer; z-index: 5; text-shadow: var(--halo); }
+#mpBar::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--tx3); margin-right: 8px; vertical-align: 1px; }
+#mpBar.live { color: var(--tx); } #mpBar.live::before { background: var(--acc); }
+#fpsCounter { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); z-index: 8; padding: 3px 8px; font: 700 10px var(--font-num); letter-spacing: .08em; color: var(--tx3); pointer-events: none; font-variant-numeric: tabular-nums; background: none; border: 0; text-shadow: var(--halo); }
+/* tools, top right: one flat strip */
+.tools { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); display: flex; gap: 1px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .06); border-radius: var(--r); z-index: 5; }
+.tbtn { font: 700 10px var(--font-ui); letter-spacing: .1em; color: var(--tx2); background: var(--hud-bg); border: 0; padding: 8px 10px; cursor: pointer; touch-action: manipulation; text-transform: uppercase; }
+.tbtn:hover { color: var(--tx); background: rgba(14, 17, 19, .9); }
+.tbtn kbd { color: var(--tx3); margin-left: 5px; font-size: 9px; }
+@media (max-width: 900px) { .tbtn kbd { display: none; } }
+/* combat feed, right: kills and losses, newest at the bottom, each fading after a while */
+#feed { position: fixed; top: calc(76px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); display: grid; gap: 2px; justify-items: end; pointer-events: none; z-index: 5; }
+#feed div { font: 700 11px var(--font-num); letter-spacing: .04em; padding: 4px 8px; background: var(--hud-bg); border-right: 2px solid var(--tx3); color: var(--tx); text-shadow: var(--halo); transition: opacity .6s; white-space: nowrap; }
+#feed div.mine { border-right-color: var(--acc); }
+#feed div.lost { border-right-color: var(--red); }
+#feed div i { font-style: normal; color: var(--tx3); margin: 0 6px; }
+#feed div.old { opacity: 0; }
+/* chat, under the identity strip */
+#chat { position: fixed; top: calc(48px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: min(380px, calc(100vw - 24px)); display: grid; gap: 6px; pointer-events: none; z-index: 5; }
+#chatLog { display: grid; gap: 2px; max-height: 36vh; overflow: hidden; }
+body.chatting #chatLog { overflow-y: auto; pointer-events: auto; }
+.cl { justify-self: start; max-width: 100%; padding: 3px 8px; background: var(--hud-bg); font: 12px/1.4 var(--font-ui); color: var(--tx); overflow-wrap: anywhere; transition: opacity .6s; text-shadow: var(--halo); border-radius: var(--r); }
+.cl b { margin-right: 6px; font-weight: 700; color: var(--acc); }
+.cl.sys { color: var(--tx2); }
+.cl.old { opacity: 0; }
+body.chatting .cl.old { opacity: 1; }
+#chatForm { pointer-events: auto; }
+#chatIn { width: 100%; box-sizing: border-box; background: var(--bg1); border-color: var(--acc); }
+#vote { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; font-size: 12px; max-width: calc(100vw - 32px); flex-wrap: wrap; justify-content: center; z-index: 6; }
+#vote .pick { display: flex; }
+#vote .pickb { padding: 6px 14px; border: 1px solid var(--line2); }
+/* players' name tags over their aircraft */
+.mpTag { position: fixed; left: 0; top: 0; padding: 1px 6px; font: 700 10px var(--font-num); letter-spacing: .06em; color: var(--amb); background: rgba(8, 10, 11, .5); border-left: 2px solid var(--amb); pointer-events: none; white-space: nowrap; will-change: transform; text-shadow: var(--halo); }
+/* scoreboard (Tab): compact, centred */
+#board { position: fixed; top: 18%; left: 50%; transform: translateX(-50%); z-index: 9; min-width: min(460px, calc(100vw - 32px)); padding: 0; pointer-events: none; font: 700 12px var(--font-num); letter-spacing: .04em; background: var(--bg1); border: 1px solid var(--line); border-radius: var(--r); }
+#board h3 { margin: 0; padding: 10px 14px; font-size: 10px; letter-spacing: .2em; color: var(--tx2); font-weight: 700; border-bottom: 1px solid var(--line); }
+#board table { width: 100%; border-collapse: collapse; }
+#board td { padding: 6px 14px; white-space: nowrap; border-bottom: 1px solid var(--line); }
+#board tr:last-child td { border-bottom: 0; }
+#board td.n { text-align: right; width: 4em; }
+#board tr.me td { color: var(--acc); }
+#board th { padding: 8px 14px 6px; text-align: left; color: var(--tx3); font-weight: 700; font-size: 9px; letter-spacing: .18em; }
+#board th.n { text-align: right; }
+
+/* ---------- reticles (HUD symbology): green for flight, amber for weapons and locks, red for nuclear ---------- */
+.ret { position: fixed; left: 0; top: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 1.5px solid var(--hud); border-radius: 50%; pointer-events: none; filter: drop-shadow(0 0 1px #000); }
+.ret::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-radius: 50%; background: var(--hud); }
+.ret.ccip { width: 22px; height: 22px; margin: -11px 0 0 -11px; border-color: var(--amb); border-radius: 0; transform-origin: center; }
+.ret.ccip::after { background: var(--amb); }
+.ret.ccip span { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font: 700 10px var(--font-num); letter-spacing: .12em; color: var(--amb); text-shadow: var(--halo); }
+.ret.nuke { border-color: var(--red); width: 28px; height: 28px; margin: -14px 0 0 -14px; border-style: dashed; }
+.ret.nuke::after { background: var(--red); }
+.ret.nuke span { color: var(--red) !important; }
+.ret.tgt { width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 1.5px solid var(--amb); border-radius: 0; }
 .ret.tgt::after { display: none; }
-.ret.tgt span { position: absolute; top: -2px; left: calc(100% + 8px); font: 700 10px/1.45 var(--font-num); letter-spacing: .08em; color: #ff8c2e; white-space: pre; text-shadow: 0 0 2px #000, 0 1px 2px rgba(0,0,0,.8); }
-/* gun lead: where the gun cross must be for the rounds to meet the locked target */
+.ret.tgt span { position: absolute; top: -2px; left: calc(100% + 8px); font: 700 10px/1.45 var(--font-num); letter-spacing: .08em; color: var(--amb); white-space: pre; text-shadow: var(--halo); }
 .ret.tgt.left span { left: auto; right: calc(100% + 8px); text-align: right; }
-.ret.lead { width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid #ff8c2e; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
-.ret.lead::after { background: #ff8c2e; }
-.ret.lead.hot { background: rgba(255,140,46,.35); }
-#cue { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ret.lead { width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 1.5px solid var(--amb); border-radius: 50%; }
+.ret.lead::after { background: var(--amb); }
+.ret.lead.hot { background: rgba(224, 169, 72, .3); }
+.ret.aim { width: 18px; height: 18px; margin: -9px 0 0 -9px; border-color: #fff; opacity: .8; }
+.ret.aim::after { background: #fff; }
+.ret.nose { width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 0; border-radius: 0; }
+.ret.nose::before, .ret.nose::after { content: ""; position: absolute; background: var(--hud); border-radius: 0; }
+.ret.nose::before { left: 0; top: 7px; width: 16px; height: 1.5px; }
+.ret.nose::after { left: 7px; top: 0; width: 1.5px; height: 16px; margin: 0; }
 .ret.hitmk { width: 26px; height: 26px; margin: -13px 0 0 -13px; border: 0; border-radius: 0; }
 .ret.hitmk::after { display: none; }
 .ret.hitmk span { position: absolute; inset: 0; opacity: 0; }
-.ret.hitmk span::before, .ret.hitmk span::after { content: ""; position: absolute; left: 12px; top: -2px; width: 2px; height: 30px; background: linear-gradient(#fff 0 36%, transparent 36% 64%, #fff 64%); transform: rotate(45deg); filter: drop-shadow(0 0 1px #000); }
+.ret.hitmk span::before, .ret.hitmk span::after { content: ""; position: absolute; left: 12px; top: -2px; width: 2px; height: 30px; background: linear-gradient(#fff 0 36%, transparent 36% 64%, #fff 64%); transform: rotate(45deg); }
 .ret.hitmk span::after { transform: rotate(-45deg); }
 .ret.hitmk span.on { animation: hitmk .32s ease-out forwards; }
 .ret.hitmk span.big { animation-duration: .7s; }
 .ret.hitmk span.big::before, .ret.hitmk span.big::after { background: linear-gradient(var(--red) 0 36%, transparent 36% 64%, var(--red) 64%); }
 @keyframes hitmk { from { opacity: 1; transform: scale(1.35); } to { opacity: 0; transform: scale(1); } }
-#splash { position: fixed; top: 26%; left: 50%; transform: translateX(-50%); pointer-events: none; text-align: center; font: 800 22px var(--font-num); letter-spacing: .22em; color: var(--red); text-shadow: 0 0 2px #000, 0 1px 6px rgba(0,0,0,.7); white-space: pre; opacity: 0; }
-#splash.on { animation: splash 2.6s ease-out forwards; }
-@keyframes splash { 0% { opacity: 0; transform: translateX(-50%) scale(1.4); } 8% { opacity: 1; transform: translateX(-50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
-#board { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); z-index: 9; min-width: min(420px, calc(100vw - 32px)); padding: 12px 16px; pointer-events: none; font: 700 12px var(--font-num); letter-spacing: .06em; }
-#board h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .18em; color: var(--dim); font-weight: 700; }
-#board table { width: 100%; border-collapse: collapse; }
-#board td { padding: 3px 6px; white-space: nowrap; }
-#board td.n { text-align: right; width: 3.5em; }
-#board tr.me td { color: var(--amber); }
-#board th { padding: 0 6px 4px; text-align: left; color: var(--dim); font-weight: 700; font-size: 10px; letter-spacing: .14em; }
-#board th.n { text-align: right; }
-#gun.sel, #msl.sel { color: var(--cyan) !important; }
-#cm.out { color: var(--red) !important; }
-.chip.rwr { color: var(--night); background: var(--amber); border-color: var(--amber); }
-.chip.rwr.msl { background: var(--red); border-color: var(--red); animation: blink .5s steps(2) infinite; }
-body.touch #radar { right: auto; bottom: auto; left: calc(12px + env(safe-area-inset-left, 0px)); top: calc(48px + env(safe-area-inset-top, 0px)); transform: scale(.8); transform-origin: top left; }
-body.noui #radar { display: none !important; }
-/* chat: the last few lines under the player count, fading out after a while; all of them while typing */
-#chat { position: fixed; top: calc(48px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: min(380px, calc(100vw - 24px)); display: grid; gap: 6px; pointer-events: none; z-index: 5; }
-#chatLog { display: grid; gap: 2px; max-height: 40vh; overflow: hidden; }
-body.chatting #chatLog { overflow-y: auto; pointer-events: auto; }
-.cl { justify-self: start; max-width: 100%; padding: 3px 8px; border-radius: 5px; background: rgba(8,14,20,.55); font: 12px/1.35 var(--font-ui); color: #eef2f5; overflow-wrap: anywhere; transition: opacity .6s; }
-.cl b { margin-right: 6px; font-weight: 700; }
-.cl.sys { color: var(--dim); font-style: italic; }
-.cl.old { opacity: 0; }
-body.chatting .cl.old { opacity: 1; }
-#chatForm { pointer-events: auto; }
-#chatIn { width: 100%; box-sizing: border-box; padding: 8px 10px; font: 13px var(--font-ui); color: #eef2f5; background: rgba(8,14,20,.78); border: 1px solid var(--cyan); border-radius: 6px; outline: none; }
-body.touch #chat { top: auto; bottom: calc(260px + env(safe-area-inset-bottom, 0px)); }
-body.noui:not(.chatting) #chat { display: none; }
-#nameGate { z-index: 50; }
-#nameForm { display: flex; gap: 8px; margin-top: 14px; }
-#nameIn { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 12px; color: inherit; background: rgba(255,255,255,.08); border: 1px solid var(--glass-edge); border-radius: 8px; }
-#nameIn:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
-#mpBar { cursor: pointer; }
-#mpBar { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); padding: 6px 10px; font-size: 11px; letter-spacing: .08em; color: var(--dim); cursor: default; }
-#mpBar.live { color: #7ee2a8; }
-#fpsCounter { position: fixed; top: calc(48px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); z-index: 8; padding: 6px 9px; font: 700 12px var(--font-num); letter-spacing: .04em; color: var(--go); pointer-events: none; font-variant-numeric: tabular-nums; }
-#mpBar::before { content: '●'; margin-right: 6px; }
-#vote { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; font-size: 13px; max-width: calc(100vw - 32px); flex-wrap: wrap; justify-content: center; }
-#vote .pickb { padding: 5px 14px; }
-.mpTag { position: fixed; left: 0; top: 0; padding: 2px 7px; font-size: 11px; color: #fff; background: rgba(8,14,20,.55); border-radius: 5px; pointer-events: none; white-space: nowrap; will-change: transform; }
-body.noui .mpTag { display: none; }
-.pickb.busy { opacity: .45; text-decoration: line-through; }
-.tools { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); display: flex; gap: 6px; }
-.tbtn { font: 700 11px var(--font-ui); letter-spacing: .1em; color: var(--fg); background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 8px; padding: 9px 11px; cursor: pointer; touch-action: manipulation; }
-.tbtn:hover { border-color: var(--cyan); }
-#graphicsPanel { z-index: 40; background: rgba(4,8,13,.82); }
-#roomsPanel { z-index: 40; background: rgba(4,8,13,.82); }
-#roomsPanel .card { width: min(500px, 100%); }
-#roomNow { color: var(--dim); font-size: 13px; }
-#roomNow b { color: var(--cyan); }
-.room-list { display: grid; gap: 6px; margin: 12px 0; max-height: 40vh; overflow-y: auto; }
-.room-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--glass-edge); border-radius: 8px; background: rgba(255,255,255,.045); color: var(--fg); font: 600 14px var(--font-ui); text-align: left; cursor: pointer; }
-.room-row span { margin-left: auto; color: var(--dim); font: 12px var(--font-num); }
-.room-row[aria-current="true"] { border-color: var(--cyan); color: var(--cyan); cursor: default; }
-.room-empty { color: var(--dim); font-size: 13px; padding: 6px 2px; }
-#roomForm { display: flex; gap: 8px; }
-#roomIn { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 12px; color: inherit; background: rgba(255,255,255,.08); border: 1px solid var(--glass-edge); border-radius: 8px; }
-#roomIn:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
-.room-hide { display: flex; gap: 8px; align-items: center; margin-top: 10px; color: var(--dim); font-size: 13px; }
-#roomErr { margin: 8px 0 0; }
-#roomsPanel.gate { background: rgba(4,8,13,.94); }
-#roomInviteNote { color: var(--amber); font-size: 13px; }
-#roomDiag { color: var(--dim); font: 11px var(--font-num); letter-spacing: .04em; line-height: 1.6; }
-#roomDiag b { font-weight: 700; } #roomDiag .ok { color: #7ee2a8; } #roomDiag .bad { color: var(--amber); }
-#graphicsPanel .card { width: min(480px, 100%); }
-.graphics-options { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
-.graphics-option { min-height: 68px; text-align: left; padding: 12px; border: 1px solid var(--glass-edge); border-radius: 8px; background: rgba(255,255,255,.045); color: var(--fg); cursor: pointer; font: 700 14px var(--font-ui); }
-.graphics-option span { display: block; margin-top: 5px; color: var(--dim); font: 11px var(--font-ui); }
-.graphics-option[aria-pressed="true"] { border-color: var(--cyan); background: rgba(79,216,234,.12); color: var(--cyan); }
-#graphicsStatus { color: var(--dim); font-size: 12px; }
-.tbtn kbd { font-family: var(--font-num); color: var(--dim); margin-left: 4px; font-size: 10px; }
-button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+#cue { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* kill confirmation */
+#splash { position: fixed; top: 26%; left: 50%; transform: translateX(-50%); pointer-events: none; text-align: center; font: 700 18px/1.5 var(--font-num); letter-spacing: .28em; color: var(--acc); text-shadow: var(--halo); white-space: pre; opacity: 0; }
+#splash.on { animation: splash 2.4s ease-out forwards; }
+@keyframes splash { 0% { opacity: 0; } 8% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+#flash { position: fixed; inset: 0; background: #fffdf4; opacity: 0; pointer-events: none; z-index: 5; }
 
-/* ---------- overlays ---------- */
-.overlay { position: fixed; inset: 0; display: grid; align-items: center; justify-items: start; padding-block: 24px; padding-left: max(16px, 6vw, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: linear-gradient(90deg, rgba(6,10,15,.78), rgba(6,10,15,.25) 60%, transparent); overflow-y: auto; }
-.card { width: min(440px, 100%); padding: 26px 26px 22px; display: grid; gap: 16px; }
-.eyebrow { font-family: var(--font-num); font-size: 11px; letter-spacing: .18em; color: var(--cyan); }
-h1 { margin: 0; font-size: clamp(40px, 9vw, 60px); font-weight: 700; letter-spacing: -.01em; line-height: .95; text-wrap: balance; }
-h2 { margin: 0; font-size: 30px; text-wrap: balance; }
-.card p { margin: 0; line-height: 1.5; color: #cdd8df; font-size: 14px; max-width: 60ch; }
-.specs { display: flex; gap: 6px; flex-wrap: wrap; }
-.specs span { font-family: var(--font-num); font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--fg); }
-.pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: rgba(255,255,255,.06); }
-.lopick, .ctlpick { grid-template-columns: repeat(2, 1fr); }
-.lopick { grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); }
-/* AC-130J gunship sensor view and weapon panel: thin lines, restrained colours, dark halo so it reads on any terrain */
+/* ---------- AC-130J gunship sensor view: thin lines, restrained colours, dark halo ---------- */
 #gsHud { position: fixed; inset: 0; pointer-events: none; font: 700 12px var(--font-num); letter-spacing: .06em; color: #e4ebe4; text-shadow: 0 0 2px #000, 0 0 1px #000, 0 1px 3px rgba(0,0,0,.8); }
 #gsHud .gs-view { display: none; position: absolute; inset: 0; }
 body.gscam #gsHud .gs-view { display: block; }
@@ -186,12 +362,12 @@ body.gscam #hud, body.gscam .ret:not(.gs-ret) { display: none !important; }
 .gs-tl, .gs-tr { position: absolute; top: 64px; line-height: 1.55; white-space: pre; }
 .gs-tl { left: 24px; } .gs-tr { right: 24px; text-align: right; }
 .gs-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); font-size: 10px; color: #b9c3b9; white-space: nowrap; }
-.gs-wpn { position: fixed; right: 16px; top: calc(60px + env(safe-area-inset-top, 0px)); left: auto; bottom: auto; display: grid; gap: 4px; width: min(330px, calc(100vw - 32px)); min-width: 0; }
+.gs-wpn { position: fixed; right: 16px; top: calc(84px + env(safe-area-inset-top, 0px)); left: auto; bottom: auto; display: grid; gap: 4px; width: min(330px, calc(100vw - 32px)); min-width: 0; }
 body.gscam .gs-wpn { left: 16px; right: auto; top: auto; bottom: 40px; width: min(330px, calc(100vw - 32px)); }
 body.touch .gs-wpn { left: 12px; right: auto; top: 40vh; bottom: calc(160px + env(safe-area-inset-bottom, 0px)); width: min(300px, calc(58vw - 24px)); max-height: calc(100vh - 40vh - 160px - env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
-.gsw { display: grid; grid-template-columns: 22px 1fr auto; gap: 2px 10px; align-items: center; padding: 6px 10px; border: 1px solid rgba(228,235,228,.28); border-radius: 4px; background: rgba(8,12,10,.42); }
+.gsw { display: grid; grid-template-columns: 22px 1fr auto; gap: 2px 10px; align-items: center; padding: 6px 10px; border: 1px solid rgba(228,235,228,.28); border-radius: var(--r); background: rgba(8,12,10,.42); }
 .gsw.on { border-color: #e4ebe4; background: rgba(8,12,10,.6); }
-.gsw .k { grid-row: span 2; text-align: center; border: 1px solid rgba(228,235,228,.5); border-radius: 3px; font-size: 11px; line-height: 18px; }
+.gsw .k { grid-row: span 2; text-align: center; border: 1px solid rgba(228,235,228,.5); border-radius: var(--r); font-size: 11px; line-height: 18px; }
 .gsw .st { font-size: 11px; }
 .gsw .am { grid-column: 2 / 4; display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: #b9c3b9; }
 .gsw .bar { grid-column: 1 / 4; height: 2px; background: rgba(228,235,228,.18); }
@@ -199,103 +375,88 @@ body.touch .gs-wpn { left: 12px; right: auto; top: 40vh; bottom: calc(160px + en
 .st.ready { color: #e4ebe4; } .st.firing { color: #ffc861; } .st.reload { color: #6fd3e0; } .st.empty { color: #ff6b5e; } .st.limits { color: #ffc861; opacity: .8; }
 .gs-btns { position: absolute; right: 16px; bottom: 120px; display: none; gap: 6px; pointer-events: auto; }
 body.touch .gs-btns { display: flex; flex-direction: column; }
-.gsb { font: 700 11px var(--font-ui); letter-spacing: .08em; color: #e4ebe4; background: rgba(8,12,10,.5); border: 1px solid rgba(228,235,228,.5); border-radius: 6px; padding: 10px 12px; touch-action: none; }
+.gsb { font: 700 11px var(--font-ui); letter-spacing: .08em; color: #e4ebe4; background: rgba(8,12,10,.5); border: 1px solid rgba(228,235,228,.5); border-radius: var(--r); padding: 10px 12px; touch-action: none; }
 .gsb.fire { border-color: #ffc861; color: #ffc861; }
-/* mouse aim: the circle is where you point, the cross is where the nose is */
-.ret.aim { width: 18px; height: 18px; margin: -9px 0 0 -9px; border-color: #fff; opacity: .85; }
-.ret.aim::after { background: #fff; }
-.ret.nose { width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 0; border-radius: 0; }
-.ret.nose::before, .ret.nose::after { content: ""; position: absolute; background: var(--cyan); border-radius: 1px; }
-.ret.nose::before { left: 0; top: 7px; width: 16px; height: 2px; }
-.ret.nose::after { left: 7px; top: 0; width: 2px; height: 16px; margin: 0; }
-.pickb { font: 700 13px var(--font-ui); padding: 10px 8px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--dim); cursor: pointer; }
-.pickb:hover { color: var(--fg); }
-.pickb[aria-pressed="true"] { background: rgba(79,216,234,.14); border-color: rgba(79,216,234,.5); color: var(--cyan); }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.btn { font: 700 14px var(--font-ui); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--glass-edge); background: rgba(255,255,255,.06); color: var(--fg); cursor: pointer; }
-.btn.primary { background: var(--cyan); color: var(--night); border-color: var(--cyan); }
-.btn:hover { filter: brightness(1.12); }
-.keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; color: #cdd8df; }
-.keys dt { font-family: var(--font-num); color: var(--fg); white-space: nowrap; }
-.keys dd { margin: 0; }
-.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.stats div { display: grid; gap: 2px; padding: 8px; border-radius: 6px; background: rgba(255,255,255,.06); }
-.stats b { font-family: var(--font-num); font-size: 18px; font-variant-numeric: tabular-nums; }
-.reason { color: var(--amber) !important; }
-body:not(.touch) .touch-only { display: none; }
 
 /* ---------- touch controls ---------- */
 #touch { position: fixed; inset: auto 0 0 0; height: 0; }
-#stick { position: fixed; left: calc(20px + env(safe-area-inset-left, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: 136px; height: 136px; border-radius: 50%; touch-action: none; }
-#knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(79,216,234,.35); border: 2px solid var(--cyan); }
-#thrTrack { position: fixed; right: calc(22px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: 58px; height: 170px; touch-action: none; }
-#thrFill { position: absolute; left: 6px; right: 6px; bottom: 6px; border-radius: 6px; background: rgba(120,224,143,.55); }
-#thrTrack span { position: absolute; top: -18px; left: 0; right: 0; text-align: center; font-size: 10px; letter-spacing: .12em; color: var(--dim); }
+#stick { position: fixed; left: calc(20px + env(safe-area-inset-left, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: 136px; height: 136px; border-radius: 50%; touch-action: none; background: var(--hud-bg); border: 1px solid var(--line2); }
+#knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: var(--acc-dim); border: 1.5px solid var(--acc); }
+#thrTrack { position: fixed; right: calc(22px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: 58px; height: 170px; touch-action: none; background: var(--hud-bg); border: 1px solid var(--line2); border-radius: var(--r); }
+#thrFill { position: absolute; left: 6px; right: 6px; bottom: 6px; background: rgba(159, 202, 110, .5); }
+#thrTrack span { position: absolute; top: -18px; left: 0; right: 0; text-align: center; font-size: 10px; letter-spacing: .14em; color: var(--tx3); }
 #wpn { position: fixed; right: calc(92px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; }
-.wbtn { width: 62px; height: 62px; border-radius: 50%; font: 700 11px var(--font-ui); letter-spacing: .1em; color: var(--fg); background: var(--glass); border: 1px solid var(--glass-edge); touch-action: none; }
-.wbtn.gun { border-color: var(--amber); color: var(--amber); }
-.ret { position: fixed; left: 0; top: 0; width: 30px; height: 30px; margin: -15px 0 0 -15px; border: 2px solid var(--cyan); border-radius: 50%; pointer-events: none; }
-.ret::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: var(--cyan); }
-.ret.ccip { width: 22px; height: 22px; margin: -11px 0 0 -11px; border-color: var(--magenta); border-radius: 3px; transform-origin: center; }
-.ret.ccip::after { background: var(--magenta); }
-.ret.nuke { border-color: var(--amber); width: 28px; height: 28px; margin: -14px 0 0 -14px; border-style: dashed; }
-.ret.nuke::after { background: var(--amber); }
-.ret.nuke span { color: var(--amber) !important; }
+.wbtn { width: 62px; height: 62px; border-radius: 50%; font: 700 11px var(--font-ui); letter-spacing: .1em; color: var(--tx); background: var(--hud-bg); border: 1px solid var(--line2); touch-action: none; }
+.wbtn.gun { border-color: var(--amb); color: var(--amb); }
 .wbtn.nuke { border-color: var(--red); color: var(--red); }
-#flash { position: fixed; inset: 0; background: #fffdf4; opacity: 0; pointer-events: none; z-index: 5; }
 #bBombCam { touch-action: none; }
-.ret.ccip span { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font: 700 10px var(--font-num); letter-spacing: .12em; color: var(--magenta); }
 #brk { position: fixed; right: calc(92px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); touch-action: none; }
-
-body.touch .key-only { display: none; }
-body.touch #hud { left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; transform: translateX(-50%) scale(.6); transform-origin: top center; justify-items: center; }
+body.touch .h-pfd { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; transform: translateX(-50%) scale(.56); transform-origin: top center; }
+body.touch .h-left { left: auto; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: auto; top: calc(48px + env(safe-area-inset-top, 0px)); transform: scale(.7); transform-origin: top right; flex-direction: column-reverse; }
+body.touch .h-wpn { display: none; }
+body.touch #radar { right: auto; bottom: auto; left: calc(12px + env(safe-area-inset-left, 0px)); top: calc(48px + env(safe-area-inset-top, 0px)); transform: scale(.75); transform-origin: top left; }
 body.touch .tools { top: auto; bottom: calc(210px + env(safe-area-inset-bottom, 0px)); flex-direction: column; }
 body.touch #toast { top: auto; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); }
-@media (max-width: 520px) { .tbtn kbd { display: none; } }
+body.touch #chat { top: auto; bottom: calc(260px + env(safe-area-inset-bottom, 0px)); }
+/* a phone held upright: the instruments under the identity strip, radar and systems below them */
+@media (orientation: portrait) {
+  body.touch .h-pfd { top: calc(48px + env(safe-area-inset-top, 0px)); transform: translateX(-50%) scale(.5); }
+  body.touch #radar { top: calc(166px + env(safe-area-inset-top, 0px)); transform: scale(.66); }
+  body.touch .h-left { top: calc(166px + env(safe-area-inset-top, 0px)); transform: scale(.62); }
+  body.touch #wpn { right: calc(104px + env(safe-area-inset-right, 0px)); }
+}
+body.touch #feed { top: calc(48px + env(safe-area-inset-top, 0px)); right: auto; left: 50%; transform: translateX(-50%) translateY(120px); justify-items: center; }
+
 /* clean view: only the button that brings the UI back (and touch flight controls) stay */
-body.noui #hud, body.noui #warn, body.noui .ret, body.noui #toast, body.noui .tools > :not(#bUi) { display: none !important; }
+body.noui #hud, body.noui #warn, body.noui .ret, body.noui #toast, body.noui .tools > :not(#bUi), body.noui #radar, body.noui .mpTag, body.noui #feed, body.noui #mpBar, body.noui #fpsCounter { display: none !important; }
+body.noui:not(.chatting) #chat { display: none; }
+/* the debrief replaces the instruments of the aircraft that just crashed */
+body.debrief #hud, body.debrief #radar, body.debrief .ret { display: none !important; }
 body.noui #bUi { opacity: .45; }
 body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { #warn { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #warn, .chip.rwr.msl { animation: none; } }
 </style>
 
 <canvas id="gl"></canvas>
 
+<div id="radar" hidden><canvas id="rdr"></canvas><div id="rdrInfo"></div></div>
 <div id="hud" hidden>
-  <div class="pfd glass">
-    <div class="side">
-      <div class="box"><span class="lab">IAS KT</span><span class="big" id="spd">0</span><span class="unit" id="mach">M 0.00</span></div>
-      <div class="box"><span class="lab">AOA</span><span class="small" id="aoa">0.0°</span></div>
+  <section class="hm h-pfd" aria-label="Flight instruments">
+    <canvas id="hdg"></canvas>
+    <div class="h-pfd-row">
+      <div class="h-tape">
+        <span class="lab">IAS · KT</span><span class="big" id="spd">0</span>
+        <div class="sub"><span id="mach">M 0.00</span></div>
+        <div class="sub"><span class="lab">AOA</span><span id="aoa">0.0°</span></div>
+      </div>
+      <canvas id="ai"></canvas>
+      <div class="h-tape r">
+        <span class="lab">ALT · FT</span><span class="big" id="alt">0</span>
+        <div class="sub"><span class="lab" id="vsl">V/S</span><span id="vs">0</span></div>
+        <div class="sub"><span class="lab">G</span><span id="gload">1.0 G</span></div>
+      </div>
     </div>
-    <canvas id="ai"></canvas>
-    <div class="side">
-      <div class="box"><span class="lab">ALT</span><span class="big" id="alt">0</span><span class="unit">FT MSL</span></div>
-      <div class="box"><span class="lab" id="vsl">V/S</span><span class="small" id="vs">0</span></div>
-    </div>
+  </section>
+  <div class="h-left">
+  <section class="hm h-dmg" id="dmgPanel" hidden aria-label="Damage"></section>
+  <section class="hm h-sys" aria-label="Aircraft systems">
+    <div class="h-row"><span class="lab">THR</span><div class="thr"><div class="thr-bar"><i id="thrBar"></i></div><span id="thr">0%</span></div><span class="chip" id="cAb">AB</span><span class="chip" id="cHiG" hidden>HI-G</span></div>
+    <div class="h-row"><span class="chip cy" id="cGear">GEAR DN</span><span class="chip" id="cBrk">BRK</span><span class="chip" id="cGnd">GND</span><span class="chip cy" id="cRa">RA ----</span><span class="chip on" id="cDmg" hidden>DMG</span></div>
+    <div class="h-row dim"><span class="rwy" id="rwy">RWY 36</span></div>
+    <div class="h-row dim"><span id="wx">WIND CALM</span></div>
+  </section>
   </div>
-  <div class="glass" style="padding:4px 8px"><canvas id="hdg"></canvas></div>
-  <div class="strip2 glass">
-    <div class="thr"><span class="lab">THR</span><div class="thr-bar"><i id="thrBar"></i></div><span class="small" id="thr">0%</span></div>
-    <span class="small" id="gun">GUN 940</span>
-    <span class="small" id="bombs">MK-82 ×4</span>
-    <span class="small" id="nukes">B61 ×1</span>
-    <span class="small" id="msl" hidden>AAM</span>
-    <span class="small" id="cm" hidden>CM 30</span>
+  <section class="hm h-wpn" id="wpnPanel" aria-label="Weapons">
+    <span class="lab">STORES</span>
+    <div class="w" id="gun">GUN 940</div>
+    <div class="w" id="msl" hidden>AAM</div>
+    <div class="w" id="bombs">MK-82 ×4</div>
+    <div class="w" id="nukes">B61 ×1</div>
+    <div class="w" id="cm" hidden>CM 30</div>
     <span class="chip rwr" id="cRwr" hidden>LOCKED</span>
-    <span class="chip" id="cAb">AB</span>
-    <span class="chip" id="cHiG" hidden>HI-G</span>
-    <span class="small" id="gload">1.0 G</span>
-    <span class="small" id="wx">WIND CALM</span>
-    <span class="rwy" id="rwy">RWY 36</span>
-    <span class="chip cy" id="cGear">GEAR DN</span>
-    <span class="chip on" id="cDmg" hidden>DMG</span>
-    <span class="chip" id="cGnd">GND</span>
-    <span class="chip" id="cBrk">BRK</span>
-    <span class="chip cy" id="cRa">RA ----</span>
-  </div>
+  </section>
 </div>
 
-<div id="radar" class="glass" hidden><canvas id="rdr"></canvas><div id="rdrInfo"></div></div>
 <canvas id="cue"></canvas>
 <div id="tgtBox" class="ret tgt" hidden><span></span></div>
 <div id="hitMk" class="ret hitmk" hidden><span></span></div>
@@ -325,11 +486,12 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="ccipN" class="ret ccip nuke" hidden><span>B61</span></div>
 <div id="ccip" class="ret ccip" hidden><span>BOMB</span></div>
 <div id="warn" hidden></div>
-<div id="toast" class="glass" style="opacity:0"></div>
-<div id="mpBar" class="glass" title="Change your callsign">CONNECTING…</div>
-<div id="fpsCounter" class="glass" aria-live="off">FPS --</div>
+<div id="toast" style="opacity:0"></div>
+<div id="feed" aria-live="polite"></div>
+<div id="mpBar" title="Change your callsign">CONNECTING…</div>
+<div id="fpsCounter" aria-live="off">FPS --</div>
 <div id="chat"><div id="chatLog" aria-live="polite"></div><form id="chatForm" hidden><input id="chatIn" maxlength="160" autocomplete="off" spellcheck="false" placeholder="Message everyone · Enter sends · Esc closes" aria-label="Chat message"></form></div>
-<div id="vote" class="glass" hidden><span id="voteText"></span><button class="pickb" id="voteYes" aria-pressed="false">Yes <kbd>Y</kbd></button><button class="pickb" id="voteNo" aria-pressed="false">No</button></div>
+<div id="vote" class="panel" hidden><span id="voteText"></span><div class="pick"><button class="pickb" id="voteYes" aria-pressed="false">Yes <kbd>Y</kbd></button><button class="pickb" id="voteNo" aria-pressed="false">No</button></div></div>
 
 <div class="tools" id="tools" hidden>
   <button class="tbtn" id="bBombCam" title="Hold to follow your last bomb or missile">BOMB CAM<kbd>Z</kbd></button>
@@ -347,7 +509,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 </div>
 
 <div id="graphicsPanel" class="overlay" hidden>
-  <div class="card glass">
+  <div class="card">
     <div class="eyebrow">DISPLAY CONFIGURATION</div>
     <h2>Graphics</h2>
     <p>Choose a preset. Changes apply immediately and are saved on this device.</p>
@@ -363,7 +525,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 </div>
 
 <div id="roomsPanel" class="overlay" hidden>
-  <div class="card glass">
+  <div class="card">
     <div class="eyebrow">MULTIPLAYER</div>
     <h2>Rooms</h2>
     <p id="roomNow"></p>
@@ -383,21 +545,34 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div id="wpn"><button class="wbtn" id="tLock" hidden>LOCK</button><button class="wbtn" id="tCm" hidden>CM</button><button class="wbtn" id="tHiG" hidden>HI-G</button><button class="wbtn nuke" id="tNuke">B61</button><button class="wbtn" id="tBomb">BOMB</button><button class="wbtn gun" id="tGun">GUN</button></div>
 </div>
 
-<div id="menu" class="overlay">
-  <div class="card glass">
-    <div class="eyebrow" id="acEyebrow"></div>
-    <h1>Skylark</h1>
-    <p id="acDesc"></p>
-    <div class="specs" id="acSpecs"></div>
-    <div class="pick" role="group" aria-label="Aircraft"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="su34" aria-pressed="false">Su-34</button><button class="pickb" data-ac="b737" aria-pressed="false">737 MAX 8</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b2" aria-pressed="false">B-2 Spirit</button></div>
-    <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
-    <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
-    <div class="actions">
-      <button class="btn primary" id="goRunway">Take off from runway</button>
-      <button class="btn" id="goAir">Start airborne</button>
-      <button class="btn" id="menuGraphics">Graphics</button>
-      <button class="btn" id="menuRooms">Rooms</button>
-    </div>
+<div id="menu" class="screen">
+  <header class="topbar">
+    <div class="brand">SKYLARK <small>FLIGHT</small></div>
+    <div class="net" id="hgNet"><span><span class="led wait"></span>CONNECTING</span></div>
+    <nav><button class="btn ghost" id="menuRooms">Rooms</button><button class="btn ghost" id="menuGraphics">Graphics</button></nav>
+  </header>
+  <div class="hangar-body">
+    <aside class="hg-list" aria-label="Aircraft">
+      <div class="hg-cat">FIGHTERS</div>
+      <div class="pick" role="group" aria-label="Aircraft: fighters"><button class="pickb" data-ac="f15" data-name="F-15C" aria-pressed="true"><span class="nm">F-15C</span><span class="ds"></span></button><button class="pickb" data-ac="typhoon" data-name="Typhoon" aria-pressed="false"><span class="nm">Typhoon</span><span class="ds"></span></button><button class="pickb" data-ac="su30" data-name="Su-30SM" aria-pressed="false"><span class="nm">Su-30SM</span><span class="ds"></span></button></div>
+      <div class="hg-cat">STRIKE</div>
+      <div class="pick" role="group" aria-label="Aircraft: strike"><button class="pickb" data-ac="su34" data-name="Su-34" aria-pressed="false"><span class="nm">Su-34</span><span class="ds"></span></button></div>
+      <div class="hg-cat">BOMBER</div>
+      <div class="pick" role="group" aria-label="Aircraft: bomber"><button class="pickb" data-ac="b2" data-name="B-2 Spirit" aria-pressed="false"><span class="nm">B-2 Spirit</span><span class="ds"></span></button></div>
+      <div class="hg-cat">GUNSHIP</div>
+      <div class="pick" role="group" aria-label="Aircraft: gunship"><button class="pickb" data-ac="ac130" data-name="AC-130J" aria-pressed="false"><span class="nm">AC-130J</span><span class="ds"></span></button></div>
+      <div class="hg-cat">AIRLINERS</div>
+      <div class="pick" role="group" aria-label="Aircraft: airliners"><button class="pickb" data-ac="b737" data-name="737 MAX 8" aria-pressed="false"><span class="nm">737 MAX 8</span><span class="ds"></span></button><button class="pickb" data-ac="b748" data-name="747-8" aria-pressed="false"><span class="nm">747-8</span><span class="ds"></span></button><button class="pickb" data-ac="concorde" data-name="Concorde" aria-pressed="false"><span class="nm">Concorde</span><span class="ds"></span></button></div>
+    </aside>
+    <div class="hg-view"></div>
+    <section class="hg-detail" aria-label="Selected aircraft">
+      <div class="sec"><div class="eyebrow" id="acEyebrow"></div><h1 id="acName">F-15C</h1><p id="acDesc"></p></div>
+      <div class="sec"><div class="lbl">Specifications</div><div class="specs" id="acSpecs"></div></div>
+      <div class="sec lo-sec"><div class="lbl">Loadout</div><div class="pick lopick" role="group" aria-label="Loadout" hidden></div></div>
+      <div class="sec key-only"><div class="lbl">Controls</div><div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div></div>
+      <div class="sec"><div class="lbl">Notes</div><p class="tip" id="acTip"></p></div>
+      <div class="sec"><div class="lbl">In this room</div><div class="roster" id="hgRoster"></div></div>
+      <div class="sec"><details class="hg-keys"><summary>CONTROLS REFERENCE</summary>
     <dl class="keys key-only" id="keyList">
       <dt>Mouse aim</dt><dd>Pick it in the controls picker (menu or pause): move the mouse and the nose follows the circle; left click fires the gun. W/S/A/D still override</dd>
       <dt>W / S, ↑ / ↓</dt><dd>Pitch (S pulls the nose up)</dd>
@@ -433,52 +608,63 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>Gun · Bomb · Nuke</dt><dd>Hold GUN to fire the cannon; tap BOMB to drop one on the magenta marker; with a nuclear loadout (B61 or B83), tap its button for the nuke (get 0.3 km from a 0.3 kt B61, 4.8 km from a 1.2 Mt B83)</dd>
       <dt>Bomb cam</dt><dd>Hold BOMB CAM to follow your last bomb or missile</dd>
     </dl>
-    <p style="font-size:13px;color:var(--dim)" id="acTip"></p>
+      </details></div>
+      <div class="spawn"><button class="btn primary" id="goRunway">Take off from runway</button><button class="btn" id="goAir">Start airborne</button></div>
+    </section>
   </div>
 </div>
 
-<div id="crash" class="overlay" hidden>
-  <div class="card glass">
-    <div class="eyebrow" style="color:var(--red)">FLIGHT ENDED</div>
-    <h2>Crashed</h2>
-    <p class="reason" id="reason"></p>
-    <div class="stats">
-      <div><span class="lab">TIME</span><b id="stTime">0:00</b></div>
-      <div><span class="lab">MAX ALT</span><b id="stAlt">0</b></div>
-      <div><span class="lab">TOP SPD</span><b id="stSpd">0</b></div>
+<div id="crash" class="dock" hidden>
+  <div class="panel">
+    <div class="head"><div class="eyebrow" style="color:var(--red)">FLIGHT ENDED</div><h2>Crashed</h2></div>
+    <div class="body">
+      <p class="reason" id="reason"></p>
+      <div class="stats">
+        <div><span class="lab">Flight time</span><b id="stTime">0:00</b></div>
+        <div><span class="lab">Max alt</span><b id="stAlt">0</b></div>
+        <div><span class="lab">Top speed</span><b id="stSpd">0</b></div>
+      </div>
+      <p class="key-only tip">Enter restarts the same way you last started.</p>
     </div>
-    <div class="actions">
+    <div class="foot">
       <button class="btn primary" id="reRunway">Restart on runway</button>
-      <button class="btn" id="reAir">Start airborne</button>
-      <button class="btn" id="reRebuild">Rebuild city</button>
+      <div class="row"><button class="btn" id="reAir">Start airborne</button><button class="btn danger" id="reRebuild">Rebuild city</button></div>
     </div>
-    <p class="key-only" style="font-size:12px;color:var(--dim)">Enter restarts the same way you last started.</p>
   </div>
 </div>
 
-<div id="pause" class="overlay" hidden>
-  <div class="card glass">
-    <div class="eyebrow">HOLDING</div>
-    <h2>Paused</h2>
-    <div class="pick" role="group" aria-label="Aircraft (restarts the flight)"><button class="pickb" data-ac="f15" aria-pressed="true">F-15C</button><button class="pickb" data-ac="typhoon" aria-pressed="false">Typhoon</button><button class="pickb" data-ac="su30" aria-pressed="false">Su-30SM</button><button class="pickb" data-ac="su34" aria-pressed="false">Su-34</button><button class="pickb" data-ac="b737" aria-pressed="false">737 MAX 8</button><button class="pickb" data-ac="b748" aria-pressed="false">747-8</button><button class="pickb" data-ac="concorde" aria-pressed="false">Concorde</button><button class="pickb" data-ac="ac130" aria-pressed="false">AC-130J</button><button class="pickb" data-ac="b2" aria-pressed="false">B-2 Spirit</button></div>
-    <div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div>
-    <div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div>
-    <div class="actions">
+<div id="pause" class="dock" hidden>
+  <div class="panel">
+    <div class="head"><div class="eyebrow">HOLDING</div><h2>Paused</h2></div>
+    <div class="body">
+      <aside class="hg-list" aria-label="Aircraft (restarts the flight)">
+      <div class="hg-cat">FIGHTERS</div>
+      <div class="pick" role="group" aria-label="Aircraft (restarts the flight): fighters"><button class="pickb" data-ac="f15" data-name="F-15C" aria-pressed="true"><span class="nm">F-15C</span><span class="ds"></span></button><button class="pickb" data-ac="typhoon" data-name="Typhoon" aria-pressed="false"><span class="nm">Typhoon</span><span class="ds"></span></button><button class="pickb" data-ac="su30" data-name="Su-30SM" aria-pressed="false"><span class="nm">Su-30SM</span><span class="ds"></span></button></div>
+      <div class="hg-cat">STRIKE</div>
+      <div class="pick" role="group" aria-label="Aircraft (restarts the flight): strike"><button class="pickb" data-ac="su34" data-name="Su-34" aria-pressed="false"><span class="nm">Su-34</span><span class="ds"></span></button></div>
+      <div class="hg-cat">BOMBER</div>
+      <div class="pick" role="group" aria-label="Aircraft (restarts the flight): bomber"><button class="pickb" data-ac="b2" data-name="B-2 Spirit" aria-pressed="false"><span class="nm">B-2 Spirit</span><span class="ds"></span></button></div>
+      <div class="hg-cat">GUNSHIP</div>
+      <div class="pick" role="group" aria-label="Aircraft (restarts the flight): gunship"><button class="pickb" data-ac="ac130" data-name="AC-130J" aria-pressed="false"><span class="nm">AC-130J</span><span class="ds"></span></button></div>
+      <div class="hg-cat">AIRLINERS</div>
+      <div class="pick" role="group" aria-label="Aircraft (restarts the flight): airliners"><button class="pickb" data-ac="b737" data-name="737 MAX 8" aria-pressed="false"><span class="nm">737 MAX 8</span><span class="ds"></span></button><button class="pickb" data-ac="b748" data-name="747-8" aria-pressed="false"><span class="nm">747-8</span><span class="ds"></span></button><button class="pickb" data-ac="concorde" data-name="Concorde" aria-pressed="false"><span class="nm">Concorde</span><span class="ds"></span></button></div>
+      </aside>
+      <div class="col">
+        <div class="lo-sec"><div class="lbl">Loadout · restarts the flight</div><div class="pick lopick" role="group" aria-label="Loadout (restarts the flight)" hidden></div></div>
+        <div class="key-only"><div class="lbl">Controls</div><div class="pick ctlpick key-only" role="group" aria-label="Flight controls"><button class="pickb" data-ctl="keys" aria-pressed="true">Keyboard</button><button class="pickb" data-ctl="mouse" aria-pressed="false">Mouse aim</button></div></div>
+        <div><div class="lbl">Session</div><div class="actions" style="margin-top:8px"><button class="btn" id="pCallsign">Callsign</button><button class="btn" id="pauseRooms">Rooms</button><button class="btn" id="pauseGraphics">Graphics</button></div></div>
+      </div>
+    </div>
+    <div class="foot">
       <button class="btn primary" id="resume">Resume</button>
-      <button class="btn" id="pRunway">Restart on runway</button>
-      <button class="btn" id="pAir">Start airborne</button>
-      <button class="btn" id="pApproach">Approach</button>
-      <button class="btn" id="pCallsign">Change callsign</button>
-      <button class="btn" id="pauseGraphics">Graphics</button>
-      <button class="btn" id="pauseRooms">Rooms</button>
-      <button class="btn" id="pLeave">Leave room</button>
-      <button class="btn" id="pRebuild">Rebuild city</button>
+      <div class="row"><button class="btn" id="pRunway">Restart on runway</button><button class="btn" id="pAir">Start airborne</button><button class="btn" id="pApproach">Approach</button></div>
+      <div class="row"><button class="btn danger" id="pLeave">Leave room</button><button class="btn danger" id="pRebuild">Rebuild city</button></div>
     </div>
   </div>
 </div>
 
 <div id="keysPanel" class="overlay" hidden>
-  <div class="card glass">
+  <div class="card">
     <div class="eyebrow">HOLDING</div>
     <h2>Keys</h2>
     <div id="keysBody"></div>
@@ -489,7 +675,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 </div>
 
 <div id="nameGate" class="overlay" hidden>
-  <div class="card glass">
+  <div class="card">
     <div class="eyebrow">MULTIPLAYER</div>
     <h2 id="nameTitle">Pick a callsign</h2>
     <p>Everyone flying with you sees it over your aircraft.</p>
@@ -6402,7 +6588,7 @@ function crash(msg) {
   MP.stT = 0; // report the crash straight away
   // shot down (or brought down by damage) within 20 s of another player's hit: everyone hears who did it
   const H = MP.lastHitBy;
-  if (H && performance.now() - H.t < 20000) { mpSend('ev', { k: 'kill', by: H.name }); toast(H.name + ' shot you down'); MP.deaths++; }
+  if (H && performance.now() - H.t < 20000) { mpSend('ev', { k: 'kill', by: H.name }); toast(H.name + ' shot you down'); MP.deaths++; feedPush(H.name, 'You', 'lost'); }
   setGunshipCam(false);
   lockPointer.releasing = true; unlockPointer(); aim.fire = false;
   const building = S.hitBuilding >= 0;
@@ -6449,7 +6635,7 @@ function crash(msg) {
   $('#stSpd').textContent = Math.round(S.maxSpd * 1.94384) + ' kt';
   $('#warn').hidden = true;
   clearTimeout(crashTimer);
-  crashTimer = setTimeout(() => { if (S.crashed && running) $('#crash').hidden = false; }, 4000);
+  crashTimer = setTimeout(() => { if (S.crashed && running) { $('#crash').hidden = false; document.body.classList.add('debrief'); } }, 4000);
 }
 const fmtTime = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
 
@@ -7008,6 +7194,7 @@ function start(mode) {
   reset(mode);
   running = true; paused = false;
   $('#menu').hidden = true; $('#crash').hidden = true; $('#pause').hidden = true; $('#keysPanel').hidden = true;
+  document.body.classList.remove('debrief');
   hud.hidden = false; tools.hidden = false; touchUI.hidden = !isTouch;
   canvas.focus?.();
   takeMouse();
@@ -7026,8 +7213,14 @@ $('#gsW2').onclick = () => selectGunshipWeapon(1);
 $('#gsFire').addEventListener('pointerdown', () => { gs.touchFire = true; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('#gsFire').addEventListener(ev, () => { gs.touchFire = false; });
 $('#bUi').onclick = () => toggleUI();
+// each aircraft row's second line is its role, from the aircraft's own description line
+document.querySelectorAll('.pickb[data-ac]').forEach(b => {
+  const e = AC[b.dataset.ac] && AC[b.dataset.ac].eyebrow, ds = b.querySelector('.ds');
+  if (ds && e) ds.textContent = (e.split('·')[1] || e).trim();
+});
 function updateAircraftUI() {
   $('#acEyebrow').textContent = A.eyebrow;
+  $('#acName').textContent = acShort(A.id);
   $('#acDesc').textContent = A.desc;
   $('#acTip').textContent = A.tip;
   const specs = $('#acSpecs');
@@ -7037,10 +7230,14 @@ function updateAircraftUI() {
   document.querySelectorAll('.pickb[data-ac]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ac === A.id)));
   document.querySelectorAll('.lopick').forEach(g => {
     g.hidden = !A.loadouts;
+    const sec = g.closest('.lo-sec'); if (sec) sec.hidden = !A.loadouts;
     g.textContent = '';
     for (const l of A.loadouts || []) {
       const b = document.createElement('button');
-      b.className = 'pickb'; b.textContent = l.name;
+      b.className = 'pickb';
+      // the loadout's name, and what it carries (when that says more than the name)
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = l.name; b.append(nm);
+      if (l.spec && l.spec !== l.name) { const ds = document.createElement('span'); ds.className = 'ds'; ds.textContent = l.spec; b.append(ds); }
       b.setAttribute('aria-pressed', String(l === lo));
       b.onclick = () => pickLoadout(l);
       g.appendChild(b);
@@ -7071,7 +7268,7 @@ document.querySelectorAll('.pickb[data-ac]').forEach(b => {
     setAircraft(b.dataset.ac);
     if (running) start(lastMode); // switching from the pause screen restarts the flight
     else reset('runway');
-    toast(b.textContent + ' selected');
+    toast(b.dataset.name + ' selected');
   };
 });
 function setControls(mode) {
@@ -7397,7 +7594,7 @@ function updateAudio(stall) {
 // ---------------- instruments ----------------
 const DPR = Math.min(devicePixelRatio || 1, 2);
 function prep(c, w, h) { c.width = w * DPR; c.height = h * DPR; const x = c.getContext('2d'); x.scale(DPR, DPR); return x; }
-const AIS = 168, aictx = prep($('#ai'), AIS, AIS), hctx = prep($('#hdg'), 300, 34);
+const AIS = 150, aictx = prep($('#ai'), AIS, AIS), hctx = prep($('#hdg'), 300, 34);
 
 function drawAI(pitch, roll) {
   const c = aictx, s = AIS, r = s / 2, ppd = r / 24, pd = pitch * 180 / Math.PI;
@@ -7405,8 +7602,8 @@ function drawAI(pitch, roll) {
   c.save();
   c.beginPath(); c.arc(r, r, r - 1, 0, Math.PI * 2); c.clip();
   c.translate(r, r); c.rotate(-roll); c.translate(0, pd * ppd);
-  c.fillStyle = '#2d70bd'; c.fillRect(-s * 2, -s * 6, s * 4, s * 6);
-  c.fillStyle = '#86562a'; c.fillRect(-s * 2, 0, s * 4, s * 6);
+  c.fillStyle = '#3b6a8f'; c.fillRect(-s * 2, -s * 6, s * 4, s * 6);
+  c.fillStyle = '#6b5236'; c.fillRect(-s * 2, 0, s * 4, s * 6);
   c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.moveTo(-s * 2, 0); c.lineTo(s * 2, 0); c.stroke();
   c.lineWidth = 1.5; c.fillStyle = '#ffffff'; c.font = '10px "B612 Mono", monospace'; c.textBaseline = 'middle';
   for (let p = -40; p <= 40; p += 5) {
@@ -7424,21 +7621,21 @@ function drawAI(pitch, roll) {
     c.beginPath(); c.moveTo(Math.cos(t) * (r - 3), Math.sin(t) * (r - 3)); c.lineTo(Math.cos(t) * (r - 3 - l), Math.sin(t) * (r - 3 - l)); c.stroke();
   }
   c.rotate(-roll);
-  c.fillStyle = '#ef6fe0'; c.beginPath(); c.moveTo(0, -r + 16); c.lineTo(-6, -r + 26); c.lineTo(6, -r + 26); c.closePath(); c.fill();
+  c.fillStyle = '#e0a948'; c.beginPath(); c.moveTo(0, -r + 16); c.lineTo(-6, -r + 26); c.lineTo(6, -r + 26); c.closePath(); c.fill();
   c.restore();
   // fixed aircraft symbol
   c.save(); c.translate(r, r);
-  c.fillStyle = '#ffb547'; c.strokeStyle = '#000000'; c.lineWidth = 1;
+  c.fillStyle = '#e0a948'; c.strokeStyle = '#000000'; c.lineWidth = 1;
   for (const sx of [-1, 1]) { c.beginPath(); c.rect(sx > 0 ? 14 : -44, -2.5, 30, 5); c.fill(); c.stroke(); c.beginPath(); c.rect(sx > 0 ? 14 : -19, -2.5, 5, 10); c.fill(); c.stroke(); }
   c.beginPath(); c.rect(-3, -3, 6, 6); c.fill(); c.stroke();
   c.restore();
-  c.strokeStyle = 'rgba(190,215,235,.35)'; c.lineWidth = 2; c.beginPath(); c.arc(r, r, r - 1, 0, Math.PI * 2); c.stroke();
+  c.strokeStyle = '#2a3135'; c.lineWidth = 2; c.beginPath(); c.arc(r, r, r - 1, 0, Math.PI * 2); c.stroke();
 }
 
 function drawHdg(h, brg) {
   const c = hctx, w = 300, H = 34, ppd = 3;
   c.clearRect(0, 0, w, H);
-  c.strokeStyle = '#eef3f6'; c.fillStyle = '#eef3f6'; c.lineWidth = 1.2;
+  c.strokeStyle = '#dfe3dc'; c.fillStyle = '#dfe3dc'; c.lineWidth = 1.2;
   c.font = '11px "B612 Mono", monospace'; c.textAlign = 'center'; c.textBaseline = 'top';
   const lbl = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
   for (let d = Math.ceil((h - 52) / 5) * 5; d <= h + 52; d += 5) {
@@ -7448,8 +7645,8 @@ function drawHdg(h, brg) {
   }
   let diff = ((brg - h + 540) % 360) - 180;
   const bx = clamp(w / 2 + diff * ppd, 6, w - 6);
-  c.fillStyle = '#4fd8ea'; c.beginPath(); c.moveTo(bx, H - 11); c.lineTo(bx - 5, H - 19); c.lineTo(bx + 5, H - 19); c.closePath(); c.fill();
-  c.fillStyle = '#ef6fe0'; c.beginPath(); c.moveTo(w / 2, H - 1); c.lineTo(w / 2 - 6, H - 10); c.lineTo(w / 2 + 6, H - 10); c.closePath(); c.fill();
+  c.fillStyle = '#9fca6e'; c.beginPath(); c.moveTo(bx, H - 11); c.lineTo(bx - 5, H - 19); c.lineTo(bx + 5, H - 19); c.closePath(); c.fill();
+  c.fillStyle = '#e0a948'; c.beginPath(); c.moveTo(w / 2, H - 1); c.lineTo(w / 2 - 6, H - 10); c.lineTo(w / 2 + 6, H - 10); c.closePath(); c.fill();
 }
 
 const prj = new THREE.Vector3();
@@ -7515,6 +7712,46 @@ function updateLowAltitudeOverspeed(dt) {
   for (const z of wings) ripZone(z, localRoot, worldRoot);
   toast('WINGS TORN OFF BY LOW-ALTITUDE OVERSPEED');
 }
+// The damage panel: only while something is damaged. A row per part (engines, wings, tail, the four fuselage
+// sections, gear, crew, controls), its remaining strength as a bar and its state in words.
+let dmgT = 0, dmgSig = '';
+const DMG_WORDS = ['OK', 'DAMAGED', 'SEVERE', 'CRITICAL', 'FAILED'];
+const stateOfFrac = v => v <= 0.01 ? 4 : v < 0.35 ? 3 : v < 0.6 ? 2 : v < 0.95 ? 1 : 0;
+function updateDamagePanel() {
+  const now = performance.now();
+  if (now - dmgT < 200) return;
+  dmgT = now;
+  const D = S.dmg, rows = [];
+  const add = (lbl, v, st) => rows.push([lbl, v, st ?? stateOfFrac(v)]);
+  if (D.engL < 0.995 || D.engR < 0.995) { add('L ENG', D.engL); add('R ENG', D.engR); }
+  if (D.wingL < 0.995 || D.wingR < 0.995) { add('L WING', D.wingL); add('R WING', D.wingR); }
+  if (D.stab < 0.995) add(A.id === 'typhoon' ? 'CANARD' : 'STAB', D.stab);
+  if (D.fin < 0.995) add('FIN', D.fin);
+  if (S.sec) S.sec.forEach((v, i) => { if (v < 0.995) add(SEC_HUD[i], v, secState(v)); });
+  if (D.legsLost) add('GEAR', 0, 4);
+  if (S.pilot < 0.995) add('CREW', S.pilot, S.pilot <= 0 ? 4 : S.pilot < 0.6 ? 2 : 1);
+  if (S.noCtrl) add('CONTROL', 0, 4);
+  else if ((S.ctrl ?? 1) < 0.95) add('CONTROL', S.ctrl, stateOfFrac(S.ctrl));
+  const p = $('#dmgPanel');
+  p.hidden = !rows.length;
+  const sig = rows.map(r => r[0] + Math.round(r[1] * 50) + r[2]).join(',') + S.noCtrl;
+  if (!rows.length || sig === dmgSig) return;
+  dmgSig = sig;
+  const worst = Math.max(...rows.map(r => r[2]));
+  p.textContent = '';
+  const hd = document.createElement('div'); hd.className = 'hd';
+  const t = document.createElement('span'); t.className = 'lab'; t.textContent = 'DAMAGE';
+  const w = document.createElement('span'); w.className = 'chip ' + (worst >= 3 || S.noCtrl ? 'warn' : 'on');
+  w.textContent = S.noCtrl ? (S.noCtrl === 'pilot' ? 'PILOT INCAPACITATED' : 'CONTROLS LOST') : worst >= 3 ? 'WARNING' : 'CAUTION';
+  hd.append(t, w); p.append(hd);
+  for (const [lbl, v, st] of rows) {
+    const r = document.createElement('div'); r.className = 'dr c' + st;
+    const a = document.createElement('span'); a.textContent = lbl;
+    const bar = document.createElement('i'), fill = document.createElement('b'); fill.style.width = Math.round(clamp(v, 0, 1) * 100) + '%'; bar.append(fill);
+    const e = document.createElement('em'); e.textContent = DMG_WORDS[st];
+    r.append(a, bar, e); p.append(r);
+  }
+}
 function updateHUD() {
   updateGunshipHUD();
   const att = attitude();
@@ -7566,7 +7803,10 @@ function updateHUD() {
   if (S.noCtrl) dm.push(S.noCtrl === 'pilot' ? 'PILOT INCAPACITATED' : 'CONTROLS LOST');
   const dmEl = document.getElementById('cDmg');
   dmEl.hidden = !dm.length;
-  setText(dmEl, 'DMG ' + dm.join(' · '));
+  const critical = !!S.noCtrl || (S.sec && S.sec.some(v => secState(v) >= 3)) || Dh.engL < 0.01 || Dh.engR < 0.01 || Dh.wingL < 0.35 || Dh.wingR < 0.35;
+  setText(dmEl, critical ? 'WARNING' : 'CAUTION');
+  dmEl.className = 'chip ' + (critical ? 'warn' : 'on');
+  updateDamagePanel();
   el.ab.classList.toggle('on', !!A.thrustAB && S.throttle > AB_AT);
   el.ab.hidden = !A.thrustAB;
   const hg = $('#cHiG');
@@ -7583,6 +7823,8 @@ function updateHUD() {
     mEl.style.color = Object.values(cnt).some(v => v) ? '' : 'var(--dim)';
   }
   el.nukes.hidden = !parts.nuke;
+  // the stores panel only on an armed aircraft
+  const wp = document.getElementById('wpnPanel'); if (wp) wp.hidden = !A.weapons;
   // the selected air-to-air weapon, and the countermeasures left
   el.gun.classList.toggle('sel', !!A.radar && aaSel === 'gun');
   mEl.classList.toggle('sel', !!A.radar && aaSel === 'msl');
@@ -7986,7 +8228,7 @@ function cycleLock() {
   RADAR.acq = { P, t: 0, need: LOCK_TIME * (lo ? lo.lock : 1) };
   toast('Acquiring ' + P.name + (lo ? ' (low observable)' : '') + '…');
 }
-const rdrCtx = prep($('#rdr'), 180, 132), RDR_STEPS = [10000, 20000, 40000, 80000, 160000];
+const rdrCtx = prep($('#rdr'), 192, 140), RDR_STEPS = [10000, 20000, 40000, 80000, 160000];
 function updateRadar(dt) {
   const box = $('#radar'), tgt = $('#tgtBox');
   box.hidden = !(running && A.radar);
@@ -8035,21 +8277,21 @@ function updateRadar(dt) {
   // range scale: fits the lock, else the nearest contact, else 40 km
   const want = L ? L.d * 1.15 : cs.length ? cs[0].d * 1.15 : 40000;
   RADAR.scale = Math.min(A.radar.range, RDR_STEPS.find(s => s >= want) || 160000);
-  const x = rdrCtx, W = 180, H = 132, ox = W / 2, oy = H - 8, Rp = H - 20, cone = A.radar.cone, G = '#7ee2a8';
+  const x = rdrCtx, W = 192, H = 140, ox = W / 2, oy = H - 8, Rp = H - 20, cone = A.radar.cone, G = '#b4e692', T = '#e0a948';
   x.clearRect(0, 0, W, H);
-  x.strokeStyle = 'rgba(126,226,168,.35)'; x.lineWidth = 1;
+  x.strokeStyle = 'rgba(180,230,146,.28)'; x.lineWidth = 1;
   for (const f of [0.5, 1]) { x.beginPath(); x.arc(ox, oy, Rp * f, -Math.PI / 2 - cone, -Math.PI / 2 + cone); x.stroke(); }
   for (const a of [-cone, 0, cone]) { x.beginPath(); x.moveTo(ox, oy); x.lineTo(ox + Math.sin(a) * Rp, oy - Math.cos(a) * Rp); x.stroke(); }
-  x.strokeStyle = 'rgba(126,226,168,.8)';
+  x.strokeStyle = 'rgba(180,230,146,.75)';
   x.beginPath(); x.moveTo(ox, oy); x.lineTo(ox + Math.sin(RADAR.sweep) * Rp, oy - Math.cos(RADAR.sweep) * Rp); x.stroke();
   x.font = '700 9px ' + getComputedStyle(document.body).getPropertyValue('--font-num'); x.fillStyle = G;
   x.textAlign = 'left'; x.fillText((A.radar.name || 'RDR') + ' ' + RADAR.scale / 1000, 4, 10);
-  x.textAlign = 'right'; x.fillText(cs.length + ' TGT', W - 4, 10);
+  x.textAlign = 'right'; x.fillText(cs.length + ' CONTACT' + (cs.length === 1 ? '' : 'S'), W - 4, 10);
   x.textAlign = 'center';
   for (const c of cs) {
     if (c.d > RADAR.scale) continue;
     const r = c.d / RADAR.scale * Rp, px = ox + Math.sin(c.az) * r, py = oy - Math.cos(c.az) * r, locked = c.P === RADAR.lock;
-    x.fillStyle = locked ? '#ffb547' : G; x.strokeStyle = x.fillStyle;
+    x.fillStyle = locked ? '#e05a4c' : T; x.strokeStyle = x.fillStyle;
     if (locked) { x.fillRect(px - 4, py - 4, 8, 8); x.beginPath(); x.arc(px, py, 8, 0, Math.PI * 2); x.stroke(); }
     else x.strokeRect(px - 3.5, py - 3.5, 7, 7);
     x.fillText(String(Math.round(c.P.obj.position.y * 3.28084 / 1000)), px, py - 9); // altitude in thousands of feet
@@ -8459,6 +8701,18 @@ function hitMark(p, big) {
   sp.className = ''; void sp.offsetWidth; sp.className = big ? 'on big' : 'on';
   soundFX(big ? 'hitbig' : 'hit');
 }
+// The combat feed: who shot down whom, the last five lines, each fading out after 8 s.
+function feedPush(by, victim, kind) {
+  const f = $('#feed'); if (!f) return;
+  const d = document.createElement('div'); d.className = kind || '';
+  const a = document.createElement('span'); a.textContent = String(by).toUpperCase();
+  const i = document.createElement('i'); i.textContent = '▸';
+  const b = document.createElement('span'); b.textContent = String(victim).toUpperCase();
+  d.append(a, i, b); f.append(d);
+  while (f.children.length > 5) f.firstChild.remove();
+  setTimeout(() => d.classList.add('old'), 8000);
+  setTimeout(() => d.remove(), 8700);
+}
 // kill confirmation
 function splash(name) {
   const e = $('#splash');
@@ -8590,7 +8844,8 @@ function drawPeerMissiles(P, now) {
 //  - one B-2 at a time: whoever took it first keeps it; anyone who took it at the same moment is moved off it
 //  - each nuclear bomb has a cooldown after release (NUKE_COOLDOWN), and pages ignore nuclear blasts that come faster
 //  - Rebuild city starts a vote; the city is rebuilt for everyone once at least 2/3 of the players say yes
-const acShort = id => (document.querySelector('.pickb[data-ac="' + id + '"]') || {}).textContent || id;
+// an aircraft's short name, from its row in the aircraft list (a function declaration: it's needed before this line runs)
+function acShort(id) { return (document.querySelector('.pickb[data-ac="' + id + '"]') || { dataset: {} }).dataset.name || id; }
 const mmss = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 const r1 = v => Math.round(v * 10) / 10;
 const mpV = p => [r1(p.x), r1(p.y), r1(p.z)];
@@ -9047,7 +9302,36 @@ $('#chatIn').addEventListener('blur', () => setTimeout(() => { if (CHAT.open && 
 $('#bChat').addEventListener('mousedown', e => e.preventDefault()); // keep the text box focused, so the click toggles
 $('#bChat').onclick = () => { if (CHAT.open) closeChat(); else openChat(); };
 
+// The hangar's network line (callsign, room, players, kills / deaths) and roster of who's flying what. Rebuilt
+// only when its contents change, so a busy room doesn't keep touching the page.
+let hgSig = '';
+function updateHangarNet() {
+  const n = MP.peers.size + 1, st = MP.room ? 'on' : MP.failed ? '' : 'wait';
+  const peers = [...MP.peers.values()].filter(P => P.name !== '…');
+  const sig = [st, MP.name, MP.roomName, n, MP.kills, MP.deaths, A.id, ...peers.map(P => P.name + P.ac + (P.kd || []).join(':'))].join('|');
+  if (sig === hgSig) return;
+  hgSig = sig;
+  const net = $('#hgNet');
+  if (net) {
+    net.textContent = '';
+    const item = (label, value, led) => { const sp = document.createElement('span'); if (led !== undefined) { const l = document.createElement('span'); l.className = 'led ' + led; sp.append(l); } if (label) sp.append(label + ' '); const b = document.createElement('b'); b.textContent = value; sp.append(b); net.append(sp); };
+    item('', MP.room ? (MP.roomName || 'PUBLIC').toUpperCase() + (MP.roomHidden ? ' (HIDDEN)' : '') : MP.failed ? 'OFFLINE' : 'CONNECTING', st);
+    if (MP.name) item('CALLSIGN', MP.name.toUpperCase());
+    if (MP.room) item('PILOTS', String(n));
+    item('K/D', MP.kills + ' / ' + MP.deaths);
+  }
+  const ro = $('#hgRoster');
+  if (ro) {
+    ro.textContent = '';
+    const row = (name, ac, kd, me) => { const r = document.createElement('div'); r.className = 'r' + (me ? ' me' : ''); const b = document.createElement('b'); b.textContent = name; const a = document.createElement('span'); a.textContent = acShort(ac); const k = document.createElement('span'); k.textContent = kd[0] + ' / ' + kd[1]; r.append(b, a, k); ro.append(r); };
+    row(MP.name ? MP.name + ' (you)' : 'You', A.id, [MP.kills, MP.deaths], true);
+    for (const P of peers) row(P.name, P.ac, P.kd || [0, 0], false);
+    if (!peers.length) { const e = document.createElement('div'); e.className = 'none'; e.textContent = MP.room ? 'No one else is flying in this room yet.' : 'Join a room to fly with other players.'; ro.append(e); }
+  }
+}
+updateHangarNet(); // filled in at once, before the network has said anything
 function updateMpBar() {
+  updateHangarNet();
   const el = $('#mpBar'), n = MP.peers.size + 1;
   if (n !== MP.lastN) { MP.lastN = n; announceRoom(); renderRooms(); }
   if (!MP.room) { setText(el, MP.failed ? 'OFFLINE' : MP.lib ? `${MP.name.toUpperCase()} · LOBBY` : 'CONNECTING…'); return; }
@@ -9431,6 +9715,7 @@ function wireGameRoom(room) {
     if (P && d && d.k === 'kill' && typeof d.by === 'string') {
       const by = d.by.replace(/[^\w\- ]/g, '').slice(0, 16);
       toast(by === MP.name ? `You shot down ${P.name}` : `${by} shot down ${P.name}`);
+      feedPush(by === MP.name ? 'You' : by, P.name, by === MP.name ? 'mine' : '');
       if (by === MP.name) { MP.kills++; MP.stT = 0; splash(P.name); }
       chatLine('', by === MP.name ? `You shot down ${P.name}` : `${by} shot down ${P.name}`, 'sys');
     }
