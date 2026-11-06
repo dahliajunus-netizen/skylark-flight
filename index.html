@@ -8001,10 +8001,11 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) bBrk.addEventLi
 const tGun = $('#tGun');
 tGun.addEventListener('pointerdown', () => { initAudio(); touchIn.gun = true; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) tGun.addEventListener(ev, () => { touchIn.gun = false; });
-$('#tBomb').addEventListener('pointerdown', () => dropBomb());
-$('#tNuke').addEventListener('pointerdown', () => dropNuke());
+function bindHoldButton(button, action, repeatMs) { let timer = null, pointerId = null; const stop = e => { if (pointerId !== null && e && e.pointerId !== undefined && e.pointerId !== pointerId) return; if (timer !== null) clearInterval(timer); timer = null; pointerId = null; }; button.style.touchAction = 'none'; button.addEventListener('pointerdown', e => { if (timer !== null) return; pointerId = e.pointerId; try { button.setPointerCapture(pointerId); } catch (err) {} action(); timer = setInterval(action, repeatMs); }); for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(ev, stop); addEventListener('blur', stop); }
+bindHoldButton($('#tBomb'), dropBomb, 200);
+bindHoldButton($('#tNuke'), dropNuke, 450);
 $('#tLock').addEventListener('pointerdown', () => cycleLock());
-$('#tCm').addEventListener('pointerdown', () => releaseCM());
+bindHoldButton($('#tCm'), releaseCM, 200);
 $('#tHiG').addEventListener('pointerdown', () => { touchIn.hiG = true; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('#tHiG').addEventListener(ev, () => { touchIn.hiG = false; });
 const bBombCam = $('#bBombCam');
