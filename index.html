@@ -6255,7 +6255,16 @@ function physics(dt) {
   // The air moves (wind, gusts, turbulence), so the wings work on the velocity through the air, not over the ground.
   // Parked and taxiing slowly the wind is left out, so a crosswind can't weathervane a jet standing on its wheels.
   const wk = S.onGround ? smooth(8, 35, v.length()) : 1;
-  const va = wk > 0 ? windAt(S.pos, _wa).multiplyScalar(-wk).add(v) : _wa.copy(v);
+  if (wk > 0) {
+    windAt(S.pos, _wa);
+    // On the wheels the tires and nosewheel steering hold the jet's track: the headwind (or tailwind) along the
+    // runway still counts in full, for lift-off and landing speeds, but only 25% of the crosswind pushes on the airframe
+    if (S.onGround && !S.belly) {
+      const fl = Math.hypot(F.x, F.z) || 1, fx = F.x / fl, fz = F.z / fl, along = _wa.x * fx + _wa.z * fz;
+      _wa.set(fx * along + (_wa.x - fx * along) * 0.25, _wa.y * 0.25, fz * along + (_wa.z - fz * along) * 0.25);
+    }
+  }
+  const va = wk > 0 ? _wa.multiplyScalar(-wk).add(v) : _wa.copy(v);
   const V = va.length();
   const vf = va.dot(F), vu = va.dot(U), vr = va.dot(R);
   const alpha = V > 2 ? Math.atan2(-vu, Math.max(vf, 0.1)) : 0;
@@ -6340,7 +6349,8 @@ function physics(dt) {
     groundPitchLimit = 0.045 * rotateAuthority;
     tp = clamp(tp, -0.05, groundPitchLimit);
   }
-  let ty = inp.yaw * A.rates[1] * eff * Dm.fin + beta * 2.0 * stab * (0.15 + 0.85 * Dm.fin);
+  // weathervaning: the fin turns the nose into the airflow; on the wheels the nosewheel resists most of it
+  let ty = inp.yaw * A.rates[1] * eff * Dm.fin + beta * 2.0 * stab * (0.15 + 0.85 * Dm.fin) * (S.onGround && !S.belly ? 0.04 : 1);
   let tr = inp.roll * A.rates[2] * eff0 * (Dm.wingL + Dm.wingR) / 2; // roll comes from the wings, not the nozzles
   if (!S.onGround && WX.turb > 0) tr += WX.turb * 0.3 * eff0 * smoothNoise(S.time * 1.7, 3.1) / Math.max(1, A.scale); // turbulence rocks the wings, heavies less
   if (S.onGround) {
