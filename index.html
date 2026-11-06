@@ -5036,26 +5036,47 @@ function blast(p, R, power, from = '') {
 }
 // A blast near the aircraft: parts within its reach are torn off where the blast meets them,
 // and the fuselage inside the inner part of it ends the flight.
-function blastPlane(p, R, from) {
+// A blast against this aircraft. Blast and fragments fall off fast with distance, so a part is torn only where the
+// blast is severe (within 30% of its radius): from the innermost point of the part that close, so a burst off a
+// wingtip takes the outer wing and a burst under the fuselage takes the whole wing. Parts further out, still inside
+// the radius, take fragment damage: scorch marks and weakening (the next hit on them tears them), never a tear on
+// their own. The fuselage is destroyed inside the kill radius; further out it loses integrity, less with distance.
+// A missile warhead (warhead true) is small: it only kills the airframe outright from within 25% of its radius,
+// where a bomb's blast does from within 60%.
+function blastPlane(p, R, from, warhead = false) {
   const who = from ? MP.blastBy || 'Another player' : '';
   if (from) MP.lastHitBy = { name: who, t: performance.now() };
+  const Rs = R * 0.3, tough = A.scale > 2 ? 2.5 : 1, tears = [];
+  const kill = warhead ? 0.25 : 0.6, reach = warhead ? 1 : 1.2;
   for (const z of parts.zones) {
     if (!z.alive || !z.pts || !z.pts.length || (z.kind === 'gear' && S.gearT < 0.5)) continue;
-    let best = null, bd = Infinity;
-    for (const q of z.pts) { const d = tC.copy(q).applyQuaternion(S.quat).add(S.pos).distanceTo(p); if (d < bd) { bd = d; best = q; } }
+    let best = null, bd = Infinity, inner = null, innerC = Infinity;
+    for (const q of z.pts) {
+      const d = tC.copy(q).applyQuaternion(S.quat).add(S.pos).distanceTo(p);
+      if (d < bd) { bd = d; best = q; }
+      if (d < Rs && z.cut) { const c = coordOf(z.cut, q); if (c < innerC) { innerC = c; inner = q; } }
+    }
     if (z.kind === 'core') {
-      if (bd < R * 0.6) {
+      if (bd < R * kill) {
         S.hitBuilding = -1;
         crash(from ? `You were caught in ${who}'s blast.` : 'You flew through your own bomb blast. Release from higher up, at least 500 ft.');
         return;
       }
-      if (bd < R * 1.2) {
-        S.hull -= 0.5 * (1 - bd / (R * 1.2)); S.damaged = true;
-        addDamageMark(best, 'core', z, clamp(1 - bd / (R * 1.2), 0.15, 0.8));
+      if (bd < R * reach) {
+        const f = 1 - bd / (R * reach);
+        S.hull -= warhead ? 1.1 * f * f : 0.5 * f; S.damaged = true;
+        addDamageMark(best, 'core', z, clamp(f, 0.15, 0.8));
       }
       if (S.hull <= 0) { S.hitBuilding = -1; crash(from ? `${who}'s blast tore your aircraft apart.` : 'Your own bomb blast tore the aircraft apart.'); return; }
-    } else if (bd < R) ripZone(z, best, tC.copy(best).applyQuaternion(S.quat).add(S.pos));
+    } else if (bd < Rs) tears.push([z, inner || best]); // engines and gear legs have no tear line: they go whole
+    else if (bd < R) {
+      const hp = (ZONE_HP[z.kind] || 4) * tough, f = 1 - bd / R;
+      z.taken = Math.min(hp * 0.9, (z.taken || 0) + hp * 0.6 * f);
+      addDamageMark(best, z.kind, z, clamp(f, 0.12, 0.5));
+    }
   }
+  for (const [z, q] of tears) if (z.alive) ripZone(z, q, tC.copy(q).applyQuaternion(S.quat).add(S.pos));
+  updateDamage();
 }
 // 3D simplex noise (Ashima / Stefan Gustavson) and fBm, shared by the fireball and nuclear cloud shaders
 const NOISE_GLSL = `
@@ -7899,7 +7920,7 @@ function onMissileMsg(id, d) {
     const fxScale = num(d.s, 1) ? d.s : missileExplosionProfile('aim120').visual;
     explode(w, fxScale, false, true);
     MP.blastBy = who;
-    blastPlane(w, d.R, 'remote');
+    blastPlane(w, d.R, 'remote', true);
     if (!S.crashed) toast(`Hit by ${who}'s ${String(d.n || 'missile').replace(/[^\w\- ]/g, '').slice(0, 12)}`);
   }
 }
@@ -8167,6 +8188,25 @@ function ghostModel(ac) {
     shift.position.copy(center).negate();
     shift.add(src.clone(true)); fit.add(shift); g.add(fit);
     g.userData.real = true;
+    const rule = AC[ac].bodySplit;
+    if (rule) {
+      g.updateMatrixWorld(true);
+      const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), bodies = [];
+      g.traverse(o => { if (o.isMesh && rule.mesh.test(nameOf(o))) bodies.push(o); });
+      for (const o of bodies) {
+        // bake the piece into the aircraft's frame (in metres, where the split rule is written), then split it
+        const M = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld), geo = o.geometry.clone();
+        geo.applyMatrix4(M);
+        if (M.determinant() < 0 && geo.index) { // a mirroring node chain leaves the baked faces wound inward
+          const ix = geo.index.array;
+          for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; }
+          geo.index.needsUpdate = true;
+        }
+        const baked = new THREE.Mesh(geo, o.material); baked.name = o.name;
+        for (const piece of splitAirframe(baked, rule)) g.add(piece);
+        o.parent.remove(o);
+      }
+    }
   } else if (MODELS[ac]) {
     const m = MODELS[ac].clone(true);
     m.rotation.y = Math.PI; // the Blender models face +z; the sim's aircraft face -z
@@ -8582,7 +8622,7 @@ const TURN_SAVED_MAX_AGE = 5 * 3600e3; // a saved set is only used while its pas
 // sits in a small lobby room and says there which room it is in (unless that room is hidden), so everyone can
 // see a live list of rooms and how many are in each. "Public" uses the original room, so older pages still meet.
 const ROOM_OK = /^[A-Za-z0-9 _-]{2,24}$/;
-const BUILD = '2026-11-05';
+const BUILD = '2026-11-06';
 // a hidden room is a different room from a listed one with the same name
 const roomKey = (name, hidden) => hidden ? 'hidden-' + name.toLowerCase().replace(/\s+/g, '-')
   : name.toLowerCase() === 'public' ? 'main' : 'room-' + name.toLowerCase().replace(/\s+/g, '-');
