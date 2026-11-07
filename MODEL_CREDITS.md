@@ -100,6 +100,20 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: `b2_split.glb` bakes the model's object transforms; separates the six elevons, the beavertail, the four split drag-rudder halves, the four bomb-bay doors (with their inner faces), the nose and main gear struts, bogies and wheels, and the nose and main gear doors, each on its own hinge; and turns the model to face -Z.
 
+## F-22 Raptor
+
+- Creator: [sxnneh](https://sketchfab.com/Sxnneh)
+- Source: [F22 RAPTOR](https://sketchfab.com/3d-models/f22-raptor-ec44bd6cffa649b4927799a7b19c703b)
+- License: [Sketchfab Standard](https://sketchfab.com/licenses), supplied by the project owner
+- Changes: `f22_split.glb` bakes the model's node transforms, turns it to the game's frame, and leaves out the model's own stores (the game hangs the chosen loadout). It splits the stabilators, the upper and lower flaps of each 2D nozzle (joined into one swivelling nozzle per side), rudders, ailerons, flaperons, canopy, nose and main gear struts and wheels, the nose and main gear doors (with the hinge and angle that shut them) and the main and side weapon-bay doors into named parts, each on its own hinge.
+
+## GBU-32 JDAM
+
+- Creator: [KojfDiscord](https://sketchfab.com/KojfDiscord)
+- Source: [US Navy GBU-32 JDAM guided bomb (War Thunder)](https://sketchfab.com/3d-models/us-navy-gbu-32-jdam-guided-bomb-war-thunder-e5647bec47a449a1ac44fb6735968978)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: none; `gbu32.glb` is the original export, which the game scales to 3.03 m.
+
 ## GBU-57 MOP and B83
 
 - Source: models supplied by the project owner.
