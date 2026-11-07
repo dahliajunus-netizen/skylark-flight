@@ -49,7 +49,7 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - Creator: [Rhine_Lab_Muelsyse](https://sketchfab.com/Rhine_Lab_Muelsyse)
 - Source: [Russian weapon pack](https://sketchfab.com/3d-models/russian-weapon-pack-af00b7135a184ecfb2812a0e54458a8a)
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
-- Changes: `ru_aam.glb` holds only the R-73 and R-77 from the pack, with their transforms baked, noses turned toward -Z and centred, for the Su-30's air-to-air missiles in Skylark Flight.
+- Changes: `ru_aam.glb` holds only the R-73, R-77, R-77M and Kh-29T from the pack, with their transforms baked, noses turned toward -Z and centred, and their textures downsized to 1024 px JPEG, for the Su-30, Su-34 and Su-57.
 
 ## FAB-250
 
@@ -113,6 +113,13 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - Source: [US Navy GBU-32 JDAM guided bomb (War Thunder)](https://sketchfab.com/3d-models/us-navy-gbu-32-jdam-guided-bomb-war-thunder-e5647bec47a449a1ac44fb6735968978)
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: none; `gbu32.glb` is the original export, which the game scales to 3.03 m.
+
+## Su-57
+
+- Creator: [Collaro_Show](https://sketchfab.com/Collaro_Show)
+- Source: [su57](https://sketchfab.com/3d-models/su57-469b7d36d6254c30b96d78563a054977)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: `su57_split.glb` bakes the model's transforms, scales it to the real 14.1 m span and turns it to the game's frame; splits the all-moving tailplanes and fins, ailerons, flaperons, the two thrust-vectoring nozzles, canopy, pylons, the main and side weapon-bay doors, and the gear (sorted from the one gear-down mesh into nose and main struts, wheels and open doors, with the closed doors as their own skin) into named parts, each on its own pivot; leaves out the extended refuelling probe.
 
 ## GBU-57 MOP and B83
 
