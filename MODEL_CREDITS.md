@@ -121,6 +121,13 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: `su57_split.glb` bakes the model's transforms, scales it to the real 14.1 m span and turns it to the game's frame; splits the all-moving tailplanes and fins, ailerons, flaperons, the two thrust-vectoring nozzles, canopy, pylons, the main and side weapon-bay doors, and the gear (sorted from the one gear-down mesh into nose and main struts, wheels and open doors, with the closed doors as their own skin) into named parts, each on its own pivot; leaves out the extended refuelling probe.
 
+## KAB-500Kr
+
+- Creator: [KojfDiscord](https://sketchfab.com/KojfDiscord)
+- Source: [SU KAB-500Kr (500 kg) Bomb (War Thunder)](https://sketchfab.com/3d-models/su-kab-500kr-500-kg-bomb-war-thunder-4e779192f9ba4c3aa0ac8644a8784591)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: none; `kab500.glb` is the original export, which the game scales to 3.05 m.
+
 ## GBU-57 MOP and B83
 
 - Source: models supplied by the project owner.
