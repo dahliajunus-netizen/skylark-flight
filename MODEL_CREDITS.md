@@ -128,6 +128,27 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: none; `kab500.glb` is the original export, which the game scales to 3.05 m.
 
+## AH-64D Apache
+
+- Creator: [Muhamad Mirza Arrafi](https://sketchfab.com/nazidefenseforceofficial)
+- Source: [Boeing AH-64D Apache Combat Helicopter](https://sketchfab.com/3d-models/boeing-ah-64d-apache-combat-helicopter-c3b58008c46b45048fdd7dd283a3c8c8)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes:  scales the model to its 14.63 m rotor and sorts its merged meshes into the main and tail rotors, the TADS and PNVS sight turrets, the M230 gun, the eight Hellfires and the two rocket pods (their fronts opened), each on its own pivot.
+
+## Hydra 70 rocket
+
+- Creator: [xFORTUNAx](https://sketchfab.com/xFORTUNAx)
+- Source: [Hydra 70 (2.75" FFAR) Rocket — Low Poly](https://sketchfab.com/3d-models/hydra-70-275-ffar-rocket-low-poly-50bf3b3cd8ec4823801ca8507ec78008)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: in , whole and as its front end only (for the rockets sitting in the pod tubes).
+
+## FIM-92 Stinger
+
+- Creator: [Bot212](https://sketchfab.com/Bot212)
+- Source: [FIM-92 Missile](https://sketchfab.com/3d-models/fim-92-missile-d427c916b2114f03a555c70eaa465206)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: in , scaled to 1.52 m as the AIM-92 (ATAS) the Apache carries.
+
 ## GBU-57 MOP and B83
 
 - Source: models supplied by the project owner.

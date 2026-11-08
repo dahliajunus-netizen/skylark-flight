@@ -1,7 +1,7 @@
 # Skylark
 
-A browser flight simulator: fly an F-15C, an F-22A Raptor, a Sukhoi Su-57, a Eurofighter Typhoon, a Sukhoi Su-30SM, a Sukhoi Su-34, a Boeing 737 MAX 8, a Boeing 747-8, Concorde, a B-2 Spirit or an AC-130J Ghostrider gunship from a huge military airbase next to a destructible city.
-Open `index.html` through any static web server. The F-15C, F-22A, Su-57, Typhoon, Su-30SM, Su-34, 737 MAX 8, 747-8, Concorde and B-2 Spirit are adapted Sketchfab models (see MODEL_CREDITS.md); the other aircraft models (`*.gltf.json`) were built in Blender, and the AC-130J and Su-30SM stand-in rebuild with `blender --background --python ac130/build_ac130.py -- AC130.gltf.json` and `blender --background --python su30/build_su30.py -- SU30.gltf.json`.
+A browser flight simulator: fly an F-15C, an F-22A Raptor, a Sukhoi Su-57, a Eurofighter Typhoon, a Sukhoi Su-30SM, a Sukhoi Su-34, a Boeing 737 MAX 8, a Boeing 747-8, Concorde, a B-2 Spirit or an AH-64D Apache attack helicopter from a huge military airbase next to a destructible city.
+Open `index.html` through any static web server. The F-15C, F-22A, Su-57, Typhoon, Su-30SM, Su-34, 737 MAX 8, 747-8, Concorde, B-2 Spirit and AH-64D are adapted Sketchfab models (see MODEL_CREDITS.md); the other aircraft models (`*.gltf.json`) were built in Blender, and the Su-30SM stand-in rebuilds with `blender --background --python su30/build_su30.py -- SU30.gltf.json`.
 
 ## Multiplayer
 
@@ -23,6 +23,13 @@ Everyone who has the page open flies in the same world under a callsign picked o
   - Kh-29T: a TV-guided rocket. It needs the point within 12 km and 40° of the nose; it drops clear of the pylon, boosts to about 550 m/s and steers onto the point. Fire and forget.
   - KAB-500Kr: a guided bomb with no motor. Its fins correct its fall onto the point within about half the load a GBU-32's can make. The sight says IN ZONE when a release can reach; out of zone, it falls short.
   - Other players see both in flight and the blasts.
+- The AH-64D Apache flies as a helicopter. The collective (R and F) sets the main rotor's lift: about half lifts it off, and more climbs. The stick tilts it (centred, it levels itself) and Q and E turn it in the hover; at speed it turns with its bank. The rotor spins up from a runway start and runs down when a flight ends, and its lift grows near the ground and with forward speed. Level flight tops out near 150 kt.
+- V opens the Apache's TADS sight: the camera sits at the sight turret in the nose, which turns with it, and stays on the ground point it is pointed at. The mouse or arrows slew it, scroll zooms, and Y switches TV and IR. 1–4 pick the M230, the Hellfires, the Hydra rockets or the Stingers; Space or a click fires.
+  - M230: its turret follows the sight within its limits (±86° across, +11° to −60°), and the rounds leave along the barrel.
+  - Hellfires (the model's own eight): they ride the sight's laser spot onto the target, out to 8 km.
+  - Hydra 70: fired along the nose from the two 19-tube pods, whose rockets disappear one by one.
+  - Stingers (four, on the wingtips): heat-seekers for aircraft ahead.
+  - Outside the sight, Space fires the gun ahead and X the picked store. Other players see the rotors, sights, gun, the remaining Hellfires, and the missiles and rockets in flight.
 - Every F-22A store rides inside, and the bay doors open as each one goes. There are two loadouts:
   - Air superiority: 6 × AIM-120C in the main bay and 2 × AIM-9X in the side bays.
   - Precision strike: 2 × GBU-32 JDAM.
