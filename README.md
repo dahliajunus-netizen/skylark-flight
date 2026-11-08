@@ -24,6 +24,7 @@ Everyone who has the page open flies in the same world under a callsign picked o
   - KAB-500Kr: a guided bomb with no motor. Its fins correct its fall onto the point within about half the load a GBU-32's can make. The sight says IN ZONE when a release can reach; out of zone, it falls short.
   - Other players see both in flight and the blasts.
 - The AH-64D Apache flies as a helicopter. The collective (R and F) sets the main rotor's lift: about half lifts it off, and more climbs. The stick tilts it (centred, it levels itself) and Q and E turn it in the hover; at speed it turns with its bank. The rotor spins up from a runway start and runs down when a flight ends, and its lift grows near the ground and with forward speed. Level flight tops out near 150 kt.
+- A runway start puts the Apache on the heliport beside the heavy apron: ten marked and lit pads, 170 m apart. It takes the first pad free of other players (and of the two parked Apaches), so helicopters starting together never pile up.
 - V opens the Apache's TADS sight: the camera sits at the sight turret in the nose, which turns with it, and stays on the ground point it is pointed at. The mouse or arrows slew it, scroll zooms, and Y switches TV and IR. 1–4 pick the M230, the Hellfires, the Hydra rockets or the Stingers; Space or a click fires.
   - M230: its turret follows the sight within its limits (±86° across, +11° to −60°), and the rounds leave along the barrel.
   - Hellfires (the model's own eight): they ride the sight's laser spot onto the target, out to 8 km.

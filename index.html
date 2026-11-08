@@ -1516,10 +1516,15 @@ function applyWeatherSky(daylight) {
 // city's building table, so they are solid and break up like any other building. The east end is left open for
 // expansion.
 const BASE_BOXES = [];
+// The heliport east of the heavy apron: ten pads in two rows of five, 170 m apart so a helicopter starting on one
+// is well clear of the rotors on the next. Helicopters start on the first free pad (helipadSpawn); the two parked
+// Apaches stand on the east end of the back row.
+const HELIPADS = [];
+for (let row = 0; row < 2; row++) for (let k = 0; k < 5; k++) HELIPADS.push({ n: row * 5 + k + 1, x: -2470 + 170 * k, z: 830 - 330 * row });
 (function buildAirbase() {
   const Y = CITY_H, rnd = mulberry(3636);
-  const LAYER = { road: 0.04, lot: 0.04, apron: 0.05, pad: 0.05, taxi: 0.07, rwy: 0.1 };
-  const COL = { road: '#38393b', lot: '#46474a', apron: '#6a6c6d', pad: '#77776f', taxi: '#46494d', rwy: '#3a3d42' };
+  const LAYER = { road: 0.04, lot: 0.04, apron: 0.05, pad: 0.05, heli: 0.06, taxi: 0.07, rwy: 0.1 };
+  const COL = { road: '#38393b', lot: '#46474a', apron: '#6a6c6d', pad: '#77776f', heli: '#85857d', taxi: '#46494d', rwy: '#3a3d42' };
   const WHITE = '#e8e6de', YELLOW = '#d9b23a';
   const box = (x0, z0, x1, z1, h, col) => BASE_BOXES.push([x0, z0, x1, z1, h, col]);
   // a point on runway R: t metres along it (toward hdg), s metres to its right
@@ -1550,6 +1555,8 @@ const BASE_BOXES = [];
   pave('apron', -6400, -942.5, -2600, -942.5, 585); // main apron, between B and the hangar line
   pave('apron', -6400, 717.5, -2600, 717.5, 635);   // heavy apron for bombers, tankers and transports, on C
   pave('apron', -2600, -925, -2300, -925, 450);     // ground support equipment yard
+  pave('apron', -2600, 645, -1690, 645, 690);       // heliport, beside the heavy apron
+  for (const H of HELIPADS) pave('heli', H.x, H.z - 25, H.x, H.z + 25, 50);
 
   // ---- hangars and the buildings behind them ----
   const HANGAR = '#a3a8ab', HEAVY = '#9aa1a6', SHOP = '#bdb6a8', WARE = '#a89f90', DORM = '#c9b79c', HQ = '#cfc7b6';
@@ -1705,6 +1712,18 @@ const BASE_BOXES = [];
   line(paint, -6400, 980, -2600, 980, 0.6, ay, YELLOW);
   for (let x = -6200; x <= -2800; x += 300) { line(paint, x, 980, x, 480, 0.4, ay, YELLOW); line(paint, x - 6, 480, x + 6, 480, 0.8, ay, YELLOW); }
 
+  // helipads: a white edge, the yellow touchdown circle and a white H, its legs along the north-south approach
+  for (const H of HELIPADS) {
+    const hy = Y + LAYER.heli + 0.015;
+    for (const [a, b, c, d] of [[-24, -24, 24, -24], [24, -24, 24, 24], [24, 24, -24, 24], [-24, 24, -24, -24]]) line(paint, H.x + a, H.z + b, H.x + c, H.z + d, 1, hy, WHITE);
+    for (let k = 0; k < 40; k++) {
+      const a0 = k / 40 * Math.PI * 2, a1 = (k + 1) / 40 * Math.PI * 2;
+      line(paint, H.x + 17 * Math.cos(a0), H.z + 17 * Math.sin(a0), H.x + 17 * Math.cos(a1), H.z + 17 * Math.sin(a1), 1.2, hy, YELLOW);
+    }
+    line(paint, H.x - 4, H.z - 6, H.x - 4, H.z + 6, 2, hy, WHITE);
+    line(paint, H.x + 4, H.z - 6, H.x + 4, H.z + 6, 2, hy, WHITE);
+    line(paint, H.x - 4, H.z, H.x + 4, H.z, 2, hy, WHITE);
+  }
   // Painted stand envelopes, lead-in/stop positions and concrete expansion joints.
   const standWhite = '#c9ccca', joint = '#777a7c';
   for (let x = -6300; x <= -2700; x += 280) {
@@ -1823,6 +1842,8 @@ const BASE_BOXES = [];
     const x = r.cx + r.ux * t - r.uz * sd * (r.hw + 1), z = r.cz + r.uz * t + r.ux * sd * (r.hw + 1);
     if (offRunway(x, z)) lights.push([x, z, '#3a78ff']);
   }
+  // green perimeter lights round each helipad
+  for (const H of HELIPADS) for (const [dx, dz] of [[-26, -26], [0, -26], [26, -26], [26, 0], [26, 26], [0, 26], [-26, 26], [-26, 0]]) lights.push([H.x + dx, H.z + dz, '#43dc72']);
   // Green inset taxiway centreline lights guide aircraft through the taxi network.
   for (const r of PAVE) if (r.kind === 'taxi' && r.hl > 45) {
     for (let t = -r.hl + 18; t <= r.hl - 18; t += 60) {
@@ -2102,10 +2123,11 @@ float pvN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f)
 // stands (stop bars at z = 470, facing north). They are scenery: drawn from the same models as other players'
 // aircraft, built once each model has loaded, and hidden beyond 4 km to keep the frame rate up.
 const PARKED = [];
-['f15', 'f15', 'f15', null, 'typhoon', 'typhoon', null, 'su34', 'su34', null, 'f22', 'f22', 'su57', null, 'ah64', 'ah64']
+['f15', 'f15', 'f15', null, 'typhoon', 'typhoon', null, 'su34', 'su34', null, 'f22', 'f22', 'su57']
   .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6300 + 280 * k, stop: -815, face: 1 }); });
 ['b2', 'b2', null, 'b748', null, 'b737', null, null, null, null, null, null]
   .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6200 + 300 * k, stop: 470, face: -1 }); });
+HELIPADS.slice(-2).forEach(H => { H.parked = true; PARKED.push({ ac: 'ah64', x: H.x, z: H.z, pad: true }); });
 let parkedCheckAt = 0;
 // A model is dozens of parts; parked, nothing moves, so its parts are merged into one mesh per material and an
 // aircraft costs a few draw calls instead of dozens.
@@ -2153,7 +2175,8 @@ function updateParkedAircraft(now) {
       g.rotation.y = P.face > 0 ? Math.PI : 0;
       g.updateMatrixWorld(true);
       const b = new THREE.Box3().setFromObject(g);
-      g.position.set(P.x, CITY_H - b.min.y + 0.05, P.face > 0 ? P.stop - 4 - b.max.z : P.stop + 4 - b.min.z);
+      if (P.pad) g.position.set(P.x - (b.min.x + b.max.x) / 2, CITY_H - b.min.y + 0.07, P.z - (b.min.z + b.max.z) / 2); // centred on its helipad
+      else g.position.set(P.x, CITY_H - b.min.y + 0.05, P.face > 0 ? P.stop - 4 - b.max.z : P.stop + 4 - b.min.z);
       P.obj = mergeParked(g);
       scene.add(P.obj);
     }
@@ -7810,11 +7833,13 @@ function reset(mode) {
   if (mode === 'runway') {
     // lined up on runway 36, facing north toward the city, unless another player is sitting there: then the first
     // free runway end
-    const sp = runwaySpawn();
-    S.pos.set(sp.x, ground(sp.x, sp.z).h + 0.1 + GEAR, sp.z);
+    // (a helicopter starts on the first free helipad instead)
+    const sp = A.heli ? helipadSpawn() : runwaySpawn();
+    S.pos.set(sp.x, ground(sp.x, sp.z).h + 0.1 + GEAR + (A.heli ? LAYER_HELI : 0), sp.z);
     S.vel.set(0, 0, 0);
     S.quat.setFromEuler(eul.set(0, -sp.hdg, 0, 'YXZ'));
-    if (sp.name !== '36') toast(`Runway 36 is occupied: lined up on runway ${sp.name}`);
+    if (A.heli) { if (sp.n !== HELIPADS[0].n) toast(`Helipad 1 is occupied: on helipad ${sp.n}`); }
+    else if (sp.name !== '36') toast(`Runway 36 is occupied: lined up on runway ${sp.name}`);
     S.throttle = 0;
     S.onGround = true;
     S.gearDown = true; S.gearT = 1;
@@ -7873,6 +7898,16 @@ function runwaySpawn() {
   const taken = sp => [...MP.peers.values()].some(P => P.r && !P.c && P.obj && P.obj.visible &&
     Math.hypot(P.p.x - sp.x, P.p.z - sp.z) < 300 && P.p.y - ground(P.p.x, P.p.z).h < 30);
   return spots.find(sp => !taken(sp)) || spots[0];
+}
+
+// The first helipad free of parked helicopters and of other players on or just above it (the one with the nearest
+// player farthest away when every pad is in use), facing north.
+const LAYER_HELI = 0.06;
+function helipadSpawn() {
+  const near = H => Math.min(Infinity, ...[...MP.peers.values()].filter(P => P.r && !P.c && P.obj && P.obj.visible &&
+    P.p.y - ground(P.p.x, P.p.z).h < 30).map(P => Math.hypot(P.p.x - H.x, P.p.z - H.z)));
+  const pads = HELIPADS.filter(H => !H.parked).map(H => ({ ...H, hdg: 0, d: near(H) }));
+  return pads.find(H => H.d > 40) || pads.reduce((a, b) => (b.d > a.d ? b : a));
 }
 
 // A random airborne start over the main island (or just off its coast): out of the airbase's traffic, well away
@@ -8224,7 +8259,7 @@ function physics(dt) {
   // structure: every zone of the airframe against buildings, the ground and the water
   if (parts.hasCore) {
     if (checkStructure()) return;
-  } else if (S.pos.y < CITY_MAX_TOP + reach) {
+  } else if (S.pos.y < CITY_MAX_TOP + (parts.reach || 25)) {
     axes(q);
     for (const [f, r, u] of A.hitPts) {
       tC.copy(S.pos).addScaledVector(F, f).addScaledVector(R, r).addScaledVector(U, u);
