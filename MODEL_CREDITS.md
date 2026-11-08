@@ -121,6 +121,20 @@ This license permits sharing and adaptation for noncommercial use with attributi
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Changes: `su57_split.glb` bakes the model's transforms, scales it to the real 14.1 m span and turns it to the game's frame; splits the all-moving tailplanes and fins, ailerons, flaperons, the two thrust-vectoring nozzles, canopy, pylons, the main and side weapon-bay doors, and the gear (sorted from the one gear-down mesh into nose and main struts, wheels and open doors, with the closed doors as their own skin) into named parts, each on its own pivot; leaves out the extended refuelling probe.
 
+## F/A-18C Hornet
+
+- Creator: [Rhine_Lab_Muelsyse](https://sketchfab.com/Rhine_Lab_Muelsyse)
+- Source: [McDonnell Douglas F/A-18C Hornet](https://sketchfab.com/3d-models/mcdonnell-douglas-fa-18c-hornet-c68c8417c8e84864b2a5e0c35c178fd9)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: `f18_split.glb` bakes the model's transforms, scales it to the real 17.07 m length and turns it to the game's frame. It splits these into named parts, each on its own pivot: the stabilators, rudders, ailerons, flaps, speed brake, tailhook, gear (struts and wheels sorted apart), and the gear doors that hang open (each with its hinge line). The pylons stay on the airframe, with their launch rails as two sets (air-to-air, and the inner rails plus the outer twin rails for Mavericks). It leaves out the drop tank and the bomb-rack pylon variants.
+
+## AGM-65 Maverick
+
+- Creator: [Wilbruh](https://sketchfab.com/mirz1911)
+- Source: [AGM Maverick](https://sketchfab.com/3d-models/agm-maverick-f68e897f7f5b45c2860f52313b9598a9)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+- Changes: `f18_stores.glb` turns it nose toward -Z, centres it and scales it to the real 2.49 m.
+
 ## KAB-500Kr
 
 - Creator: [KojfDiscord](https://sketchfab.com/KojfDiscord)

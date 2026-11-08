@@ -1,7 +1,7 @@
 # Skylark
 
-A browser flight simulator: fly an F-15C, an F-22A Raptor, a Sukhoi Su-57, a Eurofighter Typhoon, a Sukhoi Su-30SM, a Sukhoi Su-34, a Boeing 737 MAX 8, a Boeing 747-8, Concorde, a B-2 Spirit or an AH-64D Apache attack helicopter from a huge military airbase next to a destructible city.
-Open `index.html` through any static web server. The F-15C, F-22A, Su-57, Typhoon, Su-30SM, Su-34, 737 MAX 8, 747-8, Concorde, B-2 Spirit and AH-64D are adapted Sketchfab models (see MODEL_CREDITS.md); the other aircraft models (`*.gltf.json`) were built in Blender, and the Su-30SM stand-in rebuilds with `blender --background --python su30/build_su30.py -- SU30.gltf.json`.
+A browser flight simulator: fly an F-15C, an F/A-18C Hornet, an F-22A Raptor, a Sukhoi Su-57, a Eurofighter Typhoon, a Sukhoi Su-30SM, a Sukhoi Su-34, a Boeing 737 MAX 8, a Boeing 747-8, Concorde, a B-2 Spirit or an AH-64D Apache attack helicopter from a huge military airbase next to a destructible city.
+Open `index.html` through any static web server. The F-15C, F/A-18C, F-22A, Su-57, Typhoon, Su-30SM, Su-34, 737 MAX 8, 747-8, Concorde, B-2 Spirit and AH-64D are adapted Sketchfab models (see MODEL_CREDITS.md); the other aircraft models (`*.gltf.json`) were built in Blender, and the Su-30SM stand-in rebuilds with `blender --background --python su30/build_su30.py -- SU30.gltf.json`.
 
 ## Multiplayer
 
@@ -16,6 +16,13 @@ Everyone who has the page open flies in the same world under a callsign picked o
 - The B-2 is Low Observable (passive, always on): other players' radar picks it up at 60% of the normal range and takes twice as long (2 s instead of 1 s) to lock it. It can still be seen and hit by missiles.
 - The F-22A Raptor's STEALTH is a passive ability, always on. Other players' radar detects it at 45% of the normal range, takes 2.2 times as long to lock it, and gives radar-guided missiles fired at it (AIM-120, R-77) 75% of their usual odds. Eyes, heat-seekers (AIM-9, R-73, IRIS-T) and guns are not affected.
 - The F-22A has 2D thrust vectoring: both nozzles swing up and down together, up to 20°, following the stick. Thrust through the deflected nozzles adds pitch control in proportion to the thrust, so the nose stays controllable at low speed and high angles of attack. The nozzles never move sideways, so roll and yaw stay aerodynamic. The nozzles drawn on the model, and the HUD's TVC readout, show the same angle the physics uses.
+- The F/A-18C Hornet has less power than the F-15C and a lower top speed, but its leading-edge extensions keep it turning and pointing its nose at very high angles of attack (7.5 g; Shift for harder turns that bleed speed fast). Its main gear folds aft, the nose gear forward, the gear doors swing shut behind them, and the tailhook drops with the gear.
+- The F/A-18C has two loadouts, each on its own pylon rails:
+  - Air superiority: an AIM-9M on each wingtip, and six AIM-120Cs on the outer and inner wing pylons and the engine nacelles.
+  - Ground attack: six AGM-65F Mavericks, one on each inner pylon and two side by side on each outer pylon, and nothing else.
+  - V shows the view through a Maverick's own seeker (only with Mavericks aboard). L locks the ground point and X fires one. Each flies off its rail under its motor and steers onto the point, out to 14 km.
+  - Other players see its missiles and Mavericks on the jet, minus the ones fired.
+- With missiles selected, 2 again picks one missile type (AIM-120C, AIM-9M, …) or goes back to the jet picking by range, on every fighter.
 - The Su-57's LOW OBSERVABLE is a passive ability, always on, and depends on aspect. Seen from ahead, other players' radar detects it at 62% of the normal range; from the side or behind, at 85%. A lock takes 1.7 times as long, and radar-guided missiles fired at it get 85% of their usual odds. Eyes, heat-seekers and guns are not affected.
 - The Su-57 has 3D thrust vectoring. Each nozzle swivels up, down and sideways inside a 15° cone, following the stick and the rudder; the nozzles split in pitch with roll input. This adds pitch and yaw control (and a little roll) in proportion to thrust, so the nose can be swung even when slow. With Shift it flies far past the stall, but hard manoeuvres bleed speed fast. Other players see the nozzles move as the pilot's physics moves them.
 - The Su-57's air-superiority loadout carries 4 × R-77 and 2 × R-77M in its two tandem main bays and 2 × R-73 in the side bays. With a lock, X fires the shortest-reach radar missile that covers the range, keeping the R-77Ms for long shots.

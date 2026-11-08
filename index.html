@@ -591,7 +591,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="hangar-body">
     <aside class="hg-list" aria-label="Aircraft">
       <div class="hg-cat">FIGHTERS</div>
-      <div class="pick" role="group" aria-label="Aircraft: fighters"><button class="pickb" data-ac="f15" data-name="F-15C" aria-pressed="true"><span class="nm">F-15C</span><span class="ds"></span></button><button class="pickb" data-ac="typhoon" data-name="Typhoon" aria-pressed="false"><span class="nm">Typhoon</span><span class="ds"></span></button><button class="pickb" data-ac="su30" data-name="Su-30SM" aria-pressed="false"><span class="nm">Su-30SM</span><span class="ds"></span></button><button class="pickb" data-ac="f22" data-name="F-22A" aria-pressed="false"><span class="nm">F-22A</span><span class="ds"></span></button><button class="pickb" data-ac="su57" data-name="Su-57" aria-pressed="false"><span class="nm">Su-57</span><span class="ds"></span></button></div>
+      <div class="pick" role="group" aria-label="Aircraft: fighters"><button class="pickb" data-ac="f15" data-name="F-15C" aria-pressed="true"><span class="nm">F-15C</span><span class="ds"></span></button><button class="pickb" data-ac="f18" data-name="F/A-18C" aria-pressed="false"><span class="nm">F/A-18C</span><span class="ds"></span></button><button class="pickb" data-ac="typhoon" data-name="Typhoon" aria-pressed="false"><span class="nm">Typhoon</span><span class="ds"></span></button><button class="pickb" data-ac="su30" data-name="Su-30SM" aria-pressed="false"><span class="nm">Su-30SM</span><span class="ds"></span></button><button class="pickb" data-ac="f22" data-name="F-22A" aria-pressed="false"><span class="nm">F-22A</span><span class="ds"></span></button><button class="pickb" data-ac="su57" data-name="Su-57" aria-pressed="false"><span class="nm">Su-57</span><span class="ds"></span></button></div>
       <div class="hg-cat">STRIKE</div>
       <div class="pick" role="group" aria-label="Aircraft: strike"><button class="pickb" data-ac="su34" data-name="Su-34" aria-pressed="false"><span class="nm">Su-34</span><span class="ds"></span></button></div>
       <div class="hg-cat">BOMBER</div>
@@ -627,7 +627,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
       <dt>K</dt><dd>Countermeasures: one salvo of flares and chaff (not on the airliners)</dd>
       <dt>Weather</dt><dd>Wind and weather change every few minutes, the same for everyone: clear, scattered or broken cloud, overcast, rain and thunderstorms. The HUD shows the wind (from, in degrees, and knots; G is the gusts) and the windsocks point downwind. Expect crosswinds on the runway, bumps in turbulence, poor visibility in rain and bombs drifting downwind</dd>
       <dt>Tab (hold)</dt><dd>Scoreboard: kills and deaths of everyone in the room. Arrows at the edge of the screen point to your lock and to players out of view; red arrows are missiles coming at you</dd>
-      <dt>1 · 2</dt><dd>Air-to-air weapon: gun (with a radar lock, the orange circle shows the gun lead) or missiles</dd>
+      <dt>1 · 2</dt><dd>Air-to-air weapon: gun (with a radar lock, the orange circle shows the gun lead) or missiles. With missiles selected, 2 again picks one type (AIM-120C, AIM-9M, …) or back to the jet picking by range; with ground missiles aboard (Kh-29T, AGM-65), 2 picks among those</dd>
       <dt>Z (hold)</dt><dd>Bomb camera: follow your last bomb or missile and watch it go off; hold the right mouse and drag to look around it</dd>
       <dt>Combat</dt><dd>Your cannon and bombs hit other players' aircraft. Hits tear off the part they land on, as hitting a building does; enough on the fuselage brings it down</dd>
       <dt>Y</dt><dd>Vote yes to rebuild the city. With other players online, Rebuild city starts a vote; it passes at 2/3 yes</dd>
@@ -676,7 +676,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
     <div class="body">
       <aside class="hg-list" aria-label="Aircraft (restarts the flight)">
       <div class="hg-cat">FIGHTERS</div>
-      <div class="pick" role="group" aria-label="Aircraft (restarts the flight): fighters"><button class="pickb" data-ac="f15" data-name="F-15C" aria-pressed="true"><span class="nm">F-15C</span><span class="ds"></span></button><button class="pickb" data-ac="typhoon" data-name="Typhoon" aria-pressed="false"><span class="nm">Typhoon</span><span class="ds"></span></button><button class="pickb" data-ac="su30" data-name="Su-30SM" aria-pressed="false"><span class="nm">Su-30SM</span><span class="ds"></span></button><button class="pickb" data-ac="f22" data-name="F-22A" aria-pressed="false"><span class="nm">F-22A</span><span class="ds"></span></button><button class="pickb" data-ac="su57" data-name="Su-57" aria-pressed="false"><span class="nm">Su-57</span><span class="ds"></span></button></div>
+      <div class="pick" role="group" aria-label="Aircraft (restarts the flight): fighters"><button class="pickb" data-ac="f15" data-name="F-15C" aria-pressed="true"><span class="nm">F-15C</span><span class="ds"></span></button><button class="pickb" data-ac="f18" data-name="F/A-18C" aria-pressed="false"><span class="nm">F/A-18C</span><span class="ds"></span></button><button class="pickb" data-ac="typhoon" data-name="Typhoon" aria-pressed="false"><span class="nm">Typhoon</span><span class="ds"></span></button><button class="pickb" data-ac="su30" data-name="Su-30SM" aria-pressed="false"><span class="nm">Su-30SM</span><span class="ds"></span></button><button class="pickb" data-ac="f22" data-name="F-22A" aria-pressed="false"><span class="nm">F-22A</span><span class="ds"></span></button><button class="pickb" data-ac="su57" data-name="Su-57" aria-pressed="false"><span class="nm">Su-57</span><span class="ds"></span></button></div>
       <div class="hg-cat">STRIKE</div>
       <div class="pick" role="group" aria-label="Aircraft (restarts the flight): strike"><button class="pickb" data-ac="su34" data-name="Su-34" aria-pressed="false"><span class="nm">Su-34</span><span class="ds"></span></button></div>
       <div class="hg-cat">BOMBER</div>
@@ -2123,7 +2123,7 @@ float pvN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f)
 // stands (stop bars at z = 470, facing north). They are scenery: drawn from the same models as other players'
 // aircraft, built once each model has loaded, and hidden beyond 4 km to keep the frame rate up.
 const PARKED = [];
-['f15', 'f15', 'f15', null, 'typhoon', 'typhoon', null, 'su34', 'su34', null, 'f22', 'f22', 'su57']
+['f15', 'f15', 'f15', null, 'typhoon', 'typhoon', null, 'su34', 'su34', null, 'f22', 'f22', 'su57', null, 'f18', 'f18']
   .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6300 + 280 * k, stop: -815, face: 1 }); });
 ['b2', 'b2', null, 'b748', null, 'b737', null, null, null, null, null, null]
   .forEach((ac, k) => { if (ac) PARKED.push({ ac, x: -6200 + 300 * k, stop: 470, face: -1 }); });
@@ -3576,6 +3576,15 @@ const SU57_AAM = [[-0.29, 0.0, 0.9, 'r77m'], [0.29, 0.0, 0.9, 'r77m'], [-0.29, 0
 const SU57_STRIKE = [[-4.04, -0.45, 3.4, 'kh29'], [4.04, -0.45, 3.4, 'kh29'], [0, 0.0, 0.9, 'kab500'], [0, 0.0, 5.9, 'kab500']];
 // AH-64D: an AIM-92 Stinger pair on each stub-wing tip, one above the other
 const AH64_STINGERS = [[-3.34, -0.72, -1.95, 'aim92'], [3.34, -0.72, -1.95, 'aim92'], [-3.34, -1.0, -1.95, 'aim92'], [3.34, -1.0, -1.95, 'aim92']];
+// F/A-18C stations (aircraft frame): the inner wing pylons' rails at x ±2.24 (bottom y -0.86), the outer pylons' rails at
+// ±3.42 (-0.93), the twin Maverick rail on the outer pylons at ±3.13 and ±3.67 (-0.83), the wingtip rails at ±6.03 and
+// the lower corners of the engine nacelles at ±0.98 (bottom y -1.1), behind the intakes beside the main gear.
+// Air superiority: an AIM-9M on each wingtip; AIM-120s on the outer and inner wing pylons and the fuselage stations.
+const F18_AAM = [[-6.1, -0.38, 2.6, 'aim9m'], [6.1, -0.38, 2.6, 'aim9m'], [-3.42, -1.05, 1.36, 'aim120'], [3.42, -1.05, 1.36, 'aim120'],
+  [-2.24, -0.98, 1.2, 'aim120'], [2.24, -0.98, 1.2, 'aim120'], [-0.98, -1.22, 2.4, 'aim120'], [0.98, -1.22, 2.4, 'aim120']];
+// Ground attack: six AGM-65 Mavericks, one on each inner pylon's rail and two side by side on each outer pylon's twin rail
+const F18_MAV = [[-2.24, -1.04, 1.2, 'agm65'], [2.24, -1.04, 1.2, 'agm65'], [-3.67, -1.0, 2.0, 'agm65'], [3.67, -1.0, 2.0, 'agm65'],
+  [-3.13, -1.0, 2.0, 'agm65'], [3.13, -1.0, 2.0, 'agm65']];
 const F22_JDAM = [[-0.42, -1.2, -0.55, 'gbu32'], [0.42, -1.2, -0.55, 'gbu32']];
 // 100 R-77s: ten across the span, five deep, two layers, under the Su-30SM's wings and belly
 function R77_HUNDRED() {
@@ -3583,7 +3592,7 @@ function R77_HUNDRED() {
   for (const y of [-0.85, -1.4]) for (let k = 0; k < 5; k++) for (let i = 0; i < 10; i++) out.push([-6.3 + i * 1.4, y, -2 + k * 1.0, 'r77']);
   return out;
 }
-const loadout = { f15: 'mk82', b2: 'mk82', f22: 'aa', su57: 'aa' };
+const loadout = { f15: 'mk82', b2: 'mk82', f22: 'aa', su57: 'aa', f18: 'aa' };
 // a loadout with a secret is only there for the callsign that is its secret
 const loadoutOk = l => !l.secret || String(MP.name || '').trim().toUpperCase() === l.secret;
 const curLoadout = () => (A.loadouts || []).find(l => l.id === loadout[A.id] && loadoutOk(l)) || (A.loadouts || [])[0] || null;
@@ -3654,6 +3663,35 @@ const AC = {
     desc: 'Fly an F-15 from a huge military airbase on the south coast, just outside the city, then head north to the downtown towers, the river, the suburbs and the hills. Strafe with the cannon, bomb the towers and watch them come down, then try to land in one piece. Every building can be wrecked, piece by piece, and the damage stays until you choose Rebuild city on the pause screen.',
     specs: ['ROTATE 150 KT', 'APPROACH 150 KT', '9 G LIMIT', 'MACH 1+ IN AB', 'M61 20 MM · 940 RDS', 'STORES', 'RWY 36 · 16,400 FT'],
     tip: 'Takeoff: full throttle, pull back at 150 kt, then raise the gear. With the stick centered the jet holds level flight; the throttle sets your speed. Lower the gear before landing.'
+  },
+  f18: {
+    // Boeing (McDonnell Douglas) F/A-18C Hornet: ~16.8 t in combat trim, 37.2 m² wing, two F404-GE-402 (~49 kN dry,
+    // ~79 kN in reheat each). Lighter-powered than the F-15 and slower at the top end (it runs out of push past Mach
+    // 1.6), but its big leading-edge extensions keep the wing lifting to very high angles of attack: it points its nose
+    // and turns hard at low speed better than most here, and loses energy doing it. 7.5 g, as the real one is limited.
+    // Carrier-built: a sturdy aft-folding main gear, a forward-folding nose gear and a tailhook (it drops with the gear).
+    id: 'f18', mass: 16800, wing: 37.2, thrust: 98000, thrustAB: 158000,
+    CL0: 0.2, CLA: 3.7, stallA: 0.6, cd0: 0.024, k: 0.12, wave: [0.84, 1.02, 0.036],
+    gLimit: 7.5, effV: 85, rates: [0.8, 0.34, 3.6], stabRoll: 0.18, tailStrike: 0.22, gear: 2.41, strutHinges: true, weapons: true, gearTime: 4, mainRetract: 'aft', mainTwist: Math.PI / 2, travel: 0.3,
+    centreX: 0.6, // the nose wheels are within 0.32 m of the centreline, the mains 0.8 to 1.5 m out
+    hiG: { g: 10.5, rate: 2.1, aoa: 1.95, cl: 1.3, cd: 3.4, cobraV: 165 }, // held Shift: see physics
+    ammo: 578, muzzle: [0, 0.02, 7.3], stabSign: 1, model: 'f18_split.glb', split: 17.073, // M61A1 on top of the nose
+    loadouts: [{ id: 'aa', name: 'Air superiority', aam: true, spec: '6 × AIM-120C · 2 × AIM-9M', rack: F18_AAM, pylons: 'aa' },
+      { id: 'strike', name: 'Ground attack', spec: '6 × AGM-65F MAVERICK · SEEKER SIGHT', bombs: F18_MAV, pylons: 'ag' }],
+    // the sight (V) is the seeker of the Maverick on the left inner pylon: it works only with Mavericks aboard
+    eo: [-2.24, -1.04, -0.05], eoName: 'AGM-65 SEEKER · IR', eoStore: true,
+    ghostStores: true, // other players see its missiles and Mavericks, and which are gone
+    radar: { name: 'APG-73', range: 110000, cone: 1.05 },
+    // the flames fit the 0.54 m nozzle exits
+    rig: { ab: [[-0.53, -0.36, 8.1], [0.53, -0.36, 8.1]], abScale: 0.6, nuke: null, bombs: [], aam: F18_AAM },
+    box: new THREE.Box3(new THREE.Vector3(-6.2, -1.25, -8.53), new THREE.Vector3(6.2, 2.41, 8.53)), slideI: 50,
+    hitPts: [[8.5, 0, -0.1], [-2.8, 6.0, -0.32], [-2.8, -6.0, -0.32], [-8.5, 0, -0.3], [-6.0, 1.6, 2.35], [-6.0, -1.6, 2.35], [0, 0, -1.15]],
+    chase: [5, 30, 27], eye: [0.72, 3.2], scale: 0.9, shadow: 14, airStart: [165, 0.55], fireball: 0.95, crashBlast: [28, 460],
+    sound: { whine: [640, 1450, 1], roar: [165, 460, 1] },
+    eyebrow: 'BOEING F/A-18C HORNET · CARRIER-BASED MULTIROLE FIGHTER',
+    desc: 'Fly the F/A-18C Hornet from the military airbase on the south coast. Its leading-edge extensions keep it turning and pointing its nose at angles of attack where other jets give up, though it has less power than the F-15 and runs out of speed sooner. Carry six AIM-120s and two AIM-9Ms against other players, or six AGM-65 Mavericks and aim them through a Maverick\'s own seeker.',
+    specs: ['ROTATE 145 KT', 'APPROACH 135 KT', '7.5 G LIMIT', 'MACH 1.6 IN AB', 'HIGH ALPHA', 'M61A1 20 MM · 578 RDS', 'STORES', 'RWY 36 · 16,400 FT'],
+    tip: 'Takeoff: full throttle, pull back at about 145 kt, then raise the gear. It keeps flying slow and nose-high: hold Shift for hard turns, but watch the speed. With the Mavericks, V shows the seeker\'s view: L locks the point, X fires one.'
   },
   typhoon: {
     // Eurofighter Typhoon: ~17 t with bombs, 51.2 m² delta, two EJ200s (~60 kN dry, ~90 kN reheat each)
@@ -4034,7 +4072,7 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // F-15C Eagle: 19.4 m long, 13 m span.
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
-const MODELS = { f15: null, typhoon: null, su34: null, b737: null, b748: null, b2: null, ah64: null, su30: null, concorde: null, f22: null, su57: null }; // Blender-built models, filled in as they load
+const MODELS = { f15: null, typhoon: null, su34: null, b737: null, b748: null, b2: null, ah64: null, su30: null, concorde: null, f22: null, su57: null, f18: null }; // Blender-built models, filled in as they load
 // Afterburner: a shader-drawn exhaust plume and a glowing nozzle. In reheat the jet leaves the nozzle as a short,
 // hot yellow-orange core inside a translucent pink-to-violet sheath, with a train of evenly spaced shock diamonds
 // (where the over-expanded jet recompresses) that fade downstream, and a turbulent flicker. Seen from behind,
@@ -4127,7 +4165,8 @@ function makeBomb(kind) {
     kab500: { r: 0.175, body: 1.8, nose: 0.55, tail: 0.6, color: '#8a8f86', band: '#c7322a', fins: 0.4, bandZ: [-0.6] },
     agm114: { r: 0.09, body: 1.1, nose: 0.3, tail: 0.2, color: '#4b5345', band: '#d4c23e', fins: 0.3, bandZ: [-0.3] },
     hydra: { r: 0.035, body: 1.0, nose: 0.25, tail: 0.2, color: '#59624d', band: '#d4c23e', fins: 0.1, bandZ: [-0.3] },
-    kh29: { r: 0.19, body: 2.7, nose: 0.6, tail: 0.5, color: '#9aa096', band: '#c7322a', fins: 0.45, bandZ: [-0.9] }
+    kh29: { r: 0.19, body: 2.7, nose: 0.6, tail: 0.5, color: '#9aa096', band: '#c7322a', fins: 0.45, bandZ: [-0.9] },
+    agm65: { r: 0.152, body: 1.75, nose: 0.35, tail: 0.39, color: '#b9bcb5', band: '#d4c23e', fins: 0.36, bandZ: [-0.5] }
   };
   const s = specs[kind] || specs.mk82;
   const body = M(s.color, 0.72, 0.12), marking = M(s.band, 0.56, 0.18), dark = M('#303630', 0.58, 0.38);
@@ -4225,6 +4264,10 @@ const BOMB_KINDS = {
   agm114: { kg: 49, name: 'AGM-114', scale: 1, tntKg: 9, power: 900, motor: { drop: 0.05, burn: 2.6, boost: 140, turnG: 22 }, range: 8000 },
   hydra: { kg: 10, name: 'HYDRA 70', scale: 1, tntKg: 1.5, power: 420, motor: { drop: 0, burn: 1.1, boost: 600, turnG: 0 } },
   kh29: { kg: 680, name: 'KH-29T', scale: 1, tntKg: 320, power: 2600, seek: 'agm', range: 12000 },
+  // AGM-65F Maverick: an imaging-infrared missile, 2.49 m, about 300 kg with a 136 kg penetrating blast warhead. It fires
+  // off its rail (no drop), its motor burning 5 s to about 300 m/s over the launch speed, and steers onto the point its
+  // seeker holds at up to 20 g. 14 km reach here.
+  agm65: { kg: 300, name: 'AGM-65F', scale: 1, tntKg: 90, power: 1700, seek: 'agm', range: 14000, motor: { drop: 0.05, burn: 5, boost: 60, turnG: 20 } },
   // KAB-500Kr: a 500 kg TV-correlation guided bomb, 3.05 m, about 195 kg of explosive; no motor, it glides onto the point
   kab500: { kg: 520, name: 'KAB-500KR', scale: 1, tntKg: 195, power: 1900, seek: 'bomb' }
 };
@@ -4508,7 +4551,9 @@ function buildFromGltf(model) {
         const b = m.geometry.boundingBox, pd = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, front: b.min.z, left: (b.min.x + b.max.x) < 0, n: 19, ims: [] };
         (parts.pods = parts.pods || []).push(pd); fillPod(pd);
       }
-      else if (n === 'pylons') { plane.add(m); parts.pylons.push(m); } // under-wing pylons, shown only for loadouts that hang stores on them
+      // under-wing pylons, shown only for loadouts that hang stores on them; pylons_<set> only for loadouts naming that set
+      else if (/^pylons(_[a-z]+)?$/.test(n)) { plane.add(m); m.userData.set = n.slice(7) || null; parts.pylons.push(m); }
+      else if (n === 'tailhook') parts.hook = hinged(); // the arresting hook swings down about its front end
       else if (/^baydoor_(p|n)_/.test(n)) parts.bayDoors.push({ pivot: hinged(), sign: /^baydoor_p/.test(n) ? 1 : -1, side: /_side_/.test(n) }); // the F-22's side bays open for its AIM-9s
       else if (n === 'droop_nose' || n === 'droop_visor') { // Concorde's nose, hinged at its lower edge; its visor drops further
         const p = hinged(); p.userData.droop = n === 'droop_visor' ? 1.8 : 1; parts.droop.push(p);
@@ -4572,7 +4617,7 @@ function buildFromGltf(model) {
     if (noz) noz.attach(ab);
   }
   addStores(r.bombs, r.bombScale || 1, r.internalFrom);
-  { const lo = curLoadout(); for (const p of parts.pylons) p.visible = !!(lo && lo.pylons); }
+  { const lo = curLoadout(); for (const p of parts.pylons) p.visible = !!(lo && (p.userData.set ? lo.pylons === p.userData.set : lo.pylons)); }
   buildZones();
 }
 
@@ -4763,8 +4808,8 @@ function setAircraft(id) {
   for (const mark of parts.damageMarks || []) mark.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
-  parts.bombs = []; parts.pylons = []; parts.pods = []; parts.rotorMain = parts.rotorTail = parts.tads = parts.pnvs = parts.gun = null; parts.pivotOf = {}; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.fans = []; parts.reversers = []; parts.dragRudders = []; parts.stabMore = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
-  ({ f15: buildF15, typhoon: buildTyphoon, su34: buildSU30, f22: buildSU30, su57: buildSU30, b737: build757, b748: build748, b2: buildB2, ah64: buildAH64, su30: buildSU30, concorde: buildConcorde })[A.id]();
+  parts.bombs = []; parts.pylons = []; parts.hook = null; parts.pods = []; parts.rotorMain = parts.rotorTail = parts.tads = parts.pnvs = parts.gun = null; parts.pivotOf = {}; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.fans = []; parts.reversers = []; parts.dragRudders = []; parts.stabMore = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
+  ({ f15: buildF15, typhoon: buildTyphoon, su34: buildSU30, f22: buildSU30, su57: buildSU30, f18: buildSU30, b737: build757, b748: build748, b2: buildB2, ah64: buildAH64, su30: buildSU30, concorde: buildConcorde })[A.id]();
   buildExteriorLights();
   if (!parts.stabL) { parts.stabL = new THREE.Group(); parts.stabR = new THREE.Group(); } // no tailplane (Concorde: elevons)
   Object.assign(sun.shadow.camera, { left: -A.shadow, right: A.shadow, top: A.shadow, bottom: -A.shadow });
@@ -4844,9 +4889,10 @@ function rigGear() {
     truck.add(lower);
     pivot.add(upper, truck);
     // nose legs (and the F-15's mains, and a 747's body gear) fold forward; the others fold inward toward the centreline
-    const fwd = (key[0] === 'c' || A.mainRetract === 'fwd' || (A.bodyFwd && Math.abs((bb.min.x + bb.max.x) / 2) < A.bodyFwd));
+    // (the Hornet's mains fold aft)
+    const fwd = (key[0] === 'c' || A.mainRetract === 'fwd' || A.mainRetract === 'aft' || (A.bodyFwd && Math.abs((bb.min.x + bb.max.x) / 2) < A.bodyFwd));
     const outboardRetract = A.mainRetract === 'out' && key[0] !== 'c';
-    const sign = fwd ? (A.noseAft && key === centre[0] ? -1 : 1) : (key[0] === 'R' ? -1 : 1) * (outboardRetract ? -1 : 1);
+    const sign = fwd ? ((A.noseAft && key === centre[0]) || (A.mainRetract === 'aft' && key[0] !== 'c') ? -1 : 1) : (key[0] === 'R' ? -1 : 1) * (outboardRetract ? -1 : 1);
     const leg = { key, pivot, upper, lower, truck, truckHome, truckCorners, truckFootY: pivot.position.y + truckBounds.min.y, nose: key === centre[0], len: Math.max(0.3, -strutBottom), ext, axis: fwd ? 'x' : 'z', sign, homeY: pivot.position.y, retractLift: 0 };
     parts.gearLegs.push(leg);
     const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
@@ -5594,7 +5640,7 @@ if (THREE.GLTFLoader) {
   // AIM-120C and AIM-9X (aam.glb, from the US Weapon Pack) and R-73 and R-77 (ru_aam.glb, from the Russian Weapon
   // Pack): already at real size, nose toward -Z and centred like the simple missiles. They replace the simple ones,
   // including any already on the jet.
-  for (const file of ['aam.glb', 'ru_aam.glb']) loader.load(file, gltf => {
+  for (const file of ['aam.glb', 'ru_aam.glb', 'f18_stores.glb']) loader.load(file, gltf => {
     gltf.scene.updateMatrixWorld(true);
     for (const node of gltf.scene.children) {
       const kind = node.name;
@@ -5607,8 +5653,10 @@ if (THREE.GLTFLoader) {
         const m = new THREE.Mesh(bakeGltfMesh(o), mat); m.castShadow = true; g.add(m);
       });
       if (BOMB_KINDS[kind]) { bombTemplates[kind] = g; for (const b of parts.bombs) if (b.userData.kind === kind) { b.clear(); g.children.forEach(c => b.add(c.clone())); } continue; }
-      mslTemplates[kind] = g;
-      for (const m of parts.missiles) if (m.userData.mkind === kind) { m.clear(); g.children.forEach(c => m.add(c.clone())); }
+      for (const k of Object.keys(MSL_KINDS).filter(k => k === kind || MSL_KINDS[k].model === kind)) {
+        mslTemplates[k] = g;
+        for (const m of parts.missiles) if (m.userData.mkind === k) { m.clear(); g.children.forEach(c => m.add(c.clone())); }
+      }
     }
   }, undefined, err => console.warn(file + ' did not load; using the simple missiles.', err));
   // IRIS-T model: discard its display platform, aim the missile down -Z, and fit it to the sim's 2.94 m scale.
@@ -5686,7 +5734,7 @@ if (THREE.GLTFLoader) {
     nukeTemplates.b61 = g;
     if (parts.nuke && parts.nuke.userData.id === 'b61') { parts.nuke.clear(); g.children.forEach(c => parts.nuke.add(c.clone())); }
   }, undefined, err => console.warn('The B61 model did not load; using the simple B61.', err));
-  for (const id of ['f15', 'typhoon', 'su34', 'b737', 'b748', 'b2', 'ah64', 'su30', 'concorde', 'f22', 'su57']) {
+  for (const id of ['f15', 'typhoon', 'su34', 'b737', 'b748', 'b2', 'ah64', 'su30', 'concorde', 'f22', 'su57', 'f18']) {
     loader.load(AC[id].model, gltf => {
       gltf.scene.traverse(o => {
         // glTF colours are linear; this renderer treats material colours as already display-ready
@@ -7423,6 +7471,7 @@ function eoGround(out) {
 }
 function setEoCam(on) {
   on = !!on && !!A.eo && running && !S.crashed;
+  if (on && A.eoStore && !agKinds().length) { toast('No Mavericks aboard: the sight is their seeker (pick the ground-attack loadout)'); on = false; }
   if (on === TGT.cam) return;
   TGT.cam = on;
   document.body.classList.toggle('eocam', on); $('#eoHud').hidden = !on;
@@ -7525,13 +7574,13 @@ function updateEoHUD() {
   if (!TGT.cam) return;
   const ft = m => Math.round(m * 3.28084).toLocaleString('en-US');
   const ks = agKinds();
-  setText($('#eoTL'), `EO SIGHT · TV\n${TGT.point ? 'POINT TRACK' : 'SLEW'}\nFOV ${TGT.fov.toFixed(1)}°\nJET ${ft(S.pos.y)} FT`);
+  setText($('#eoTL'), `${A.eoName || 'EO SIGHT · TV'}\n${TGT.point ? 'POINT TRACK' : 'SLEW'}\nFOV ${TGT.fov.toFixed(1)}°\nJET ${ft(S.pos.y)} FT`);
   const p = TGT.point || (eoGround(tC) ? tC : null);
   const lines = [];
   if (p) { lines.push('SLANT ' + (p.distanceTo(S.pos) / 1000).toFixed(1) + ' KM', 'TGT ELEV ' + ft(p.y) + ' FT'); } else lines.push('SLANT ----');
   if (TGT.point) {
-    const kh = BOMB_KINDS.kh29, d = TGT.point.distanceTo(S.pos);
-    if (ks.includes('kh29')) lines.push('KH-29T ' + (d <= kh.range ? 'IN RANGE' : 'OUT OF RANGE'));
+    const d = TGT.point.distanceTo(S.pos);
+    for (const k of ks) if (BOMB_KINDS[k].seek === 'agm') lines.push(BOMB_KINDS[k].name + ' ' + (d <= BOMB_KINDS[k].range ? 'IN RANGE' : 'OUT OF RANGE'));
     if (ks.includes('kab500')) lines.push('KAB-500 ' + (kabZone() ? 'IN ZONE' : 'OUT OF ZONE'));
   }
   setText($('#eoTR'), lines.join('\n'));
@@ -7824,7 +7873,7 @@ function reset(mode) {
   S.tvc = S.tvcP = S.tvcY = S.tvcR = 0; S.bayOpen = S.sideBayOpen = 0;
   agSel = agKinds()[0] || null;
   endGuidance(true);
-  aaSel = A.ammo ? 'gun' : 'msl';
+  aaSel = A.ammo ? 'gun' : 'msl'; mslPick = null;
   Object.assign(S, { crashed: false, time: 0, maxAlt: 0, maxSpd: 0, brake: false, hitBuilding: -1,
     ammo: A.weapons ? A.ammo : 0, bombs: A.weapons ? parts.bombs.length : 0, nukes: parts.nukeRack ? parts.nukeRack.length : parts.nuke ? 1 : 0, firing: false });
   clearWeapons();
@@ -9098,7 +9147,7 @@ function placeReticle(node, p) {
 }
 const el = { aimRet: $('#aimRet'), noseRet: $('#noseRet'), nukes: $('#nukes'), ccipN: $('#ccipN'), gun: $('#gun'), bombs: $('#bombs'), gunRet: $('#gunRet'), ccip: $('#ccip'), spd: $('#spd'), mach: $('#mach'), gl: $('#gload'), alt: $('#alt'), vs: $('#vs'), aoa: $('#aoa'), rwy: $('#rwy'), gnd: $('#cGnd'), brk: $('#cBrk'), gear: $('#cGear'), ab: $('#cAb'), ra: $('#cRa'), warn: $('#warn') };
 const setText = (node, s) => { if (node.textContent !== s) node.textContent = s; };
-const GEAR_VLE_KT = { f22: 270, su57: 290, su30: 300, f15: 300, typhoon: 280, su34: 300, b2: 260, b737: 270, b748: 260, concorde: 300, ah64: 999 };
+const GEAR_VLE_KT = { f18: 250, f22: 270, su57: 290, su30: 300, f15: 300, typhoon: 280, su34: 300, b2: 260, b737: 270, b748: 260, concorde: 300, ah64: 999 };
 const GEAR_OVERSPEED_SECONDS = 4;
 const indicatedKnots = () => S.V * Math.sqrt(S.rho / RHO) * 1.94384;
 function updateGearOverspeed(dt) {
@@ -9120,7 +9169,7 @@ function updateGearOverspeed(dt) {
   S.gearDown = false; S.gearT = 0; S.doorT = 0; S.gearOverT = 0;
   toast('LANDING GEAR TORN OFF BY OVERSPEED');
 }
-const LOW_ALT_WING_LIMIT_KT = { f22: 700, su57: 700, su30: 700, f15: 700, typhoon: 700, su34: 700, b2: 500, b737: 450, b748: 450, concorde: 600, ah64: 400 };
+const LOW_ALT_WING_LIMIT_KT = { f18: 700, f22: 700, su57: 700, su30: 700, f15: 700, typhoon: 700, su34: 700, b2: 500, b737: 450, b748: 450, concorde: 600, ah64: 400 };
 const STRUCTURAL_OVERSPEED_AGL = 550; // 1,800 ft
 const STRUCTURAL_OVERSPEED_CLEAR_AGL = 760;
 const STRUCTURAL_OVERSPEED_SECONDS = 6;
@@ -9263,7 +9312,7 @@ function updateHUD() {
   if (parts.missiles.length) {
     const cnt = {};
     for (const m of parts.missiles) cnt[m.userData.mkind] = (cnt[m.userData.mkind] || 0) + (m.visible ? 1 : 0);
-    setText(mEl, Object.keys(cnt).map(k => MSL_KINDS[k].name + ' ×' + cnt[k]).join(' · '));
+    setText(mEl, Object.keys(cnt).map(k => (k === mslPick ? '› ' : '') + MSL_KINDS[k].name + ' ×' + cnt[k]).join(' · '));
     mEl.style.color = Object.values(cnt).some(v => v) ? '' : 'var(--dim)';
   }
   el.nukes.hidden = !parts.nuke;
@@ -9569,6 +9618,7 @@ function updateVisuals(dt) {
   }
   const gk = S.gearT * S.gearT * (3 - 2 * S.gearT), ga = (1 - gk) * Math.PI / 2;
   for (const f of parts.flaps) f.rotation.x = 0.52 * gk; // F-15 flaps: 30° down with the gear, up with it
+  if (parts.hook) parts.hook.rotation.x = 0.55 * gk; // the Hornet's tailhook hangs down with the gear
   for (const D of parts.gearDoors) D.pivot.rotation.z = D.sign * ga; // hanging open with the gear down, folded flat when up
   // the open bay (hinge arms, links) shows until the doors are mostly shut; then the closed skin stands in behind them
   // panels shut flat stay on show unless the model has a closed-door skin of its own to stand in for them
@@ -9643,6 +9693,8 @@ addEventListener('resize', () => {
 // Variants and explosive formulations differ; these are visual/gameplay scale anchors.
 const MSL_KINDS = {
   aim120: { name: 'AIM-120C', len: 3.65, r: 0.089, range: 50000, acc: 230, burn: 6, g: 40, life: 70, R: 16, tntKg: 8.2, cd: 6e-5, ir: false, col: '#e8e8e2' },
+  // AIM-9M: the older Sidewinder, without the 9X's thrust vectoring: shorter reach, less agile (drawn from the AIM-9 model)
+  aim9m: { name: 'AIM-9M', len: 2.87, r: 0.064, range: 12000, acc: 380, burn: 2.2, g: 42, life: 25, R: 10, tntKg: 4.5, cd: 9.5e-5, ir: true, col: '#d9dbd6', model: 'aim9' },
   aim9: { name: 'AIM-9X', len: 3.0, r: 0.064, range: 15000, acc: 400, burn: 2.4, g: 60, life: 28, R: 11, tntKg: 4.5, cd: 9e-5, ir: true, col: '#d9dbd6' },
   r77: { name: 'R-77', len: 3.6, r: 0.1, range: 50000, acc: 235, burn: 5.5, g: 40, life: 70, R: 17, tntKg: 10, cd: 6.5e-5, ir: false, col: '#cfd2cc' },
   // R-77M: the dual-pulse R-77 with a longer reach
@@ -9850,6 +9902,7 @@ let mslSeq = 0;
 // the missile to fire at a target d metres away: the heat-seeker inside its reach, else the AIM-120
 function mslFor(d) {
   const left = parts.missiles.filter(m => m.visible).map(m => m.userData.mkind);
+  if (mslPick && left.includes(mslPick)) return mslPick; // the type the pilot picked (2 again), while any are left
   // among the radar missiles: the shortest-reach one that still covers the shot (keeping the long ones for long shots)
   const srm = left.find(k => MSL_KINDS[k].ir), mrms = left.filter(k => !MSL_KINDS[k].ir).sort((a, b) => MSL_KINDS[a].range - MSL_KINDS[b].range);
   const mrm = mrms.find(k => d <= MSL_KINDS[k].range) || mrms[mrms.length - 1];
@@ -9908,7 +9961,7 @@ function endMissile(i) {
 // heat-seekers can only be fooled by flares, the radar-guided AIM-120 only by chaff, a decoy only works while it is
 // fresh, and the odds depend on decoyChance below. A missile chasing someone else ignores these decoys.
 // Counts are combined release salvos (2 flares + 2 chaff bundles each), scaled to aircraft capacity.
-const CM_LOAD = { f22: 96, su57: 96, f15: 90, typhoon: 96, su30: 96, su34: 96, b2: 180, ah64: 60 };
+const CM_LOAD = { f18: 90, f22: 96, su57: 96, f15: 90, typhoon: 96, su30: 96, su34: 96, b2: 180, ah64: 60 };
 const CM_GAP = 0.005, FLARE_LIFE = 4.5, CHAFF_LIFE = 6;
 const CM = { left: 0, cool: 0 };
 const decoys = []; // { id, owner ('' for our own), kind 'flare' | 'chaff', p, v, t, life }
@@ -9987,11 +10040,18 @@ function missilePk(K, d, P) {
 }
 // ---- air-to-air weapon selection and the gun lead ----
 let aaSel = 'gun';
+// the missile type picked by pressing 2 again with missiles selected (null: the jet picks by range, as it always has)
+var mslPick = null;
 function selectAA(w) {
   if (!running) return;
   if (w === 'msl' && agKinds().length) { const ks = agKinds(); agSel = ks[(ks.indexOf(agSel) + 1) % ks.length]; toast(BOMB_KINDS[agSel].name + ' selected'); return; }
   if (w === 'gun' && !(A.weapons && A.ammo)) { toast('This aircraft has no gun'); return; }
   if (w === 'msl' && !parts.missiles.length) { toast('No missiles loaded: pick the missile loadout'); return; }
+  if (w === 'msl' && aaSel === 'msl') {
+    const kinds = [...new Set(parts.missiles.filter(m => m.visible).map(m => m.userData.mkind))];
+    if (kinds.length > 1) { const order = [null, ...kinds]; mslPick = order[(order.indexOf(mslPick) + 1) % order.length]; toast(mslPick ? MSL_KINDS[mslPick].name + ' selected' : 'Missiles: picked by range'); }
+    return;
+  }
   if (aaSel !== w) { aaSel = w; toast(w === 'gun' ? 'Gun selected' : 'Missiles selected'); }
 }
 // Where the gun cross must be for rounds fired now to meet the locked target: solved with the cannon's own numbers
@@ -10346,7 +10406,7 @@ addEventListener('blur', hideBoard);
 
 // other players' missiles in flight: drawn from what they report, carried on between reports
 // another player's guided stores (GBU-32, KAB-500Kr, Kh-29T), carried on from their last report
-const GB_KINDS = ['gbu32', 'kab500', 'kh29', 'agm114', 'hydra'];
+const GB_KINDS = ['gbu32', 'kab500', 'kh29', 'agm114', 'hydra', 'agm65'];
 function drawPeerGuided(P, now) {
   const list = P.gb || [];
   P.gObjs = P.gObjs || [];
@@ -10366,7 +10426,7 @@ function drawPeerGuided(P, now) {
     o.position.set(e[0] + e[3] * lag, e[1] + e[4] * lag - 0.5 * G * lag * lag, e[2] + e[5] * lag);
     _mc.set(e[3], e[4] - G * lag, e[5]);
     if (_mc.lengthSq() > 1) o.quaternion.setFromUnitVectors(NOSE, _mc.normalize());
-    if ((o.userData.kind === 'kh29' || o.userData.kind === 'agm114' || o.userData.kind === 'hydra') && _mc.lengthSq() > 0) emit('smoke', o.position, 0, 0.5, 0, 0.45);
+    if ((o.userData.kind === 'kh29' || o.userData.kind === 'agm114' || o.userData.kind === 'hydra' || o.userData.kind === 'agm65') && _mc.lengthSq() > 0) emit('smoke', o.position, 0, 0.5, 0, 0.45);
   });
 }
 function drawPeerMissiles(P, now) {
@@ -10721,11 +10781,34 @@ function stateMsg() {
     const hf = parts.bombs.reduce((b, x, i) => b | (x.visible ? 1 << i : 0), 0), pods = parts.pods || [];
     m.ah = [S.rotor || 0, gs.az, gs.el, gs.gunAz, gs.gunEl].map(v => Math.round(v * 100) / 100).concat([hf, pods[0] ? pods[0].n : 0, pods[1] ? pods[1].n : 0]);
   }
+  if (A.ghostStores) { const lo = curLoadout(); m.st = [Math.max(0, A.loadouts.indexOf(lo)), parts.missiles.reduce((b, x, i) => b | (x.visible ? 1 << i : 0), 0), parts.bombs.reduce((b, x, i) => b | (x.visible ? 1 << i : 0), 0)]; }
   if (A.tvc2d) m.tv = [Math.round((S.tvc || 0) * 100) / 100, 0, 0];
   if (A.tvc3d) m.tv = [S.tvcP || 0, S.tvcY || 0, S.tvcR || 0].map(v => Math.round(v * 100) / 100);
   const gbs = bombsFlying.filter(b => b.guided || b.agm || b.kab);
   if (gbs.length) m.gb = gbs.slice(0, 4).map(b => [...mpV(b.obj.position), ...mpV(b.v), Math.max(0, GB_KINDS.indexOf(b.kind))]);
   return m;
+}
+// Another player's stores (aircraft with ghostStores): the picked loadout's missiles or bombs at their stations, the
+// ones already gone hidden, and the pylon set that loadout uses. Rebuilt when the loadout changes, or once a store's
+// model arrives after a stand-in was drawn.
+function ghostStores(P, now) {
+  const u = P.obj.userData, st = P.st || [0, -1, -1], ac = AC[P.ac], L = ac.loadouts[st[0]] || ac.loadouts[0];
+  if (!u.st) { u.st = { g: new THREE.Group(), lo: -1, pylons: [] }; P.obj.add(u.st.g); P.obj.traverse(o => { const m = /^Pylons_([a-z]+)$/.exec(o.name); if (m) u.st.pylons.push([o, m[1]]); }); }
+  const S2 = u.st;
+  if (S2.lo !== st[0] || (S2.fake && now - S2.at > 3000)) {
+    S2.g.clear(); S2.fake = false; S2.at = now; S2.lo = st[0]; S2.m = []; S2.b = [];
+    for (const [x, y, z, kind] of L.aam ? L.rack || ac.rig.aam || [] : []) {
+      const t = mslTemplates[kind]; if (!t) S2.fake = true;
+      const o = (t || makeMissile(kind)).clone(); o.position.set(x, y, z); S2.g.add(o); S2.m.push(o);
+    }
+    for (const [x, y, z, kind] of L.aam ? [] : L.bombs || []) {
+      const t = bombTemplates[kind]; if (!t) S2.fake = true;
+      const o = (t || makeBomb(kind)).clone(); o.position.set(x, y, z); o.scale.setScalar(BOMB_KINDS[kind].scale); S2.g.add(o); S2.b.push(o);
+    }
+    for (const [o, set] of S2.pylons) o.visible = L.pylons === set;
+  }
+  S2.m.forEach((o, i) => { o.visible = !!(st[1] & (1 << i)); });
+  S2.b.forEach((o, i) => { o.visible = !!(st[2] & (1 << i)); });
 }
 function onState(id, d) {
   if (!d || typeof d !== 'object') return;
@@ -10747,6 +10830,7 @@ function onState(id, d) {
   if (d.lf !== P.lf) { P.lf = d.lf; P.rp = []; P.applied = 0; P.rebuild = true; }
   P.ml = Array.isArray(d.ml) && d.ml.length <= 12 ? d.ml.filter(e => Array.isArray(e) && e.length === 6 && e.every(v => num(v, 2e5))) : [];
   P.ah = Array.isArray(d.ah) && d.ah.length === 8 && d.ah.every(v => num(v, 1e4)) ? d.ah : null;
+  P.st = Array.isArray(d.st) && d.st.length === 3 && d.st.every(v => num(v, 1e6)) ? d.st.map(Math.round) : null;
   P.tv = Array.isArray(d.tv) && d.tv.length === 3 && d.tv.every(v => num(v, 1)) ? d.tv : null;
   P.gb = Array.isArray(d.gb) && d.gb.length <= 4 ? d.gb.filter(e => Array.isArray(e) && (e.length === 6 || e.length === 7) && e.every(v => num(v, 2e5))) : [];
   if (Array.isArray(d.rp) && d.rp.length <= 40) P.rp = d.rp.filter(r => Array.isArray(r) && r.length === 4 && typeof r[0] === 'string' && typeof r[1] === 'string' && (r[2] === null || num(r[2], 100)) && num(r[3], 100));
@@ -10804,6 +10888,7 @@ function mpUpdate(dt) {
       const order = u.ah.hfOrder || (u.ah.hfOrder = u.ah.hf.filter(Boolean).slice().sort((x, y) => Math.abs(x.position.z) - Math.abs(y.position.z) || x.position.z - y.position.z));
       order.forEach((o, i) => { o.visible = !!(a[5] & (1 << i)); });
     }
+    if (AC[P.ac].ghostStores && P.obj.userData.real) ghostStores(P, now);
     if (P.tv) {
       const nz = P.obj.userData.noz || (P.obj.userData.noz = (() => { const l = []; P.obj.traverse(o => { if (/^Nozzle_[LR]$/.test(o.name)) l.push(o); }); return l; })());
       for (const o of nz) { const left = o.name.endsWith('L'); o.rotation.set(0, P.tv[1], -(P.tv[0] + (left ? -1 : 1) * P.tv[2]), 'YXZ'); }
