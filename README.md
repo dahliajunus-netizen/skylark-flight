@@ -57,4 +57,27 @@ Everyone who has the page open flies in the same world under a callsign picked o
 - Crossings carry zebra stripes and stop lines. Some avenue crossings are roundabouts. Other street crossings have traffic signals on a 24 s cycle.
 - Traffic keeps right in its lanes, stops and queues at red lights, and goes round the roundabouts. It runs mostly in the busy districts around wherever you are.
 - At night, street lamps light pools on the ground (warm in residential streets, white downtown and in the shopping streets, sodium orange in industry). Parking lots, yards, plazas, park paths and bridges have their own lights. Lit shopfronts and signs (some animated), floodlit warehouses and civic buildings, lit garage decks and hotel lobbies add to the windows. Cars show head and tail lights, tall buildings carry red aviation lights, and signal heads change colour. From altitude the districts stay recognisable: downtown and the shopping streets bright, suburbs warm and sparse, industry orange, parks dark.
-- The building layout is identical on every machine and graphics setting, so collisions and shared damage match in multiplayer. The graphics setting (applied on the next load) only changes how many trees and parked cars there are and how far detail is drawn.
+- The building layout is identical on every machine and graphics setting, so collisions and shared damage match in multiplayer. The graphics settings only change how many trees and parked cars there are, how far detail is drawn and how it is rendered (see Graphics and performance).
+
+## Graphics and performance
+
+The Graphics panel (start screen, pause screen, or the GRAPHICS button) holds every display option. They are saved on the device. None of them touches the flight model, the weapons, collisions or what is sent to other players: the simulation runs in fixed 1/120 s steps on every device, and keeps real time down to 12 FPS.
+
+- **Presets**: Ultra low, Low, Medium, High, Ultra. A preset fills in every option below; changing any one of them makes the preset Custom. On the first visit the game picks a preset from what the browser reports about the device (GPU name, memory, cores, touch); Auto-detect picks it again, and Reset to defaults restores everything.
+- **Render distance** (6 to 26 km): where the haze closes in. Forests, street furniture, rooftop detail, traffic and parked aircraft are drawn out to distances that follow it, and the weather can still bring the haze closer.
+- **Resolution** (50 to 150% of the display's own resolution).
+- **Shadows**: off, or a 512 to 4096 px shadow map.
+- **Effects**: the share of smoke, fire, dust and rain that is drawn; bloom from High up (desktop only).
+- **Textures**: the largest size aircraft textures are loaded at (512 px to full size; on the next load) and the anisotropic filtering of ground and marking textures (at once).
+- **Environment detail**: forest and cloud density and how far aircraft keep their full models (at once); the city's trees, parked cars and traffic, and the terrain mesh's resolution (on the next load). The buildings never change.
+- **Anti-aliasing** (MSAA; on the next load) and a **frame rate limit** (30 or 60 FPS). Browsers always synchronise drawing with the display, so there is no VSync switch to turn off.
+- **Auto-optimise** (on by default): if the frame rate stays under about 26 FPS on weak hardware (38 or 48 where the device has more headroom) for 8 seconds of flying, it trims one step of optional visuals: resolution first, then bloom, shadows, effects and distance. Twenty good seconds give a step back; a step back that does not hold is not retried for a minute, then two, four and so on. It never changes saved settings, and changing any setting yourself clears what it trimmed.
+- **FPS counter** and a **performance overlay**: frame rate, frame time and the worst recent frame, script time per frame, preset, render distance, resolution, draw calls, triangles, and the JavaScript heap where the browser reports it. Browsers do not report CPU load, GPU load or video memory to a page, and the overlay says so rather than guessing.
+
+What keeps the frame rate up:
+
+- Forest chunks and city detail tiles are culled against the view as well as by distance, and far forest thins out toward the edge of its range. The buildings are skipped once the haze has swallowed the city.
+- Aircraft models load when first needed (your own, another player's, the ones parked nearby) instead of all twelve up front. On High and Ultra the rest follow in the background.
+- Parked aircraft and distant players' aircraft are drawn from shared, merged copies of the model with two thinner levels of detail. The copy still takes hits, locks and missiles at any distance, and a damaged aircraft always shows its full model.
+- Traffic sends the GPU only the cars that are drawn, and stops altogether when the city is out of sight.
+- Changing aircraft or repairing one frees the old airframe's geometry, and a player who leaves frees theirs.

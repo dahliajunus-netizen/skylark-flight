@@ -100,7 +100,8 @@ input[type="text"], #nameIn, #roomIn, #chatIn { font: 14px var(--font-ui); color
 #nameIn { flex: 1; min-width: 0; font-size: 15px; }
 #graphicsPanel, #roomsPanel { z-index: 40; }
 #roomsPanel.gate { background: rgba(5, 6, 7, .9); }
-#roomsPanel .card, #graphicsPanel .card { width: min(520px, 100%); }
+#roomsPanel .card { width: min(520px, 100%); }
+#graphicsPanel .card { width: min(620px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; }
 #roomNow { color: var(--tx2); }
 #roomNow b { color: var(--acc); }
 .room-list { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); max-height: 40vh; overflow-y: auto; }
@@ -115,12 +116,28 @@ input[type="text"], #nameIn, #roomIn, #chatIn { font: 14px var(--font-ui); color
 #roomInviteNote { color: var(--amb); }
 #roomDiag { color: var(--tx3); font: 10px var(--font-num); letter-spacing: .04em; line-height: 1.7; }
 #roomDiag b { font-weight: 700; } #roomDiag .ok { color: var(--acc); } #roomDiag .bad { color: var(--amb); }
-.graphics-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
-.graphics-option { min-height: 64px; text-align: left; padding: 12px; border: 0; background: var(--bg1); color: var(--tx); cursor: pointer; font: 700 13px var(--font-ui); }
+.graphics-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.graphics-option { min-height: 54px; text-align: left; padding: 10px 12px; border: 0; background: var(--bg1); color: var(--tx); cursor: pointer; font: 700 13px var(--font-ui); }
 .graphics-option:hover { background: var(--bg2); }
 .graphics-option span { display: block; margin-top: 5px; color: var(--tx3); font: 400 11px var(--font-ui); }
 .graphics-option[aria-pressed="true"] { background: var(--bg3); box-shadow: inset 2px 0 0 var(--acc); }
-#graphicsStatus { color: var(--tx3); font-size: 12px; }
+#graphicsStatus { color: var(--tx3); font-size: 12px; line-height: 1.55; }
+#graphicsStatus b { color: var(--amb); font-weight: 400; }
+.gfx-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 10px 16px; align-items: center; font-size: 13px; color: var(--tx2); }
+.gfx-grid label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.gfx-grid label small { color: var(--tx3); font-size: 10px; }
+.gfx-grid output { color: var(--tx); font: 700 12px var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gfx-grid select { width: 100%; font: 13px var(--font-ui); color: var(--tx); background: var(--bg0); border: 1px solid var(--line2); border-radius: var(--r); padding: 7px 9px; }
+.gfx-grid input[type="range"] { width: 100%; accent-color: var(--acc); margin: 0; }
+.gfx-toggles { display: grid; gap: 8px; font-size: 13px; color: var(--tx2); }
+.gfx-toggles label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.gfx-toggles input { accent-color: var(--acc); width: 16px; height: 16px; margin: 0; flex: none; }
+@media (max-width: 520px) {
+  .graphics-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gfx-grid { grid-template-columns: 1fr; gap: 4px 0; }
+  .gfx-grid select, .gfx-grid input[type="range"] { margin-bottom: 8px; }
+}
+#perfOverlay { position: fixed; top: calc(74px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); z-index: 8; max-width: calc(100vw - 24px); padding: 7px 10px; overflow: hidden; font: 10px/1.65 var(--font-num); letter-spacing: .04em; color: var(--tx2); white-space: pre; pointer-events: none; font-variant-numeric: tabular-nums; background: rgba(5, 6, 7, .66); border: 1px solid var(--line); border-radius: var(--r); }
 
 /* ======================================================================================================
    HANGAR: the start screen. Top bar (identity, network, settings), aircraft list on the left, the selected
@@ -420,7 +437,7 @@ body.touch #chat { top: auto; bottom: calc(260px + env(safe-area-inset-bottom, 0
 body.touch #feed { top: calc(48px + env(safe-area-inset-top, 0px)); right: auto; left: 50%; transform: translateX(-50%) translateY(120px); justify-items: center; }
 
 /* clean view: only the button that brings the UI back (and touch flight controls) stay */
-body.noui #hud, body.noui #warn, body.noui .ret, body.noui #toast, body.noui .tools > :not(#bUi), body.noui #radar, body.noui .mpTag, body.noui #feed, body.noui #mpBar, body.noui #fpsCounter { display: none !important; }
+body.noui #hud, body.noui #warn, body.noui .ret, body.noui #toast, body.noui .tools > :not(#bUi), body.noui #radar, body.noui .mpTag, body.noui #feed, body.noui #mpBar, body.noui #fpsCounter, body.noui #perfOverlay { display: none !important; }
 body.noui:not(.chatting) #chat { display: none; }
 /* the debrief replaces the instruments of the aircraft that just crashed */
 body.debrief #hud, body.debrief #radar, body.debrief .ret { display: none !important; }
@@ -527,6 +544,7 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
 <div id="feed" aria-live="polite"></div>
 <div id="mpBar" title="Change your callsign">CONNECTING…</div>
 <div id="fpsCounter" aria-live="off">FPS --</div>
+<div id="perfOverlay" aria-hidden="true" hidden></div>
 <div id="chat"><div id="chatLog" aria-live="polite"></div><form id="chatForm" hidden><input id="chatIn" maxlength="160" autocomplete="off" spellcheck="false" placeholder="Message everyone · Enter sends · Esc closes" aria-label="Chat message"></form></div>
 <div id="vote" class="panel" hidden><span id="voteText"></span><div class="pick"><button class="pickb" id="voteYes" aria-pressed="false">Yes <kbd>Y</kbd></button><button class="pickb" id="voteNo" aria-pressed="false">No</button></div></div>
 
@@ -549,15 +567,40 @@ body.noui #bUi:hover, body.noui #bUi:focus-visible { opacity: 1; }
   <div class="card">
     <div class="eyebrow">DISPLAY CONFIGURATION</div>
     <h2>Graphics</h2>
-    <p>Choose a preset. Changes apply immediately and are saved on this device.</p>
-    <div class="graphics-options" role="group" aria-label="Graphics quality">
-      <button class="graphics-option" data-quality="low" aria-pressed="false">Low<span>Maximum performance · reduced detail</span></button>
-      <button class="graphics-option" data-quality="medium" aria-pressed="false">Medium<span>Balanced performance and visuals</span></button>
-      <button class="graphics-option" data-quality="high" aria-pressed="true">High<span>Sharper image · shadows and bloom</span></button>
-      <button class="graphics-option" data-quality="ultra" aria-pressed="false">Ultra<span>Highest resolution and shadow quality</span></button>
+    <p>Pick a preset, or set each option yourself. Settings are saved on this device and never change how the aircraft fly or fight.</p>
+    <div class="graphics-options" role="group" aria-label="Graphics preset">
+      <button class="graphics-option" data-preset="ultralow" aria-pressed="false">Ultra low<span>Maximum performance</span></button>
+      <button class="graphics-option" data-preset="low" aria-pressed="false">Low<span>Reduced shadows and detail</span></button>
+      <button class="graphics-option" data-preset="medium" aria-pressed="false">Medium<span>Balanced</span></button>
+      <button class="graphics-option" data-preset="high" aria-pressed="false">High<span>Detailed shadows · bloom</span></button>
+      <button class="graphics-option" data-preset="ultra" aria-pressed="false">Ultra<span>Maximum quality and distance</span></button>
+      <button class="graphics-option" id="gfxAuto" aria-pressed="false">Auto-detect<span id="gfxAutoNote">Pick for this device</span></button>
+    </div>
+    <div class="gfx-grid">
+      <label for="gfxDist">Render distance <output id="gfxDistOut" for="gfxDist"></output></label>
+      <input type="range" id="gfxDist" min="6" max="26" step="1">
+      <label for="gfxScale">Resolution <output id="gfxScaleOut" for="gfxScale"></output></label>
+      <input type="range" id="gfxScale" min="50" max="150" step="5">
+      <label for="gfxShadows">Shadows</label>
+      <select id="gfxShadows"><option value="0">Off</option><option value="1">Low · 512</option><option value="2">Medium · 1024</option><option value="3">High · 2048</option><option value="4">Ultra · 4096</option></select>
+      <label for="gfxEffects">Effects</label>
+      <select id="gfxEffects"><option value="0">Minimal</option><option value="1">Low</option><option value="2">Medium</option><option value="3">High · bloom</option><option value="4">Ultra · bloom</option></select>
+      <label for="gfxTex">Textures <small>size: next load</small></label>
+      <select id="gfxTex"><option value="0">Ultra low · 512 px</option><option value="1">Low · 1024 px</option><option value="2">Medium · 2048 px</option><option value="3">High · full size</option><option value="4">Ultra · full size, 16× filtering</option></select>
+      <label for="gfxDetail">Environment detail <small>city, terrain: next load</small></label>
+      <select id="gfxDetail"><option value="0">Ultra low</option><option value="1">Low</option><option value="2">Medium</option><option value="3">High</option><option value="4">Ultra</option></select>
+      <label for="gfxAA">Anti-aliasing <small>next load</small></label>
+      <select id="gfxAA"><option value="0">Off</option><option value="1">MSAA</option></select>
+      <label for="gfxCap">Frame rate limit</label>
+      <select id="gfxCap"><option value="0">Display refresh (VSync)</option><option value="60">60 FPS</option><option value="30">30 FPS</option></select>
+    </div>
+    <div class="gfx-toggles">
+      <label><input type="checkbox" id="gfxAdaptive"> Auto-optimise: trim optional effects when the frame rate stays low</label>
+      <label><input type="checkbox" id="gfxFps"> FPS counter</label>
+      <label><input type="checkbox" id="gfxOverlay"> Performance overlay</label>
     </div>
     <div id="graphicsStatus" aria-live="polite"></div>
-    <div class="actions"><button class="btn primary" id="closeGraphics">Done</button></div>
+    <div class="actions"><button class="btn" id="gfxReset">Reset to defaults</button><button class="btn" id="gfxReload" hidden>Reload to apply</button><button class="btn primary" id="closeGraphics">Done</button></div>
   </div>
 </div>
 
@@ -734,6 +777,93 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
 const isTouch = matchMedia('(pointer: coarse)').matches;
 if (isTouch) document.body.classList.add('touch');
+
+// ---------------- graphics settings ----------------
+// Every option is its own setting; a preset only fills them all in. Resolution, render distance, shadows, effects,
+// texture filtering and forest density apply at once. Anti-aliasing, texture size and the city's and terrain's
+// detail are fixed when the page is built, so they apply on the next load (GFX.boot is what this load was built with).
+// Nothing here touches the flight model, the weapons, collisions or what is sent to other players.
+const GFX_PRESETS = {
+  ultralow: { scale: 0.5,  dist: 7,  shadows: 0, effects: 0, aa: 0, tex: 0, detail: 0 },
+  low:      { scale: 0.75, dist: 10, shadows: 1, effects: 1, aa: 0, tex: 1, detail: 1 },
+  medium:   { scale: 0.85, dist: 14, shadows: 2, effects: 2, aa: 1, tex: 2, detail: 2 },
+  high:     { scale: 1,    dist: 19, shadows: 3, effects: 3, aa: 1, tex: 3, detail: 3 },
+  ultra:    { scale: 1.25, dist: 26, shadows: 4, effects: 4, aa: 1, tex: 4, detail: 4 }
+};
+const GFX_NAMES = { ultralow: 'ULTRA LOW', low: 'LOW', medium: 'MEDIUM', high: 'HIGH', ultra: 'ULTRA', custom: 'CUSTOM' };
+// Auto-optimise steps: each one trims optional visuals a little further on top of the player's own settings.
+const GFX_DYN = [
+  { scale: 1,    dist: 1,    shadows: 4, bloom: true,  fx: 1 },
+  { scale: 0.87, dist: 1,    shadows: 4, bloom: true,  fx: 1 },
+  { scale: 0.76, dist: 1,    shadows: 3, bloom: false, fx: 0.8 },
+  { scale: 0.76, dist: 0.85, shadows: 2, bloom: false, fx: 0.65 },
+  { scale: 0.66, dist: 0.75, shadows: 1, bloom: false, fx: 0.5 },
+  { scale: 0.56, dist: 0.65, shadows: 0, bloom: false, fx: 0.4 }
+];
+const GFX = (() => {
+  let gpu = '';
+  try {
+    const c = document.createElement('canvas'), gl = c.getContext('webgl2') || c.getContext('webgl');
+    const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+    if (ext) gpu = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '');
+    const lose = gl && gl.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+  } catch (e) {}
+  // A starting preset from what the browser tells us: the GPU's name, memory, core count and whether it is a touch
+  // device. It is only a first guess; auto-optimise corrects it from the measured frame rate.
+  const detect = () => {
+    const mem = navigator.deviceMemory || 0, cores = navigator.hardwareConcurrency || 0, g = gpu.toLowerCase();
+    let t;
+    if (/swiftshader|llvmpipe|softpipe|software|microsoft basic/.test(g)) t = 0;
+    else if (isTouch) t = /apple a1[5-9]|apple m\d|adreno \(tm\) (7[3-9]\d|8\d\d)|mali-g7[1-9]\d|immortalis/.test(g) ? 2 : /adreno \(tm\) [1-5]\d\d|mali-[4t]|mali-g[35]\d\b|powervr/.test(g) ? 0 : 1;
+    else if (/rtx [3-9]0[7-9]0|rtx [4-9]0[6-9]0|rx [6-9][89]\d0|apple m\d (max|ultra)/.test(g)) t = 4;
+    else if (/rtx|gtx (1[06]\d0|9[78]0)|radeon rx|radeon pro|arc\(tm\) [ab]\d|apple m\d|quadro|titan/.test(g)) t = 3;
+    else if (/iris|radeon\(tm\) graphics|radeon graphics|vega|arc|gtx|geforce|radeon/.test(g)) t = 2;
+    else if (/intel|uhd|hd graphics|mesa/.test(g)) t = 1;
+    else t = 2; // the browser hides the GPU: start in the middle
+    if (mem && mem <= 2) t = 0; else if (mem && mem <= 4) t = Math.min(t, 1);
+    if (cores && cores <= 2) t = 0; else if (cores && cores <= 4) t = Math.min(t, 2);
+    return ['ultralow', 'low', 'medium', 'high', 'ultra'][t];
+  };
+  const defaults = () => { const p = detect(); return { preset: p, ...GFX_PRESETS[p], cap: 0, fps: true, overlay: false, adaptive: true }; };
+  const num = (v, a, b, d) => { v = Number(v); return Number.isFinite(v) ? Math.min(b, Math.max(a, v)) : d; };
+  const lvl = (v, d) => Math.round(num(v, 0, 4, d));
+  const clean = (o, d) => ({
+    preset: GFX_NAMES[o.preset] ? o.preset : 'custom',
+    scale: num(o.scale, 0.5, 1.5, d.scale), dist: Math.round(num(o.dist, 6, 26, d.dist)),
+    shadows: lvl(o.shadows, d.shadows), effects: lvl(o.effects, d.effects), tex: lvl(o.tex, d.tex), detail: lvl(o.detail, d.detail),
+    aa: o.aa ? 1 : 0, cap: [0, 30, 60].includes(Number(o.cap)) ? Number(o.cap) : 0,
+    fps: o.fps !== false, overlay: !!o.overlay, adaptive: o.adaptive !== false
+  });
+  let set = null;
+  try {
+    const saved = JSON.parse(localStorage.getItem('skylark.gfx') || 'null');
+    if (saved && typeof saved === 'object') set = clean(saved, defaults());
+    else {
+      const old = localStorage.getItem('skylark.graphics'); // the four-preset picker of earlier versions
+      if (GFX_PRESETS[old]) set = { ...defaults(), preset: old, ...GFX_PRESETS[old] };
+    }
+  } catch (e) {}
+  if (!set) set = defaults();
+  return { gpu, set, boot: { aa: set.aa, tex: set.tex, detail: set.detail }, dyn: 0, eff: {}, baseDpr: 1, detect, defaults, clean };
+})();
+// what the settings and the auto-optimise step come to, read by the systems that draw
+function gfxDerive() {
+  const s = GFX.set, d = GFX_DYN[GFX.dyn], e = GFX.eff;
+  GFX.baseDpr = Math.min(devicePixelRatio || 1, isTouch ? 1.5 : 2);
+  e.scale = clamp(s.scale * d.scale, 0.35, 1.5);
+  e.pixelRatio = clamp(e.scale * GFX.baseDpr, 0.35, 3);
+  e.dist = Math.max(5, s.dist * d.dist) * 1000;             // m: where the haze closes in
+  e.shadows = Math.min(s.shadows, d.shadows);               // 0 off, then 512, 1024, 2048, 4096
+  e.bloom = s.effects >= 3 && d.bloom;
+  e.fx = [0.35, 0.55, 0.8, 1, 1][s.effects] * d.fx;         // share of smoke, fire, dust and rain that is drawn
+  e.scenery = clamp(e.dist * 0.55, 3500, 14500);            // m: forests and scrub
+  e.cityK = clamp(e.dist / 19000, 0.45, 1.3);               // street furniture, rooftop detail, parked aircraft, traffic
+  e.density = [0.4, 0.6, 0.8, 1, 1][s.detail];              // forests, scrub and cumulus
+  e.lod = [0.5, 0.7, 1, 1.4, 2][s.detail];                  // how far out aircraft keep their full models
+  e.aniso = [1, 2, 4, 8, 16][s.tex];
+}
+gfxDerive();
 
 if (!window.THREE) { document.body.innerHTML = '<p style="padding:24px;font:16px sans-serif;color:#eee">The 3D library failed to load. Check your connection and reload the page.</p>'; return; }
 
@@ -968,8 +1098,9 @@ function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Ma
 
 // ---------------- renderer & scene ----------------
 const canvas = $('#gl');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio || 1, isTouch ? 1 : 1.25));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: GFX.boot.aa > 0, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(GFX.eff.pixelRatio);
+renderer.info.autoReset = false; // the frame loop resets it, so the counts cover the whole frame (scene, shadows, bloom)
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1332,7 +1463,9 @@ function makeWaterNormalMap() {
 
 // terrain mesh
 (function buildTerrain() {
-  const SIZE = 18000 * MAP_K, SEG = isTouch ? 300 : 480; // finer samples preserve ridges and valleys at flight altitude
+  // finer samples preserve ridges and valleys at flight altitude; the lower detail settings trade some of that for
+  // fewer triangles (the ground the aircraft meets is the terrain function itself, whatever the mesh's resolution)
+  const SIZE = 18000 * MAP_K, SEG = Math.min([200, 280, 360, 480, 480][GFX.boot.detail], isTouch ? 300 : 480);
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
   terrainGeometry = geo; terrainSegments = SEG; terrainSize = SIZE;
   geo.rotateX(-Math.PI / 2);
@@ -1383,7 +1516,7 @@ function makeWaterNormalMap() {
 
 // Forest and scrubland are split into spatial chunks. Only chunks near the camera are
 // submitted to the GPU, rather than drawing every instance across the entire island.
-const SCENERY_CELL = 2200, SCENERY_RENDER_DISTANCE = 12500;
+const SCENERY_CELL = 2200;
 const sceneryChunks = [];
 let sceneryCullAt = 0;
 function addSceneryInstance(buckets, x, z, matrix, color) {
@@ -1393,26 +1526,51 @@ function addSceneryInstance(buckets, x, z, matrix, color) {
   bucket.matrices.push(matrix.clone());
   bucket.colors.push(color.clone());
 }
+// A geometry that shares another's vertex buffers but has its own bounding sphere: an instanced mesh is culled by
+// its geometry's sphere, so each chunk needs one that covers its instances (not the single tree at the origin).
+function sharedGeometry(geometry, sphere) {
+  const g = new THREE.BufferGeometry();
+  g.index = geometry.index; g.attributes = geometry.attributes; g.groups = geometry.groups;
+  g.boundingSphere = sphere;
+  return g;
+}
 function flushSceneryChunks(buckets, geometry, material) {
+  geometry.computeBoundingSphere();
+  const r0 = geometry.boundingSphere.radius, box = new THREE.Box3(), v = new THREE.Vector3();
   for (const bucket of buckets.values()) {
     const mesh = new THREE.InstancedMesh(geometry, material, bucket.matrices.length);
+    box.makeEmpty();
+    let reach = 0;
     for (let i = 0; i < bucket.matrices.length; i++) {
       mesh.setMatrixAt(i, bucket.matrices[i]);
       mesh.setColorAt(i, bucket.colors[i]);
+      box.expandByPoint(v.setFromMatrixPosition(bucket.matrices[i]));
+      reach = Math.max(reach, r0 * bucket.matrices[i].getMaxScaleOnAxis());
     }
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    sphere.radius += reach;
+    mesh.geometry = sharedGeometry(geometry, sphere);
+    mesh.frustumCulled = true; // off by default for instanced meshes; with its own sphere a chunk can be culled by the view
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.visible = false;
     scene.add(mesh);
-    sceneryChunks.push({ mesh, x: (bucket.ix + 0.5) * SCENERY_CELL, z: (bucket.iz + 0.5) * SCENERY_CELL });
+    // the instances are in random order, so drawing only the first part of a chunk thins it evenly
+    sceneryChunks.push({ mesh, n: bucket.matrices.length, x: (bucket.ix + 0.5) * SCENERY_CELL, z: (bucket.iz + 0.5) * SCENERY_CELL });
+    bucket.matrices = bucket.colors = null;
   }
 }
+// Chunks are shown out to the scenery distance (it follows the render distance setting). Past 45% of it they thin
+// out, down to a third at the edge, where a tree is a pixel in the haze: the far forest costs a fraction of the near.
 function updateSceneryVisibility(now) {
-  if (now - sceneryCullAt < 450) return;
+  if (now - sceneryCullAt < 300) return;
   sceneryCullAt = now;
-  const x = camera.position.x, z = camera.position.z, limit2 = (SCENERY_RENDER_DISTANCE + SCENERY_CELL) ** 2;
+  const x = camera.position.x, z = camera.position.z, lim = GFX.eff.scenery, full = lim * 0.45, dens = GFX.eff.density;
   for (const chunk of sceneryChunks) {
-    const dx = chunk.x - x, dz = chunk.z - z;
-    chunk.mesh.visible = dx * dx + dz * dz <= limit2;
+    const d = Math.max(0, Math.hypot(chunk.x - x, chunk.z - z) - SCENERY_CELL * 0.71);
+    const show = d <= lim;
+    chunk.mesh.visible = show;
+    if (show) chunk.mesh.count = Math.max(1, Math.round(chunk.n * dens * (d <= full ? 1 : 1 - 0.67 * (d - full) / (lim - full))));
   }
 }
 
@@ -2131,11 +2289,11 @@ HELIPADS.slice(-2).forEach(H => { H.parked = true; PARKED.push({ ac: 'ah64', x: 
 let parkedCheckAt = 0;
 // A model is dozens of parts; parked, nothing moves, so its parts are merged into one mesh per material and an
 // aircraft costs a few draw calls instead of dozens.
-function mergeParked(g) {
+function mergeParked(g, pick) {
   g.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), byMat = new Map(), keep = [];
   g.traverse(o => {
-    if (!o.isMesh) return;
+    if (!o.isMesh || (pick && !pick(o))) return;
     if (Array.isArray(o.material) || !o.geometry.attributes.normal) { keep.push(o); return; }
     (byMat.get(o.material) || byMat.set(o.material, []).get(o.material)).push(o);
   });
@@ -2165,22 +2323,92 @@ function mergeParked(g) {
   out.position.copy(g.position); out.quaternion.copy(g.quaternion); out.scale.copy(g.scale);
   return out;
 }
+// ---- aircraft levels of detail ----
+// Parked aircraft, and other players' aircraft far from the camera, are drawn from copies of the model built once
+// per aircraft type and shared: level 0 is the whole model merged into one mesh per material; levels 1 and 2 are
+// that thinned by vertex clustering (vertices that fall in the same small cell become one, and the triangles that
+// collapse are dropped). The cell is 1/64 of the aircraft's length, about a pixel at the distance level 1 takes
+// over, so the outline, the paint and the gear stay. The gear is kept apart so it can be shown down or up.
+const AC_LOD = {};
+function clusterGeometry(geo, cell) {
+  const pos = geo.attributes.position, nrm = geo.attributes.normal, uv = geo.attributes.uv, idx = geo.index, count = pos.count;
+  const cells = new Map(), remap = new Uint32Array(count), P = [], U = [], inv = 1 / cell;
+  for (let i = 0; i < count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    // the side a vertex faces is part of its cell, so the two skins of a thin wing don't fuse into one
+    const face = nrm ? (nrm.getX(i) > 0 ? 1 : 0) | (nrm.getY(i) > 0 ? 2 : 0) | (nrm.getZ(i) > 0 ? 4 : 0) : 0;
+    const key = Math.round(x * inv) + ',' + Math.round(y * inv) + ',' + Math.round(z * inv) + ',' + face;
+    let j = cells.get(key);
+    if (j === undefined) { j = P.length / 3; cells.set(key, j); P.push(x, y, z); if (uv) U.push(uv.getX(i), uv.getY(i)); }
+    remap[i] = j;
+  }
+  const out = [], total = idx ? idx.count : count;
+  for (let i = 0; i + 2 < total; i += 3) {
+    const a = remap[idx ? idx.getX(i) : i], b = remap[idx ? idx.getX(i + 1) : i + 1], c = remap[idx ? idx.getX(i + 2) : i + 2];
+    if (a !== b && b !== c && a !== c) out.push(a, b, c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+  g.setIndex(out);
+  g.computeVertexNormals();
+  return g;
+}
+function acLod(ac) {
+  if (AC_LOD[ac]) return AC_LOD[ac];
+  if (!MODELS[ac]) return null;
+  const g = ghostModel(ac);
+  g.updateMatrixWorld(true);
+  const body = mergeParked(g, o => !o.userData.isGear), gear = mergeParked(g, o => !!o.userData.isGear);
+  const box = new THREE.Box3().setFromObject(body), size = box.getSize(new THREE.Vector3()), cell = Math.max(size.x, size.y, size.z) / 64;
+  if (gear.children.length) box.expandByObject(gear);
+  let tris = 0;
+  for (const grp of [body, gear]) for (const m of grp.children) if (m.isMesh && m.geometry.index) tris += m.geometry.index.count / 3;
+  const thin = (grp, c) => {
+    const out = new THREE.Group();
+    for (const m of grp.children) {
+      if (!m.isMesh || Array.isArray(m.material) || !m.geometry.index) continue;
+      const geo = tris > 6000 ? clusterGeometry(m.geometry, c) : m.geometry; // a model this light is its own far copy
+      if (geo.index.count) out.add(new THREE.Mesh(geo, m.material));
+    }
+    return out;
+  };
+  return AC_LOD[ac] = { cell, box, body: [body, thin(body, cell), thin(body, cell * 3)], gear: [gear, thin(gear, cell), thin(gear, cell * 3)] };
+}
+const acLodLevel = (L, i) => { const g = new THREE.Group(); g.add(L.body[i].clone(), L.gear[i].clone()); return g; };
+// which level to draw at a distance: by how large the aircraft is on screen, so a zoomed sight keeps the detail
+function lodPick(pos, cell, cur) {
+  const d = camera.position.distanceTo(pos) * Math.tan(camera.fov * Math.PI / 360) / 0.6;
+  const d1 = Math.max(250, cell * 1000 * GFX.eff.lod) * (cur ? 0.9 : 1);
+  return d < d1 ? 0 : d < d1 * 3.5 ? 1 : 2;
+}
 function updateParkedAircraft(now) {
   if (now - parkedCheckAt < 300) return;
   parkedCheckAt = now;
+  const lim = 4000 * Math.min(1, GFX.eff.cityK), cam = camera.position;
+  let build = 1; // at most one aircraft type is built per check, so arriving at the airfield never stalls a frame for long
   for (const P of PARKED) {
+    const near = (P.x - cam.x) ** 2 + ((P.pad ? P.z : P.stop) - cam.z) ** 2 < lim * lim;
     if (!P.obj) {
-      if (!MODELS[P.ac]) continue;
-      const g = ghostModel(P.ac);
-      g.rotation.y = P.face > 0 ? Math.PI : 0;
-      g.updateMatrixWorld(true);
-      const b = new THREE.Box3().setFromObject(g);
-      if (P.pad) g.position.set(P.x - (b.min.x + b.max.x) / 2, CITY_H - b.min.y + 0.07, P.z - (b.min.z + b.max.z) / 2); // centred on its helipad
-      else g.position.set(P.x, CITY_H - b.min.y + 0.05, P.face > 0 ? P.stop - 4 - b.max.z : P.stop + 4 - b.min.z);
-      P.obj = mergeParked(g);
-      scene.add(P.obj);
+      if (!near) continue;
+      // on the two lowest detail settings only aircraft whose models are already in memory are parked
+      if (!MODELS[P.ac]) { if (GFX.boot.detail >= 2) loadModel(P.ac); continue; }
+      const L = AC_LOD[P.ac] || (build-- > 0 ? acLod(P.ac) : null);
+      if (!L) continue;
+      const flip = P.face > 0, b = L.box; // nose-in on the main apron: turned round
+      const minX = flip ? -b.max.x : b.min.x, maxX = flip ? -b.min.x : b.max.x, minZ = flip ? -b.max.z : b.min.z, maxZ = flip ? -b.min.z : b.max.z;
+      const g = new THREE.Group();
+      for (let i = 0; i < 3; i++) g.add(acLodLevel(L, i));
+      g.rotation.y = flip ? Math.PI : 0;
+      if (P.pad) g.position.set(P.x - (minX + maxX) / 2, CITY_H - b.min.y + 0.07, P.z - (minZ + maxZ) / 2); // centred on its helipad
+      else g.position.set(P.x, CITY_H - b.min.y + 0.05, flip ? P.stop - 4 - maxZ : P.stop + 4 - minZ);
+      P.obj = g; P.cell = L.cell;
+      scene.add(g);
     }
-    P.obj.visible = (P.obj.position.x - camera.position.x) ** 2 + (P.obj.position.z - camera.position.z) ** 2 < 4000 * 4000;
+    P.obj.visible = near;
+    if (!near) continue;
+    P.lv = lodPick(P.obj.position, P.cell, P.lv);
+    P.obj.children.forEach((c, i) => { c.visible = i === P.lv; });
   }
 }
 
@@ -2634,8 +2862,7 @@ const bStyle = [], bSeed = [];
 //               3 floodlight (parking, yards), 4 park path, 5 bridge
 //   CITY_TREES  [x, z, size, hue]; CITY_PARKED [x, z, yaw, colour index, y]; CITY_TALL aviation lights [x, y, z]
 const CITY_ITEMS = [], CITY_LAMPS = [], CITY_TREES = [], CITY_PARKED = [], CITY_TALL = [];
-const CITY_DETAIL = (() => { try { return localStorage.getItem('skylark.graphics') || 'high'; } catch (e) { return 'high'; } })();
-const CITY_DENSE = isTouch || CITY_DETAIL === 'low' ? 0.35 : CITY_DETAIL === 'medium' ? 0.65 : 1;
+const CITY_DENSE = Math.min([0.3, 0.4, 0.65, 1, 1][GFX.boot.detail], isTouch ? 0.4 : 1); // street trees, parked cars, traffic
 (function buildCity() {
   const rnd = mulberry(4242);
   const PAL = {
@@ -3001,11 +3228,14 @@ function cityItemsShow(i, show) {
 function updateCityDetail(now) {
   if (now - cityDetail.at < 300) return;
   cityDetail.at = now;
-  const x = camera.position.x, y = camera.position.y - CITY_H, z = camera.position.z, k = CITY_DENSE < 0.5 ? 0.7 : CITY_DENSE < 0.8 ? 0.85 : 1;
+  const x = camera.position.x, y = camera.position.y - CITY_H, z = camera.position.z, k = GFX.eff.cityK;
   for (const t of cityDetail.tiles) {
     const dx = Math.max(0, Math.abs(t.x - x) - 500), dz = Math.max(0, Math.abs(t.z - z) - 500), lim = t.d * k;
     t.mesh.visible = dx * dx + dz * dz + y * y < lim * lim;
   }
+  // the buildings are one mesh; past 2.6 times the haze distance the fog has swallowed them whole, so skip the draw
+  const cx = Math.max(CITY.x0 - x, 0, x - CITY.x1), cz = Math.max(CITY.z0 - z, 0, z - CITY.z1), edge = scene.fog.far * 2.6 + 300;
+  cityMesh.visible = cellMesh.visible = cx * cx + cz * cz < edge * edge;
 }
 (function buildCityDetail() {
   const T = 1000, D = CITY_DENSE, rnd = mulberry(90210);
@@ -3036,8 +3266,8 @@ function updateCityDetail(now) {
       b.ms.push(m.clone()); b.cs.push(c.clone()); b.its.push(it); b.top = Math.max(b.top, p.y);
     }
     for (const b of buckets.values()) {
-      const g = geo.clone();
-      g.boundingSphere = new THREE.Sphere(new THREE.Vector3((b.ix + 0.5) * T, (CITY_H + b.top) / 2, (b.iz + 0.5) * T), T * 0.72 + (b.top - CITY_H) / 2 + 30);
+      // every tile shares the layer's vertex buffers; only its bounding sphere is its own
+      const g = sharedGeometry(geo, new THREE.Sphere(new THREE.Vector3((b.ix + 0.5) * T, (CITY_H + b.top) / 2, (b.iz + 0.5) * T), T * 0.72 + (b.top - CITY_H) / 2 + 30));
       const mesh = new THREE.InstancedMesh(g, mat, b.ms.length);
       b.ms.forEach((mm, k) => {
         mesh.setMatrixAt(k, mm);
@@ -3050,6 +3280,7 @@ function updateCityDetail(now) {
         }
       });
       mesh.receiveShadow = true; mesh.castShadow = !!opts.shadow;
+      mesh.frustumCulled = true; // the tile's own sphere (above) makes culling by the view possible
       mesh.visible = false;
       scene.add(mesh);
       cityDetail.tiles.push({ mesh, x: (b.ix + 0.5) * T, z: (b.iz + 0.5) * T, d: maxDist });
@@ -3375,11 +3606,15 @@ const CITY_TRAFFIC = [];
   const nextEdge = (n, prev) => { const ch = (links.get(n.key) || []).filter(e => e !== prev); return ch.length ? ch[Math.floor(rnd() * ch.length)] : prev; };
   const leave = (car, n, e) => { car.edge = e; car.direction = e.a === n ? 1 : -1; };
   let wallPrev = new Map(), wallNow = new Map(), lastFill = null, fillTicks = 45;
-  let trafficElapsed = 1 / 15;
+  let trafficElapsed = 1 / 15, drawn = -1;
   const update = dt => {
     trafficElapsed += dt;
     if (trafficElapsed < 1 / 15) return;
     dt = Math.min(0.5, trafficElapsed); trafficElapsed = 0;
+    // nowhere near the city, or too high to make out a car: nothing to move and nothing to draw
+    const cam = camera.position, reach = 3200;
+    if (drawn === 0 && (cam.y - CITY_H > 3000 || cam.x < CITY.x0 - reach || cam.x > CITY.x1 + reach || cam.z < CITY.z0 - reach || cam.z > CITY.z1 + reach)) return;
+    const drawR = 2500 * Math.min(1, GFX.eff.cityK), drawR2 = drawR * drawR;
     const T = runwayGlow.uTime.value;
     [wallPrev, wallNow] = [wallNow, wallPrev]; wallNow.clear();
     let nb = 0, nw = 0, nl = 0, moved = 0;
@@ -3469,7 +3704,7 @@ const CITY_TRAFFIC = [];
       car.x = x; car.z = z;
       // only cars near the camera are drawn; a car is a few pixels at 2.5 km and its wheels vanish well before that
       const d2 = (x - camera.position.x) ** 2 + (z - camera.position.z) ** 2 + (CITY_H - camera.position.y) ** 2;
-      if (d2 > 2500 * 2500) continue;
+      if (d2 > drawR2) continue;
       const yaw = Math.atan2(-hx, -hz);
       carQ.setFromAxisAngle(trafficUp, yaw);
       p.set(x, CITY_H + 0.48, z);
@@ -3497,11 +3732,13 @@ const CITY_TRAFFIC = [];
         matrix.compose(p, offsetQ, scale); wheels.setMatrixAt(nw++, matrix);
       }
     }
-    bodies.count = cabs.count = nb; wheels.count = nw;
-    bodies.instanceMatrix.needsUpdate = true; cabs.instanceMatrix.needsUpdate = true; wheels.instanceMatrix.needsUpdate = true;
-    if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true;
+    bodies.count = cabs.count = nb; wheels.count = nw; drawn = nb;
+    // send the GPU only the part of each buffer that is drawn (the buffers hold every car in the city)
+    const send = (attr, count) => { if (!attr || !count) return; attr.updateRange.offset = 0; attr.updateRange.count = count; attr.needsUpdate = true; };
+    send(bodies.instanceMatrix, nb * 16); send(cabs.instanceMatrix, nb * 16); send(wheels.instanceMatrix, nw * 16);
+    send(bodies.instanceColor, nb * 3);
     lgeo.setDrawRange(0, nl);
-    lgeo.attributes.position.needsUpdate = true; lgeo.attributes.color.needsUpdate = true;
+    send(lgeo.attributes.position, nl * 3); send(lgeo.attributes.color, nl * 3);
     lights.visible = runwayGlow.uNight.value > 0.2;
   };
   update(0);
@@ -4073,6 +4310,52 @@ const tube = (rRear, rFront, len, seg = 14) => { const g = new THREE.CylinderGeo
 // The detailed model is F-15C.glb, built in Blender (f15c/build_f15c.py) and loaded at start-up;
 // until it arrives, or if it can't load, a simple box-and-cylinder stand-in is used.
 const MODELS = { f15: null, typhoon: null, su34: null, b737: null, b748: null, b2: null, ah64: null, su30: null, concorde: null, f22: null, su57: null, f18: null }; // Blender-built models, filled in as they load
+// Aircraft models are fetched when they are first needed: the player's own pick, another player's aircraft, or
+// one parked on the flight line. Until a model arrives its simple stand-in is drawn. (Fetching all twelve up front
+// cost about 90 MB of downloads and several hundred MB of memory before the first take-off.)
+const MODEL_STATE = {}; // id -> 'loading' | 'ready' | 'failed'
+let MODEL_LOADER = null;
+// the texture quality setting caps the size of the models' textures (the largest are 2048 and 4096 px)
+function limitTextures(root, max) {
+  if (!(max > 0)) return;
+  const done = new Map();
+  root.traverse(o => {
+    for (const m of o.material ? [].concat(o.material) : []) for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap']) {
+      const t = m[k], im = t && t.image;
+      if (!im || !(im.width > max || im.height > max)) continue;
+      let c = done.get(im);
+      if (!c) {
+        const f = max / Math.max(im.width, im.height);
+        c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(im.width * f)); c.height = Math.max(1, Math.round(im.height * f));
+        try { c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); } catch (e) { continue; }
+        done.set(im, c);
+      }
+      t.image = c; t.needsUpdate = true;
+    }
+  });
+}
+function loadModel(id, done) {
+  if (!(id in MODELS) || MODEL_STATE[id] || !THREE.GLTFLoader) { if (done) done(); return; }
+  MODEL_STATE[id] = 'loading';
+  (MODEL_LOADER || (MODEL_LOADER = new THREE.GLTFLoader())).load(AC[id].model, gltf => {
+    gltf.scene.traverse(o => {
+      // glTF colours are linear; this renderer treats material colours as already display-ready
+      if (o.isMesh && o.material && o.material.color) o.material.color.convertLinearToSRGB();
+    });
+    limitTextures(gltf.scene, [512, 1024, 2048, 0, 0][GFX.boot.tex]);
+    MODELS[id] = gltf.scene; MODEL_STATE[id] = 'ready';
+    if (A.id === id) {
+      const hidden = parts.bombs.map(b => !b.visible), nukeGone = !!parts.nuke && !parts.nuke.visible;
+      const rackGone = parts.nukeRack ? parts.nukeRack.map(b => !b.visible) : null;
+      setAircraft(id);
+      parts.bombs.forEach((b, i) => { b.visible = !hidden[i]; }); // keep any bombs already dropped
+      if (rackGone && parts.nukeRack) { parts.nukeRack.forEach((b, i) => { b.visible = !rackGone[i]; }); parts.nuke = parts.nukeRack.find(b => b.visible) || parts.nuke; }
+      else if (nukeGone && parts.nuke) parts.nuke.visible = false;
+    }
+    if (done) done();
+  }, undefined, err => { MODEL_STATE[id] = 'failed'; console.warn(AC[id].model + ' did not load; using the simple model.', err); if (done) done(); });
+}
 // Afterburner: a shader-drawn exhaust plume and a glowing nozzle. In reheat the jet leaves the nozzle as a short,
 // hot yellow-orange core inside a translucent pink-to-violet sheath, with a train of evenly spaced shock diamonds
 // (where the over-expanded jet recompresses) that fade downstream, and a turbulent flicker. Seen from behind,
@@ -4801,11 +5084,18 @@ function build757() {
 
 function setAircraft(id) {
   A = AC[id] || AC.f15;
+  loadModel(A.id);
   nvgOn = false; exteriorLightsOn = false; exteriorLightGroup = null;
   applyCanvasFilter();
   if (A.id !== 'b2') MP.claim = 0; else if (!MP.claim) MP.claim = Date.now(); // the B-2 is one player's at a time
   GEAR = A.gear;
   for (const mark of parts.damageMarks || []) mark.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  // Free the outgoing airframe's own geometry: its split, baked and procedural parts are built anew for every
+  // aircraft, and used to stay on the GPU for good (dozens of buffers per aircraft change or repair). Geometry
+  // shared with the loaded models and the store templates stays.
+  const keepGeo = new Set(), keep = o => { if (o.geometry) keepGeo.add(o.geometry); };
+  for (const set of [MODELS, bombTemplates, nukeTemplates]) for (const k in set) if (set[k]) set[k].traverse(keep);
+  plane.traverse(o => { if (o.geometry && !keepGeo.has(o.geometry)) o.geometry.dispose(); });
   plane.clear();
   for (const k of Object.keys(parts)) delete parts[k];
   parts.bombs = []; parts.pylons = []; parts.hook = null; parts.pods = []; parts.rotorMain = parts.rotorTail = parts.tads = parts.pnvs = parts.gun = null; parts.pivotOf = {}; parts.missiles = []; parts.spoilers = []; parts.zones = []; parts.damageMarks = []; parts.hasCore = false; parts.bayDoors = []; parts.props = []; parts.fans = []; parts.reversers = []; parts.dragRudders = []; parts.stabMore = []; parts.canards = []; parts.tvc = []; parts.elevons = []; parts.ailerons = []; parts.rudders = []; parts.droop = []; parts.flaps = []; parts.gearDoors = []; parts.wheels = []; parts.doorSets = []; parts.doorPanels = [];
@@ -5734,22 +6024,12 @@ if (THREE.GLTFLoader) {
     nukeTemplates.b61 = g;
     if (parts.nuke && parts.nuke.userData.id === 'b61') { parts.nuke.clear(); g.children.forEach(c => parts.nuke.add(c.clone())); }
   }, undefined, err => console.warn('The B61 model did not load; using the simple B61.', err));
-  for (const id of ['f15', 'typhoon', 'su34', 'b737', 'b748', 'b2', 'ah64', 'su30', 'concorde', 'f22', 'su57', 'f18']) {
-    loader.load(AC[id].model, gltf => {
-      gltf.scene.traverse(o => {
-        // glTF colours are linear; this renderer treats material colours as already display-ready
-        if (o.isMesh && o.material && o.material.color) o.material.color.convertLinearToSRGB();
-      });
-      MODELS[id] = gltf.scene;
-      if (A.id === id) {
-        const hidden = parts.bombs.map(b => !b.visible), nukeGone = !!parts.nuke && !parts.nuke.visible;
-        const rackGone = parts.nukeRack ? parts.nukeRack.map(b => !b.visible) : null;
-        setAircraft(id);
-        parts.bombs.forEach((b, i) => { b.visible = !hidden[i]; }); // keep any bombs already dropped
-        if (rackGone && parts.nukeRack) { parts.nukeRack.forEach((b, i) => { b.visible = !rackGone[i]; }); parts.nuke = parts.nukeRack.find(b => b.visible) || parts.nuke; }
-        else if (nukeGone && parts.nuke) parts.nuke.visible = false;
-      }
-    }, undefined, err => console.warn(AC[id].model + ' did not load; using the simple model.', err));
+  // The aircraft themselves load when first needed (loadModel). With the detail setting on High or Ultra the rest
+  // follow in the background, one at a time, so picking another aircraft or meeting another player never waits.
+  loadModel(A.id);
+  if (GFX.boot.detail >= 3 && !isTouch) {
+    const next = () => { const id = Object.keys(MODELS).find(k => !MODEL_STATE[k]); if (id) loadModel(id, () => setTimeout(next, 300)); };
+    setTimeout(next, 1500);
   }
 }
 
@@ -5844,6 +6124,7 @@ const FX = {
 };
 const rr = ([a, b]) => a + Math.random() * (b - a);
 function emit(type, p, vx = 0, vy = 0, vz = 0, k = 1) {
+  if (GFX.eff.fx < 1 && Math.random() > GFX.eff.fx) return; // lower effects settings draw a share of the puffs
   const o = FX[type], P = o.sys, i = P.next;
   P.next = (i + 1) % P.max;
   P.pos[i * 3] = p.x; P.pos[i * 3 + 1] = p.y; P.pos[i * 3 + 2] = p.z;
@@ -9676,6 +9957,8 @@ function updateVisuals(dt) {
 }
 
 addEventListener('resize', () => {
+  gfxDerive(); // the window may have moved to a screen with another pixel density
+  renderer.setPixelRatio(GFX.eff.pixelRatio);
   renderer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -10556,6 +10839,7 @@ function applyFx(ev, P, replay) {
 // ---- other players' aircraft ----
 function ghostModel(ac) {
   const g = new THREE.Group();
+  loadModel(ac);
   if (MODELS[ac] && AC[ac].split) {
     // the split exports (F-15C, Typhoon) get the same fit as the player's own aircraft in buildFromGltf: centred,
     // longest axis turned down -z, and scaled to the real length (AC[ac].split, m)
@@ -10689,6 +10973,7 @@ function onPlaneHits(id, d) {
 // Another player's aircraft crashed: break our copy of it the way theirs broke (same level, same random draw), so
 // everyone sees the same wreck. The pieces join the city's rubble, which is capped, and sleep once they settle.
 function ghostWreck(P, [level, seed]) {
+  ghostFull(P);
   const g = P.obj, wet = heightAt(g.position.x, g.position.z) < 0 && g.position.y < 2;
   if (level < 1) { for (let i = 0; i < 20; i++) emit('dust', g.position, (Math.random() - 0.5) * 10, rr([1, 4]), (Math.random() - 0.5) * 10); return; }
   g.updateMatrixWorld(true);
@@ -10711,6 +10996,7 @@ function ghostWreck(P, [level, seed]) {
 function ghostRip(P, [kind, side, cut, ex]) {
   const g = P.obj, rule = ZONE_RULES.find(r => r[0] === kind);
   if (!g || !rule) return;
+  ghostFull(P);
   const axis = kind === 'fin' ? 'y' : kind === 'eng' ? null : 'x', vel = P.v;
   g.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), meshes = [];
@@ -10734,6 +11020,25 @@ function ghostRip(P, [kind, side, cut, ex]) {
   for (let k = 0; k < 12; k++) emit('fire', g.position, vel.x + (Math.random() - 0.5) * 8, vel.y + rr([0, 6]), vel.z + (Math.random() - 0.5) * 8, 0.7);
   ghostBoxes(g);
 }
+// back to the full model: called before anything works on the copy's parts (a rip, a wreck)
+function ghostFull(P) {
+  if (P.lodHid) { for (const c of P.lodHid) c.visible = true; P.lodHid = null; }
+  if (P.lod) P.lod.visible = false;
+  P.lv = 0;
+  if (P.obj) for (const m of P.obj.userData.gear) m.visible = !!P.g;
+}
+// take a copy out of the scene and free the geometry made for it alone (split and torn parts); what it shares
+// with the loaded model stays
+function removeGhost(P) {
+  if (P.lod) { scene.remove(P.lod); P.lod = null; }
+  P.lodHid = null; P.lv = 0;
+  if (!P.obj) return;
+  scene.remove(P.obj);
+  const shared = new Set(), src = MODELS[P.obj.userData.ac];
+  if (src) src.traverse(o => { if (o.geometry) shared.add(o.geometry); });
+  P.obj.traverse(o => { if (o.geometry && !shared.has(o.geometry) && !o.userData.keepGeo) o.geometry.dispose(); });
+  P.obj = null;
+}
 function mpPeer(id) {
   let P = MP.peers.get(id);
   if (!P) {
@@ -10749,7 +11054,7 @@ function mpPeer(id) {
 function dropPeer(id, quiet = false) {
   const P = MP.peers.get(id);
   if (!P) return;
-  if (P.obj) scene.remove(P.obj);
+  removeGhost(P);
   for (const o of P.mObjs || []) scene.remove(o);
   for (const o of P.gObjs || []) scene.remove(o);
   if (RADAR.lock === P) setLock(null);
@@ -10854,7 +11159,7 @@ function mpUpdate(dt) {
     drawPeerGuided(P, now);
     const show = !!(P.r && !P.c && P.t);
     if (show && (!P.obj || P.rebuild || P.obj.userData.ac !== P.ac || (!P.obj.userData.real && MODELS[P.ac]))) {
-      if (P.obj) scene.remove(P.obj);
+      removeGhost(P);
       P.obj = ghostModel(P.ac);
       scene.add(P.obj);
       P.snap = true; P.rebuild = false; P.applied = 0;
@@ -10866,11 +11171,26 @@ function mpUpdate(dt) {
     }
     if (!P.obj) { P.tag.hidden = true; continue; }
     P.obj.visible = show;
-    if (!show) { P.tag.hidden = true; continue; }
+    if (!show) { if (P.lod) P.lod.visible = false; P.tag.hidden = true; continue; }
     mpTgt.copy(P.p).addScaledVector(P.v, Math.min(0.5, (now - P.t) / 1000)); // carry on from the last report
     if (P.snap) { P.obj.position.copy(mpTgt); P.obj.quaternion.copy(P.q); P.snap = false; }
     else { P.obj.position.lerp(mpTgt, k); P.obj.quaternion.slerp(P.q, k); }
+    // Far away, a whole aircraft is drawn from its merged, thinned copy (acLod) and the model's own parts are
+    // hidden. The copy object itself stays "visible": hit tests, locks and missiles go by it, at any distance.
+    let lv = P.obj.userData.real && !P.rp.length ? lodPick(P.obj.position, AC_LOD[P.ac] ? AC_LOD[P.ac].cell : 0.4, P.lv) : 0;
+    const L = lv ? acLod(P.ac) : null;
+    if (!L) lv = 0;
+    if (!lv && P.lv) ghostFull(P);
     for (const m of P.obj.userData.gear) m.visible = !!P.g;
+    if (lv) {
+      if (!P.lod) { P.lod = new THREE.Group(); P.lod.add(acLodLevel(L, 1), acLodLevel(L, 2)); scene.add(P.lod); }
+      if (!P.lodHid) P.lodHid = new Set();
+      for (const c of P.obj.children) if (c.visible) { c.visible = false; P.lodHid.add(c); }
+      P.lod.visible = true;
+      P.lod.position.copy(P.obj.position); P.lod.quaternion.copy(P.obj.quaternion);
+      P.lod.children.forEach((c, i) => { c.visible = i === lv - 1; c.children[1].visible = !!P.g; });
+    }
+    P.lv = lv;
     // thrust-vectoring nozzles at the angles the pilot's own physics last reported (in the model's frame: its z axis is
     // the aircraft's lateral axis, its y the vertical)
     if (P.ah) {
@@ -11483,46 +11803,74 @@ let bloom = !isTouch && THREE.UnrealBloomPass ? (() => {
   };
 })() : null;
 
-// ---- graphics presets ----
-const GRAPHICS_PRESETS = {
-  low:    { pixelRatio: 0.75, shadows: false, shadowSize: 256, bloom: false },
-  medium: { pixelRatio: 1.00, shadows: true,  shadowSize: 512, bloom: false },
-  high:   { pixelRatio: 1.25, shadows: true,  shadowSize: 1024, bloom: true },
-  ultra:  { pixelRatio: 1.50, shadows: true,  shadowSize: 2048, bloom: true }
-};
-let graphicsQuality = 'high';
-let graphicsResumeAfterClose = false;
-try {
-  const saved = localStorage.getItem('skylark.graphics');
-  if (saved && GRAPHICS_PRESETS[saved]) graphicsQuality = saved;
-} catch (e) {}
-function applyGraphicsQuality(quality, save = true) {
-  const preset = GRAPHICS_PRESETS[quality] || GRAPHICS_PRESETS.high;
-  graphicsQuality = GRAPHICS_PRESETS[quality] ? quality : 'high';
-  const deviceCap = isTouch ? 1 : Math.min(devicePixelRatio || 1, 2);
-  renderer.setPixelRatio(Math.min(deviceCap, preset.pixelRatio));
-  renderer.setSize(innerWidth, innerHeight);
-  if (bloom) bloom.resize();
-  renderer.shadowMap.enabled = preset.shadows;
-  sun.castShadow = preset.shadows;
-  sun.shadow.mapSize.set(isTouch ? Math.min(512, preset.shadowSize) : preset.shadowSize,
-                         isTouch ? Math.min(512, preset.shadowSize) : preset.shadowSize);
-  if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
-  renderer.shadowMap.needsUpdate = true;
-  const bloomEnabled = preset.bloom && !!bloom;
-  document.body.dataset.bloom = String(bloomEnabled);
-  document.querySelectorAll('[data-quality]').forEach(button =>
-    button.setAttribute('aria-pressed', String(button.dataset.quality === graphicsQuality)));
-  const status = $('#graphicsStatus');
-  if (status) {
-    const actualRatio = Math.min(deviceCap, preset.pixelRatio);
-    status.textContent = graphicsQuality.toUpperCase() + ' · render scale ' +
-      Math.round(actualRatio * 100) + '% · shadows ' + (preset.shadows ? 'ON' : 'OFF') +
-      ' · bloom ' + (bloomEnabled ? 'ON' : 'OFF') +
-      (isTouch && preset.shadowSize > 512 ? ' · mobile shadow cap 512' : '');
-  }
-  if (save) { try { localStorage.setItem('skylark.graphics', graphicsQuality); } catch (e) {} }
+// ---- graphics settings: applying them, and the panel ----
+const SHADOW_SIZES = [0, 512, 1024, 2048, 4096], ANISO0 = new WeakMap(), _bufSize = new THREE.Vector2();
+let graphicsResumeAfterClose = false, gfxShadowSize = -1, gfxAniso = -1;
+// texture filtering: textures built with anisotropic filtering are held to the setting's level
+function setAnisotropy(level) {
+  const cap = Math.min(level, renderer.capabilities.getMaxAnisotropy());
+  scene.traverse(o => {
+    for (const m of o.material ? [].concat(o.material) : []) for (const k in m) {
+      const t = m[k];
+      if (!t || !t.isTexture) continue;
+      if (!ANISO0.has(t)) ANISO0.set(t, t.anisotropy);
+      const a = Math.max(1, Math.min(ANISO0.get(t), cap));
+      if (ANISO0.get(t) > 1 && t.anisotropy !== a) { t.anisotropy = a; t.needsUpdate = true; }
+    }
+  });
 }
+function applyGfx(save = true) {
+  gfxDerive();
+  const st = GFX.set, e = GFX.eff;
+  if (Math.abs(renderer.getPixelRatio() - e.pixelRatio) > 1e-3) {
+    renderer.setPixelRatio(e.pixelRatio);
+    renderer.setSize(innerWidth, innerHeight);
+    if (bloom) bloom.resize();
+  }
+  const size = Math.min(SHADOW_SIZES[e.shadows], isTouch ? 1024 : 4096, renderer.capabilities.maxTextureSize);
+  if (size !== gfxShadowSize) {
+    gfxShadowSize = size;
+    renderer.shadowMap.enabled = size > 0;
+    sun.castShadow = size > 0;
+    if (size) sun.shadow.mapSize.set(size, size);
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    renderer.shadowMap.needsUpdate = true;
+  }
+  document.body.dataset.bloom = String(e.bloom && !!bloom);
+  if (e.aniso !== gfxAniso) { gfxAniso = e.aniso; setAnisotropy(e.aniso); }
+  sceneryCullAt = cityDetail.at = parkedCheckAt = 0; // cull again at once with the new distances
+  $('#fpsCounter').hidden = !st.fps;
+  $('#perfOverlay').hidden = !st.overlay;
+  if (save) { try { localStorage.setItem('skylark.gfx', JSON.stringify(st)); } catch (err) {} }
+  syncGfxUI();
+}
+const GFX_FIELDS = ['scale', 'dist', 'shadows', 'effects', 'aa', 'tex', 'detail'];
+const gfxPresetOf = st => Object.keys(GFX_PRESETS).find(p => GFX_FIELDS.every(k => Math.abs(GFX_PRESETS[p][k] - st[k]) < 1e-6)) || 'custom';
+function syncGfxUI() {
+  const st = GFX.set, e = GFX.eff, b = GFX.boot;
+  document.querySelectorAll('[data-preset]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.preset === st.preset)));
+  $('#gfxAutoNote').textContent = 'This device: ' + GFX_NAMES[GFX.detect()].toLowerCase();
+  $('#gfxDist').value = st.dist; $('#gfxDistOut').textContent = st.dist + ' km';
+  renderer.getDrawingBufferSize(_bufSize);
+  $('#gfxScale').value = Math.round(st.scale * 100); $('#gfxScaleOut').textContent = Math.round(st.scale * 100) + '% · ' + _bufSize.x + '×' + _bufSize.y;
+  $('#gfxShadows').value = st.shadows; $('#gfxEffects').value = st.effects; $('#gfxTex').value = st.tex; $('#gfxDetail').value = st.detail;
+  $('#gfxAA').value = st.aa; $('#gfxCap').value = st.cap;
+  $('#gfxAdaptive').checked = st.adaptive; $('#gfxFps').checked = st.fps; $('#gfxOverlay').checked = st.overlay;
+  const pending = [st.aa !== b.aa && 'anti-aliasing', st.tex !== b.tex && 'texture size', st.detail !== b.detail && 'city and terrain detail'].filter(Boolean);
+  $('#gfxReload').hidden = !pending.length;
+  const status = $('#graphicsStatus');
+  status.textContent = GFX_NAMES[st.preset] + ' · ' + _bufSize.x + '×' + _bufSize.y + ' · shadows ' + (gfxShadowSize || 'off') +
+    ' · bloom ' + (document.body.dataset.bloom === 'true' ? 'on' : bloom ? 'off' : 'off (not on touch devices)') +
+    ' · haze at ' + Math.round(e.dist / 1000) + ' km' + (GFX.dyn ? ' · auto-optimise has trimmed ' + GFX.dyn + ' step' + (GFX.dyn > 1 ? 's' : '') : '') + '. ';
+  if (pending.length) { const note = document.createElement('b'); note.textContent = 'On the next load: ' + pending.join(', ') + '.'; status.append(note); }
+}
+function gfxChange(change) { // the player changed something: their settings stand as chosen, with no auto-optimise trim on top
+  change(GFX.set);
+  GFX.set.preset = gfxPresetOf(GFX.set);
+  GFX.dyn = 0; PERF.low = PERF.high = 0; PERF.settle = performance.now() + 3000;
+  applyGfx();
+}
+function gfxPreset(p) { gfxChange(st => Object.assign(st, GFX_PRESETS[p])); }
 function openGraphics() {
   graphicsResumeAfterClose = !!(running && !paused && !S.crashed);
   if (graphicsResumeAfterClose) {
@@ -11530,7 +11878,7 @@ function openGraphics() {
     $('#pause').hidden = true;
   }
   $('#graphicsPanel').hidden = false;
-  applyGraphicsQuality(graphicsQuality, false);
+  syncGfxUI();
 }
 function closeGraphics() {
   $('#graphicsPanel').hidden = true;
@@ -11541,14 +11889,94 @@ $('#bGraphics').onclick = openGraphics;
 $('#menuGraphics').onclick = openGraphics;
 $('#pauseGraphics').onclick = openGraphics;
 $('#closeGraphics').onclick = closeGraphics;
-document.querySelectorAll('[data-quality]').forEach(button => {
-  button.addEventListener('click', () => applyGraphicsQuality(button.dataset.quality));
-});
-applyGraphicsQuality(graphicsQuality, false);
+document.querySelectorAll('[data-preset]').forEach(button => button.addEventListener('click', () => gfxPreset(button.dataset.preset)));
+$('#gfxAuto').onclick = () => { const p = GFX.detect(); gfxPreset(p); toast('Graphics set for this device: ' + GFX_NAMES[p]); };
+$('#gfxReset').onclick = () => { GFX.set = GFX.defaults(); gfxChange(() => {}); toast('Graphics reset to this device\'s defaults'); };
+$('#gfxReload').onclick = () => location.reload();
+$('#gfxDist').oninput = ev => gfxChange(st => { st.dist = clamp(Math.round(+ev.target.value), 6, 26); });
+$('#gfxScale').oninput = ev => gfxChange(st => { st.scale = clamp(+ev.target.value / 100, 0.5, 1.5); });
+for (const [id, key] of [['#gfxShadows', 'shadows'], ['#gfxEffects', 'effects'], ['#gfxTex', 'tex'], ['#gfxDetail', 'detail'], ['#gfxAA', 'aa']])
+  $(id).onchange = ev => gfxChange(st => { st[key] = +ev.target.value; });
+$('#gfxCap').onchange = ev => { GFX.set.cap = +ev.target.value; applyGfx(); };
+$('#gfxFps').onchange = ev => { GFX.set.fps = ev.target.checked; applyGfx(); };
+$('#gfxOverlay').onchange = ev => { GFX.set.overlay = ev.target.checked; applyGfx(); };
+$('#gfxAdaptive').onchange = ev => { GFX.set.adaptive = ev.target.checked; GFX.dyn = 0; PERF.low = PERF.high = 0; applyGfx(); };
+
+// ---- frame timing, the performance overlay and auto-optimise ----
+// The readouts are what the page can measure itself. Browsers do not report CPU load, GPU load or video memory to
+// a page, so the overlay says so instead of showing a made-up figure.
+const PERF = { frames: 0, t0: performance.now(), js: 0, ms: new Float32Array(120), i: 0, fps: 0, jsMs: 0, best: 0, drawAt: 0,
+  winN: 0, winT: 0, low: 0, high: 0, settle: 0, hold: 0, backoff: 60000, upAt: -1e9, told: false };
+// the frame rate auto-optimise defends, by the class of device: 30 on weak hardware, more where there is headroom
+const GFX_FLOOR = { ultralow: 26, low: 26, medium: 38, high: 48, ultra: 48 }[GFX.detect()];
+const gpuLabel = () => GFX.gpu ? GFX.gpu.replace(/^ANGLE \((?:[^,]*, )?/, '').replace(/ Direct3D.*$| \(0x[0-9a-f]+\).*$|, (OpenGL|Metal|Vulkan|D3D).*$|\)$/i, '').slice(0, 46) : 'hidden by this browser';
+function updatePerfOverlay() {
+  const P = PERF, e = GFX.eff, info = renderer.info, count = Math.min(P.i, P.ms.length), mem = performance.memory;
+  let sum = 0, worst = 0;
+  for (let k = 0; k < count; k++) { sum += P.ms[k]; worst = Math.max(worst, P.ms[k]); }
+  renderer.getDrawingBufferSize(_bufSize);
+  setText($('#perfOverlay'), [
+    'FPS      ' + Math.round(P.fps) + '   frame ' + (count ? sum / count : 0).toFixed(1) + ' ms   worst ' + worst.toFixed(0) + ' ms',
+    'SCRIPT   ' + P.jsMs.toFixed(1) + ' ms a frame (simulation + draw calls)',
+    'PRESET   ' + GFX_NAMES[GFX.set.preset] + (GFX.dyn ? ' · auto-optimise -' + GFX.dyn : ''),
+    'DISTANCE ' + Math.round(e.dist / 1000) + ' km   RES ' + _bufSize.x + '×' + _bufSize.y + ' (' + Math.round(e.scale * 100) + '%)',
+    'DRAWN    ' + info.render.calls + ' calls   ' + (info.render.triangles / 1e6).toFixed(2) + ' M triangles',
+    'ON GPU   ' + info.memory.geometries + ' meshes   ' + info.memory.textures + ' textures',
+    'JS HEAP  ' + (mem && mem.usedJSHeapSize ? Math.round(mem.usedJSHeapSize / 1048576) + ' MB' : 'not reported by this browser'),
+    'CPU / GPU load, VRAM: not reported by browsers',
+    'GPU      ' + gpuLabel()
+  ].join('\n'));
+}
+// Auto-optimise: the average frame rate over 4 s windows of flying. Two low windows in a row (8 s) trim one step of
+// optional visuals (resolution first, then bloom, shadows, effects, distance); five good ones (20 s) give a step
+// back. A step back that doesn't hold is not tried again for a minute, then two, four... so it settles instead of
+// hunting. The flight model, weapons and controls are never part of it.
+function gfxAdapt(fps, now) {
+  const P = PERF;
+  if (!GFX.set.adaptive || now < P.settle) { P.low = P.high = 0; return; } // just changed: let shaders compile and the load settle
+  const cap = GFX.set.cap || 1e9, lowAt = Math.min(GFX_FLOOR, cap * 0.85), highAt = Math.min(GFX_FLOOR * 1.45, Math.max(P.best, 30) * 0.93, cap * 0.97);
+  if (fps < lowAt) {
+    P.high = 0;
+    if (++P.low >= 2 && GFX.dyn < GFX_DYN.length - 1) {
+      if (now - P.upAt < 45000) { P.hold = now + P.backoff; P.backoff = Math.min(P.backoff * 2, 600000); }
+      GFX.dyn++; P.low = 0; P.settle = now + 3000;
+      applyGfx(false);
+      if (!P.told) { P.told = true; toast('Auto-optimise trimmed some effects to keep the frame rate steady'); }
+    }
+  } else if (fps > highAt) {
+    P.low = 0;
+    if (++P.high >= 5 && GFX.dyn > 0 && now > P.hold) { GFX.dyn--; P.high = 0; P.upAt = now; P.settle = now + 3000; applyGfx(false); }
+  } else { P.low = 0; P.high = Math.max(0, P.high - 1); }
+}
+function perfSample(now, gap) {
+  const P = PERF;
+  P.frames++;
+  if (gap < 1000) {
+    P.ms[P.i++ % P.ms.length] = gap;
+    if (running && !paused && !S.crashed) { P.winN++; P.winT += gap; }
+  }
+  const el = now - P.t0;
+  if (el < 500) return;
+  P.fps = P.frames * 1000 / el; P.jsMs = P.js / P.frames; P.best = Math.max(P.best, P.fps);
+  P.frames = 0; P.js = 0; P.t0 = now;
+  if (GFX.set.fps) {
+    const fpsEl = $('#fpsCounter'), fps = Math.round(P.fps);
+    setText(fpsEl, 'FPS ' + fps);
+    fpsEl.style.color = fps >= 50 ? 'var(--go)' : fps >= 30 ? 'var(--amber)' : 'var(--red)';
+  }
+  if (GFX.set.overlay) updatePerfOverlay();
+  if (P.winT >= 4000) {
+    // A page the browser is holding back (a covered or unfocused window gets a frame or two a second) is not a slow
+    // device: there the script has time to spare. Only a window that was really short of time counts.
+    const fps = P.winN * 1000 / P.winT, held = document.visibilityState !== 'visible' || (fps < 8 && P.jsMs < 40);
+    if (!held) gfxAdapt(fps, now);
+    P.winN = P.winT = 0;
+  }
+}
+applyGfx(false);
 
 // ---------------- loop ----------------
 let last = performance.now(), acc = 0;
-let fpsFrames = 0, fpsLast = performance.now();
 // a deck of stratus at 2 km for overcast skies: a world-anchored noise texture on a plane that follows the camera
 function buildStratus() {
   const N = 256, cv = document.createElement('canvas'); cv.width = cv.height = N;
@@ -11591,11 +12019,11 @@ function updateWeather(dt) {
   WX.kt = WX.wind.length() / KT;
   WX.from = (Math.atan2(-WX.wind.x, WX.wind.z) * 180 / Math.PI + 360) % 360; // where it blows from
   WX.name = f > 0.5 ? b.name : a.name;
-  scene.fog.far = WX.vis; scene.fog.near = Math.min(2600, WX.vis * 0.12);
+  scene.fog.far = Math.min(WX.vis, GFX.eff.dist); scene.fog.near = Math.min(2600, scene.fog.far * 0.12); // the render distance is a nearer haze
   // cumulus: more of the field shows the more cover there is, greyer under overcast; they drift with the wind
   if (cloudField) {
     if (!cloudField.userData.n) cloudField.userData.n = cloudField.count;
-    cloudField.count = Math.round(cloudField.userData.n * clamp(WX.cover, 0.05, 1));
+    cloudField.count = Math.round(cloudField.userData.n * clamp(WX.cover, 0.05, 1) * GFX.eff.density);
     cloudField.material.color.copy(CLOUD_WHITE).lerp(CLOUD_GREY, WX.overcast * 0.75 + WX.storm * 0.15);
   }
   if (!stratus) stratus = buildStratus();
@@ -11649,7 +12077,7 @@ function updateRain(dt) {
   if (!R.placed) { for (let i = 0; i < R.N; i++) { d[i * 3] += cam.x; d[i * 3 + 1] += cam.y; d[i * 3 + 2] += cam.z; } R.placed = true; }
   const sx = (wx - R.camV.x) * 0.03, sy = (fall - R.camV.y) * 0.03, sz = (wz - R.camV.z) * 0.03; // the streak: 30 ms of motion past the lens
   const wrap = (v, c, h) => v - c > h ? v - 2 * h : v - c < -h ? v + 2 * h : v;
-  const shown = Math.round(R.N * 0.75 * clamp(WX.rain, 0.15, 1));
+  const shown = Math.round(R.N * 0.75 * clamp(WX.rain, 0.15, 1) * Math.max(0.4, GFX.eff.fx));
   for (let i = 0; i < R.N; i++) {
     const j = i * 3;
     d[j] = wrap(d[j] + wx * dt, cam.x, 45); d[j + 1] = wrap(d[j + 1] + fall * dt, cam.y, 35); d[j + 2] = wrap(d[j + 2] + wz * dt, cam.z, 45);
@@ -11662,19 +12090,19 @@ function updateRain(dt) {
 }
 function frame(now) {
   requestAnimationFrame(frame);
-  fpsFrames++;
-  const fpsElapsed = now - fpsLast;
-  if (fpsElapsed >= 500) {
-    const fps = Math.round(fpsFrames * 1000 / fpsElapsed);
-    const fpsEl = $('#fpsCounter');
-    if (fpsEl) {
-      fpsEl.textContent = 'FPS ' + fps;
-      fpsEl.style.color = fps >= 50 ? 'var(--go)' : fps >= 30 ? 'var(--amber)' : 'var(--red)';
-    }
-    fpsFrames = 0;
-    fpsLast = now;
+  // the frame rate limit: skip display refreshes until a frame is due (the browser itself always syncs to the display)
+  const cap = GFX.set.cap;
+  if (cap) {
+    const step = 1000 / cap, el = now - PERF.drawAt;
+    if (el < step - 1.5) return;
+    PERF.drawAt = now - Math.min(Math.max(0, el - step), step); // carry the overshoot, so the average holds on any display
   }
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const js0 = performance.now();
+  perfSample(now, now - last);
+  renderer.info.reset();
+  // Up to 1/12 s of game time per frame: the flight model runs in fixed 1/120 s steps whatever the frame rate, so
+  // the game keeps real time down to 12 FPS (it used to slow down below 20) and flies the same on every device.
+  const dt = Math.min(1 / 12, (now - last) / 1000); last = now;
   if (running && !paused && !S.crashed) {
     updateInputs(dt);
     acc += dt;
@@ -11714,6 +12142,7 @@ function frame(now) {
   updateCues();
   renderer.render(scene, camera);
   if (bloom && document.body.dataset.bloom === "true") bloom.apply(dt);
+  PERF.js += performance.now() - js0;
 }
 
 // keep a flight going across page updates
